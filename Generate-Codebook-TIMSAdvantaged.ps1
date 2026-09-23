@@ -49,7 +49,8 @@ $ExcludedFiles = @(
     "db.sqlite3",
     ".secrets.toml", 
     "Codebase.md",
-    "Codebase.pdf"
+    "Codebase.pdf",
+    ".env"
 )
 
 # Delete old markdown if it exists

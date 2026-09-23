@@ -1,0 +1,25 @@
+artifact_path: file:///C:/Data/ValueAI_Project/mlruns/models/m-bbd9adad2dfc4a43930444e47c67bfb9/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.skops
+    predict_fn: predict
+    python_version: 3.13.15
+  sklearn:
+    code: null
+    pickled_model: model.skops
+    serialization_format: skops
+    sklearn_version: 1.9.1
+    skops_trusted_types:
+    - xgboost.core.Booster
+    - xgboost.sklearn.XGBClassifier
+mlflow_version: 3.16.1
+model_id: m-bbd9adad2dfc4a43930444e47c67bfb9
+model_size_bytes: 335731
+model_uuid: m-bbd9adad2dfc4a43930444e47c67bfb9
+prompts: null
+run_id: 400afad306b044288d1c52f43a9cbc9e
+utc_time_created: '2026-09-22 20:09:33.564144'

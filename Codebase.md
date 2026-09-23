@@ -1,6 +1,6 @@
 ﻿# TIMSAdvantaged Codebase
 
-Generated: 09/22/2026 10:29:21
+Generated: 09/23/2026 10:53:15
 
 ---
 
@@ -16,11 +16,45 @@ Generated: 09/22/2026 10:29:21
 - data\processed\train.parquet\_SUCCESS
 - data\processed\val.parquet\_SUCCESS
 - data\raw\.gitkeep
+- docs\compliance_and_audit.md
 - docs\data_dictionary.md
 - docs\data_governance_audit.md
 - docs\executive_summary.md
+- docs\mlflow_run_summary.json
 - docs\timeseries_model_metadata.json
 - Generate-Codebook-TIMSAdvantaged.ps1
+- mlruns\083e11b2b5c04747a519be6e5a946c70\artifacts\timeseries_model_metadata.json
+- mlruns\models\m-41fbd938513f4332af5908a91111b274\artifacts\conda.yaml
+- mlruns\models\m-41fbd938513f4332af5908a91111b274\artifacts\MLmodel
+- mlruns\models\m-41fbd938513f4332af5908a91111b274\artifacts\model.skops
+- mlruns\models\m-41fbd938513f4332af5908a91111b274\artifacts\python_env.yaml
+- mlruns\models\m-41fbd938513f4332af5908a91111b274\artifacts\requirements.txt
+- mlruns\models\m-4aaa60b08d234a5e95ef71833e223980\artifacts\conda.yaml
+- mlruns\models\m-4aaa60b08d234a5e95ef71833e223980\artifacts\MLmodel
+- mlruns\models\m-4aaa60b08d234a5e95ef71833e223980\artifacts\model.skops
+- mlruns\models\m-4aaa60b08d234a5e95ef71833e223980\artifacts\python_env.yaml
+- mlruns\models\m-4aaa60b08d234a5e95ef71833e223980\artifacts\requirements.txt
+- mlruns\models\m-814015a0b7864a089a8145fda63e6bbd\artifacts\conda.yaml
+- mlruns\models\m-814015a0b7864a089a8145fda63e6bbd\artifacts\MLmodel
+- mlruns\models\m-814015a0b7864a089a8145fda63e6bbd\artifacts\model.statsmodels
+- mlruns\models\m-814015a0b7864a089a8145fda63e6bbd\artifacts\python_env.yaml
+- mlruns\models\m-814015a0b7864a089a8145fda63e6bbd\artifacts\requirements.txt
+- mlruns\models\m-82453dc9cdbe482e8cae4b939516e720\artifacts\conda.yaml
+- mlruns\models\m-82453dc9cdbe482e8cae4b939516e720\artifacts\MLmodel
+- mlruns\models\m-82453dc9cdbe482e8cae4b939516e720\artifacts\model.skops
+- mlruns\models\m-82453dc9cdbe482e8cae4b939516e720\artifacts\python_env.yaml
+- mlruns\models\m-82453dc9cdbe482e8cae4b939516e720\artifacts\requirements.txt
+- mlruns\models\m-b0929e9d6d2d4697a0c8c76b6b408783\artifacts\conda.yaml
+- mlruns\models\m-b0929e9d6d2d4697a0c8c76b6b408783\artifacts\MLmodel
+- mlruns\models\m-b0929e9d6d2d4697a0c8c76b6b408783\artifacts\model.skops
+- mlruns\models\m-b0929e9d6d2d4697a0c8c76b6b408783\artifacts\python_env.yaml
+- mlruns\models\m-b0929e9d6d2d4697a0c8c76b6b408783\artifacts\requirements.txt
+- mlruns\models\m-bbd9adad2dfc4a43930444e47c67bfb9\artifacts\conda.yaml
+- mlruns\models\m-bbd9adad2dfc4a43930444e47c67bfb9\artifacts\MLmodel
+- mlruns\models\m-bbd9adad2dfc4a43930444e47c67bfb9\artifacts\model.skops
+- mlruns\models\m-bbd9adad2dfc4a43930444e47c67bfb9\artifacts\python_env.yaml
+- mlruns\models\m-bbd9adad2dfc4a43930444e47c67bfb9\artifacts\requirements.txt
+- models\classification_metadata.json
 - models\classification_model.pkl
 - models\clustering_model.pkl
 - models\clustering_scaler.pkl
@@ -35,10 +69,12 @@ Generated: 09/22/2026 10:29:21
 - src\ai_agent\__init__.py
 - src\ai_agent\agent_graph.py
 - src\ai_agent\agent_tools.py
+- src\ai_agent\streamlit_app.py
 - src\data\__init__.py
 - src\data\make_dataset.py
 - src\data\monte_carlo_simulation.py
 - src\data\validate_data.py
+- src\mlops\log_models.py
 - src\models\__init__.py
 - src\models\train_classification.py
 - src\models\train_clustering.py
@@ -101,6 +137,371 @@ venv/
 # File: app\app.py
 
 ```python
+"""
+Unified Executive Dashboard for ValueAI.
+Matches JD: "data visualization techniques, to create solutions that enable enhanced business performance"
+"""
+import sys
+import os
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+import streamlit as st
+import json
+
+# Add project root to path
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+# Import Phase 3 Agent
+try:
+    from src.ai_agent.agent_graph import invoke_agent
+    AGENT_AVAILABLE = True
+except ImportError:
+    AGENT_AVAILABLE = False
+
+st.set_page_config(
+    page_title="ValueAI Executive Dashboard", 
+    page_icon="🏥", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS for professional look
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #1f77b4;
+        margin-bottom: 0.5rem;
+    }
+    .sub-header {
+        font-size: 1.1rem;
+        color: #666;
+        margin-bottom: 2rem;
+    }
+    .metric-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1rem;
+        border-radius: 0.5rem;
+        color: white;
+        text-align: center;
+    }
+    .status-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 1rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-right: 0.5rem;
+    }
+    .status-complete { background: #d4edda; color: #155724; }
+    .status-warning { background: #fff3cd; color: #856404; }
+</style>
+""", unsafe_allow_html=True)
+
+# Header
+st.markdown('<h1 class="main-header"> ValueAI</h1>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Healthcare Value Intelligence Platform</p>', unsafe_allow_html=True)
+
+# Status Bar
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.markdown('<span class="status-badge status-complete">✅ All Phases Complete</span>', unsafe_allow_html=True)
+with col2:
+    st.markdown('<span class="status-badge status-complete">✅ Governance Cleared</span>', unsafe_allow_html=True)
+with col3:
+    st.markdown('<span class="status-badge status-complete">✅ MLOps Ready</span>', unsafe_allow_html=True)
+
+st.divider()
+
+# Create comprehensive tabs
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "📊 Executive Overview",
+    "👥 Patient Segmentation", 
+    "🎯 Readmission Risk",
+    "📈 Cost Forecasting",
+    "🤖 AI Business Assistant"
+])
+
+# --- TAB 1: EXECUTIVE OVERVIEW ---
+with tab1:
+    st.header("Strategic Overview")
+    
+    # Load key metrics
+    metrics_path = PROJECT_ROOT / "models" / "classification_metadata.json"
+    if metrics_path.exists():
+        with open(metrics_path, "r") as f:
+            model_meta = json.load(f)
+    else:
+        model_meta = {}
+    
+    # Key metrics row
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Records", f"{int(model_meta.get('n_records', 230890)):,}")
+    with col2:
+        st.metric("XGBoost AUC-ROC", f"{model_meta.get('auc_roc', 0.9535):.4f}")
+    with col3:
+        st.metric("Model Accuracy", f"{model_meta.get('accuracy', 0.8777):.2%}")
+    with col4:
+        st.metric("Clusters Identified", model_meta.get('n_clusters', 3))
+    
+    st.divider()
+    
+    # Executive Summary
+    st.subheader(" Executive Summary")
+    summary_path = PROJECT_ROOT / "docs" / "executive_summary.md"
+    if summary_path.exists():
+        with open(summary_path, "r", encoding="utf-8") as f:
+            st.markdown(f.read())
+    else:
+        st.info("📄 Executive Summary not found. Please ensure docs/executive_summary.md exists.")
+    
+    # Key Findings
+    st.divider()
+    st.subheader("🎯 Key Findings")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("""
+        **High-Risk Population**
+        - Cluster 2 represents ~13% of total population
+        - Average age: 75+ years
+        - 2.9x higher admission rate
+        - 4.2x higher healthcare costs
+        """)
+    with col2:
+        st.markdown("""
+        **Primary Readmission Drivers**
+        1. Average days between inpatient claims
+        2. Total admission count
+        3. Unique diagnosis count
+        4. Beneficiary response for inpatient services
+        """)
+
+# --- TAB 2: PATIENT SEGMENTATION ---
+with tab2:
+    st.header("GMM Patient Risk Clustering & SHAP Explainability")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("📊 Cluster Distribution")
+        cluster_plot = PROJECT_ROOT / "docs" / "cluster_distribution.png"
+        if cluster_plot.exists():
+            st.image(str(cluster_plot), use_container_width=True)
+        else:
+            st.info("Run Phase 2 clustering to generate this plot.")
+            
+    with col2:
+        st.subheader("🔍 Readmission Drivers (SHAP)")
+        shap_plot = PROJECT_ROOT / "docs" / "shap_summary.png"
+        if shap_plot.exists():
+            st.image(str(shap_plot), use_container_width=True)
+        else:
+            st.info("Run Phase 2 classification to generate this plot.")
+    
+    st.divider()
+    
+    # Cluster Details
+    st.subheader(" Cluster Characteristics")
+    
+    # Load clustered data if available
+    cluster_data_path = PROJECT_ROOT / "data" / "processed" / "clustered_dataset.parquet"
+    if cluster_data_path.exists():
+        try:
+            df_clustered = pd.read_parquet(cluster_data_path)
+            
+            if "RISK_CLUSTER" in df_clustered.columns:
+                cluster_stats = df_clustered.groupby("RISK_CLUSTER").agg({
+                    "AGE": "mean",
+                    "TOTAL_ADMISSIONS": "mean",
+                    "AVG_ADMISSION_COST": "mean",
+                    "UNIQUE_DIAGNOSES_COUNT": "mean"
+                }).round(2)
+                
+                st.dataframe(cluster_stats, use_container_width=True)
+                
+                st.markdown("""
+                **Key Insight:** Cluster 2 (High Risk) is primarily driven by `UNIQUE_DIAGNOSES_COUNT` and `TOTAL_ADMISSIONS`. 
+                
+                *Note: SHAP values indicate magnitude of impact, not directional causation.*
+                """)
+        except Exception as e:
+            st.error(f"Error loading cluster data: {e}")
+    else:
+        st.info("Clustered dataset not found. Run Phase 2 clustering first.")
+
+# --- TAB 3: READMISSION RISK ---
+with tab3:
+    st.header("🎯 XGBoost Readmission Prediction Model")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("AUC-ROC Score", f"{model_meta.get('auc_roc', 0.9535):.4f}")
+        st.metric("Test Accuracy", f"{model_meta.get('accuracy', 0.8777):.2%}")
+    with col2:
+        st.metric("Training Samples", f"{model_meta.get('n_train_samples', 21294):,}")
+        st.metric("Test Samples", f"{model_meta.get('n_test_samples', 4455):,}")
+    
+    st.divider()
+    
+    # SHAP Analysis
+    st.subheader(" Feature Importance Analysis")
+    shap_path = PROJECT_ROOT / "docs" / "shap_feature_importance.csv"
+    if shap_path.exists():
+        df_shap = pd.read_csv(shap_path)
+        st.dataframe(df_shap.head(10), use_container_width=True)
+        
+        st.markdown("""
+        **Understanding SHAP Values:**
+        - Mean absolute SHAP measures the average magnitude of a feature's contribution
+        - Does NOT indicate direction (higher/lower values increase risk)
+        - Does NOT establish causation
+        - Used for model interpretability and feature prioritization
+        """)
+    else:
+        st.info("SHAP analysis not available. Run Phase 2 classification with SHAP enabled.")
+
+# --- TAB 4: COST FORECASTING ---
+with tab4:
+    st.header("📈 ARIMA Time-Series Cost Projection")
+    
+    forecast_plot = PROJECT_ROOT / "docs" / "timeseries_forecast.png"
+    metrics_path = PROJECT_ROOT / "docs" / "timeseries_model_metrics.csv"
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        if forecast_plot.exists():
+            st.image(str(forecast_plot), use_container_width=True)
+        else:
+            st.info("Run Phase 2 time-series to generate this plot.")
+            
+    with col2:
+        st.subheader("📊 Model Evaluation")
+        if metrics_path.exists():
+            df_metrics = pd.read_csv(metrics_path)
+            st.dataframe(df_metrics, use_container_width=True)
+            
+            # Calculate improvement
+            if len(df_metrics) >= 2:
+                naive_rmse = df_metrics.iloc[0]['rmse']
+                arima_rmse = df_metrics.iloc[1]['rmse']
+                improvement = ((naive_rmse - arima_rmse) / naive_rmse) * 100
+                st.success(f"✅ ARIMA RMSE improvement: {improvement:.1f}% vs baseline")
+        else:
+            st.info("Metrics pending.")
+    
+    st.divider()
+    
+    # Forecast details
+    st.subheader("📅 12-Month Forecast Summary")
+    forecast_csv = PROJECT_ROOT / "docs" / "timeseries_forecast.csv"
+    if forecast_csv.exists():
+        df_forecast = pd.read_csv(forecast_csv)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Projected Cost", f"${df_forecast['forecast'].sum():,.0f}")
+        with col2:
+            st.metric("Avg Monthly Cost", f"${df_forecast['forecast'].mean():,.0f}")
+        with col3:
+            st.metric("Forecast Period", f"{len(df_forecast)} months")
+    else:
+        st.info("Forecast data not available.")
+
+# --- TAB 5: AGENTIC AI ASSISTANT ---
+with tab5:
+    st.header("🤖 ValueAI Data Science Assistant")
+    st.markdown("""
+    **Ask natural language questions about the data.** 
+    The AI retrieves *verified* Phase 2 evidence before answering.
+    
+    **Try asking:**
+    - "Analyze the high-risk cluster and give 3 strategic recommendations"
+    - "What are the top drivers of readmission?"
+    - "Generate an executive memo for the high-risk segment"
+    """)
+    
+    if not AGENT_AVAILABLE:
+        st.error("""
+        ⚠️ **GenAI Agent dependencies not found.**
+        
+        Please ensure:
+        - `langchain`, `langgraph`, and `langchain_ollama` are installed
+        - Ollama is running with Qwen 2.5 7B model
+        - Run: `ollama run qwen2.5:7b`
+        """)
+    else:
+        # Initialize chat history
+        if "messages" not in st.session_state:
+            st.session_state.messages = [
+                {
+                    "role": "assistant", 
+                    "content": "Hello! I am the ValueAI Data Science Assistant. I can analyze high-risk clusters, explain SHAP drivers, or predict individual readmission risk. Try asking: *'Analyze the high-risk cluster and give 3 strategic recommendations.'*"
+                }
+            ]
+
+        # Display chat history
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+        # Chat input
+        if prompt := st.chat_input("Ask a question about the models or data..."):
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+
+            with st.chat_message("assistant"):
+                with st.spinner("🧠 Retrieving verified evidence and generating insights..."):
+                    try:
+                        response = invoke_agent(prompt)
+                        st.markdown(response)
+                        st.session_state.messages.append({"role": "assistant", "content": response})
+                    except Exception as e:
+                        st.error(f"⚠️ Error: {str(e)}")
+                        st.markdown("**Troubleshooting:**")
+                        st.code("""
+1. Ensure Ollama is running: ollama run qwen2.5:7b
+2. Check that all Phase 2 models are trained
+3. Verify SHAP and clustering artifacts exist in docs/
+                        """)
+
+# Sidebar - Model Status
+with st.sidebar:
+    st.header("️ System Status")
+    
+    st.markdown("### Model Status")
+    status_items = [
+        ("Clustering Model", PROJECT_ROOT / "models" / "clustering_model.pkl"),
+        ("XGBoost Readmission Model", PROJECT_ROOT / "models" / "classification_model.pkl"),
+        ("SHAP Explainability", PROJECT_ROOT / "docs" / "shap_feature_importance.csv"),
+        ("Time-Series Forecast", PROJECT_ROOT / "docs" / "timeseries_forecast.csv"),
+        ("Monte Carlo Simulation", PROJECT_ROOT / "data" / "processed" / "monte_carlo_results.json"),
+    ]
+    
+    for label, path in status_items:
+        if path.exists():
+            st.markdown(f"✅ **{label}**")
+        else:
+            st.markdown(f"⚠️ **{label}**")
+    
+    st.divider()
+    
+    st.markdown("### AI Engine")
+    st.code("Qwen 2.5 7B", language="text")
+    st.markdown("**Framework:** LangGraph")
+    st.markdown("**Architecture:** Evidence-First RAG")
+    
+    st.divider()
+    
+    st.markdown("### Dataset")
+    st.metric("Records", f"{int(model_meta.get('n_records', 230890)):,}")
+    st.metric("Features", model_meta.get('n_features', 44))
 ```
 
 
@@ -158,6 +559,759 @@ venv/
 # File: data\raw\.gitkeep
 
 ```gitkeep
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: docs\compliance_and_audit.md
+
+```md
+# ValueAI Project — Data Governance, Compliance & Audit Log
+
+**Project:** ValueAI End-to-End Risk Stratification & Analytics Platform
+**Data Source:** CMS Medicare Synthetic Public Use Files (SynPUF)
+**Primary Processing:** Python, PySpark, Parquet
+**Models:** XGBoost, Gaussian Mixture Model (GMM), ARIMA, Monte Carlo simulation
+**Explainability:** SHAP
+**Agentic AI:** LangGraph + local Qwen 2.5 7B via Ollama
+**Current Phase:** Phase 4 — MLOps, Visualization & Stakeholder Communication
+**Document Date:** 2026-09-22
+**Status:** Project governance and issue-resolution record
+
+---
+
+## 1. Purpose
+
+This document records the data-quality, analytical-governance, model-interpretation, and GenAI controls applied during development of the ValueAI project.
+
+The objective is to demonstrate that analytical results are:
+
+* traceable to the underlying data and processing pipeline;
+* reproducible from versioned code and generated artifacts;
+* interpreted within the limitations of the available data;
+* separated from unsupported causal or clinical conclusions;
+* documented when data or modelling issues are discovered;
+* communicated with appropriate caveats.
+
+This is a **portfolio project governance record**, not a legal compliance certification or production healthcare compliance assessment.
+
+---
+
+# 2. Data Source & Privacy Handling
+
+## 2.1 Source
+
+The project uses the **CMS Medicare Synthetic Public Use Files (SynPUF)** available as public-use data.
+
+The local pipeline processes beneficiary, inpatient, outpatient, carrier, and prescription drug event data.
+
+The available beneficiary files used in the current pipeline are:
+
+* 2008 Beneficiary Summary File
+* 2009 Beneficiary Summary File
+
+Claims data covers the corresponding available SynPUF sample data used by the project.
+
+The processed dataset contains more than **6.5 million claim-related records** across the source files processed by the pipeline.
+
+---
+
+## 2.2 Data Sensitivity
+
+The project uses public-use synthetic/de-identified source data rather than a production healthcare database.
+
+No real patient-identifying information was intentionally introduced into the project.
+
+The project therefore does **not** constitute:
+
+* a HIPAA compliance certification;
+* a GDPR compliance certification;
+* a production healthcare security assessment;
+* authorization to process real Protected Health Information (PHI).
+
+Any production implementation using real healthcare data would require additional legal, security, access-control, encryption, retention, audit, and organizational controls.
+
+---
+
+## 2.3 Identifier Handling
+
+The SynPUF data contains synthetic beneficiary identifiers such as `DESYNPUF_ID`.
+
+These identifiers are treated as analytical keys rather than real-world patient identities.
+
+The project does not attempt to map synthetic identifiers to real individuals.
+
+---
+
+# 3. Data Storage & Processing Controls
+
+## 3.1 Raw Data
+
+Raw source files are stored under:
+
+```text
+data/raw/synpuf/
+```
+
+The current project contains:
+
+* beneficiary summary files;
+* inpatient claims;
+* outpatient claims;
+* prescription drug events;
+* carrier claims.
+
+Raw source files are retained separately from processed analytical datasets.
+
+---
+
+## 3.2 Processed Data
+
+Processed datasets are stored under:
+
+```text
+data/processed/
+```
+
+The pipeline generates Parquet datasets including:
+
+* `full_dataset.parquet`
+* `train.parquet`
+* `val.parquet`
+* `test.parquet`
+* `clustered_dataset.parquet`
+
+Parquet with Snappy compression is used for analytical storage and efficient downstream processing.
+
+---
+
+## 3.3 Local Development Environment
+
+The current project is developed locally using Python and PySpark.
+
+The architecture is designed so that the analytical pipeline can subsequently be adapted to cloud infrastructure.
+
+AWS/SageMaker should therefore be considered a **target deployment architecture**, unless an actual cloud deployment is separately documented.
+
+No claim is made here that the current project is running in production on AWS SageMaker.
+
+---
+
+# 4. Data Quality Controls
+
+The project includes explicit data validation and quality-handling steps.
+
+Relevant implementation files include:
+
+```text
+src/data/make_dataset.py
+src/data/validate_data.py
+src/data/monte_carlo_simulation.py
+```
+
+Generated analytical artifacts are stored under:
+
+```text
+data/processed/
+docs/
+models/
+```
+
+The pipeline separates raw ingestion, transformation, feature engineering, model training, evaluation, and generated outputs.
+
+---
+
+# 5. Data Quality & Issue Resolution Log
+
+The following issues were encountered during project development and were addressed through changes to the pipeline or analytical methodology.
+
+| ID      | Issue                                                                                                                                      | Date       | Resolution                                                                                                                                                        | Status     |
+|---------|--------------------------------------------------------------------------------------------------------------------------------------------|------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------|
+| AUD-001 | Expected/attempted 2010 beneficiary source file was unavailable at the attempted CMS source location and returned HTTP 404                 | 2026-09-21 | Pipeline was revised to use the available 2008 and 2009 beneficiary files rather than depending on the unavailable file                                           | Resolved   |
+| AUD-002 | Non-positive admission-cost observations affected assumptions required for log-normal Monte Carlo modelling                                | 2026-09-22 | Monte Carlo preprocessing excludes non-positive values before fitting the log-normal distribution                                                                 | Resolved   |
+| AUD-003 | Seasonal time-series specification was inappropriate given the limited historical observation window and introduced an overfitting concern | 2026-09-22 | Model simplified to ARIMA(1,1,1); out-of-sample holdout evaluation and a naive baseline were added                                                                | Resolved   |
+| AUD-004 | Free-form LLM generation could introduce unsupported quantitative claims                                                                   | 2026-09-22 | Implemented deterministic Evidence-First routing in LangGraph so analytical tools produce verified evidence before the local LLM generates the narrative response | Controlled |
+
+---
+
+# 6. AUD-001 — Source File Availability
+
+### Observation
+
+During data acquisition, an attempted source location for the 2010 beneficiary summary file returned an HTTP 404 response.
+
+### Risk
+
+A pipeline dependent on a specific unavailable file could fail during reproducibility or future execution.
+
+### Corrective Action
+
+The ingestion process was adapted to work with the available SynPUF beneficiary files:
+
+```text
+2008
+2009
+```
+
+The pipeline therefore does not treat the unavailable 2010 beneficiary file as a required input.
+
+### Evidence
+
+Available source files are retained under:
+
+```text
+data/raw/synpuf/
+```
+
+The current project contains:
+
+```text
+DE1_0_2008_Beneficiary_Summary_File_Sample_1.csv
+DE1_0_2009_Beneficiary_Summary_File_Sample_1.csv
+```
+
+### Status
+
+**Resolved**
+
+---
+
+# 7. AUD-002 — Admission Cost Data Quality
+
+### Observation
+
+The admission-cost data contained non-positive observations.
+
+A log-normal distribution requires positive observations, so directly fitting the distribution to non-positive values would violate the modelling assumption.
+
+### Risk
+
+Including invalid values could distort the fitted distribution and produce an invalid Monte Carlo projection.
+
+### Corrective Action
+
+The Monte Carlo preprocessing step filters out non-positive cost observations before fitting the log-normal distribution.
+
+The resulting simulation is therefore based only on observations satisfying the distribution's positivity requirement.
+
+### Analytical Limitation
+
+Excluding non-positive observations is a modelling treatment rather than proof that those records are erroneous.
+
+A production implementation would require investigation of the business meaning and source-system lineage of such values before deciding whether they should be corrected, excluded, imputed, or represented using another statistical model.
+
+### Evidence
+
+Generated outputs:
+
+```text
+data/processed/monte_carlo_results.json
+data/processed/monte_carlo_projection.png
+```
+
+Implementation:
+
+```text
+src/data/monte_carlo_simulation.py
+```
+
+### Status
+
+**Resolved for the current portfolio modelling workflow**
+
+---
+
+# 8. AUD-003 — Time-Series Model Specification
+
+### Observation
+
+An initial seasonal time-series approach raised an overfitting concern because the available historical series contained only a limited number of observations.
+
+The underlying synthetic claims data also exhibits a pronounced decline toward the end of the available period.
+
+### Risk
+
+A complex seasonal model could fit historical patterns that are not sufficiently supported by the available observation window and could give misleading confidence in the forecast.
+
+### Corrective Action
+
+The time-series model was simplified to:
+
+```text
+ARIMA(1,1,1)
+```
+
+The evaluation workflow also includes:
+
+* an out-of-sample holdout period;
+* comparison against a naive baseline;
+* model evaluation metrics;
+* forecast output;
+* documentation of the observed late-period decline.
+
+### Evidence
+
+```text
+src/models/train_timeseries.py
+
+data/processed/timeseries_model.pkl
+
+docs/timeseries_forecast.csv
+docs/timeseries_forecast.png
+docs/timeseries_holdout_evaluation.csv
+docs/timeseries_model_metadata.json
+docs/timeseries_model_metrics.csv
+```
+
+### Interpretation Limitation
+
+The observed late-period decline is a characteristic of the available synthetic dataset.
+
+It should not automatically be interpreted as a real-world healthcare utilization trend.
+
+Forecast results should therefore be interpreted in the context of the source data and its limited historical window.
+
+### Status
+
+**Resolved**
+
+---
+
+# 9. AUD-004 — GenAI Hallucination & Evidence Governance
+
+## 9.1 Risk
+
+A conventional LLM workflow can generate plausible-sounding quantitative statements that are not supported by the underlying analytical results.
+
+This is particularly important when communicating:
+
+* model metrics;
+* cluster sizes;
+* feature importance;
+* patient predictions;
+* financial projections;
+* business recommendations.
+
+---
+
+## 9.2 Control Architecture
+
+The project implements an **Evidence-First Agentic AI architecture**.
+
+The workflow is:
+
+```text
+User Question
+      ↓
+Deterministic Evidence Router
+      ↓
+Verified Analytical Tool
+      ↓
+Evidence Package
+      ↓
+Qwen 2.5 7B
+      ↓
+Executive Business Response
+```
+
+Relevant implementation files:
+
+```text
+src/ai_agent/agent_graph.py
+src/ai_agent/agent_tools.py
+src/ai_agent/streamlit_app.py
+```
+
+The agent can retrieve evidence from deterministic analytical functions for:
+
+* high-risk cluster analysis;
+* SHAP feature importance;
+* model metadata;
+* individual readmission-risk prediction.
+
+The LLM is therefore used primarily for **interpretation and communication**, rather than independently calculating project metrics.
+
+---
+
+## 9.3 Evidence Interpretation Rules
+
+The agent is explicitly instructed to distinguish between:
+
+### Observed Data
+
+Descriptive statistics directly calculated from the dataset.
+
+Example:
+
+```text
+Cluster 2 contains 30,298 individuals.
+```
+
+### Model Importance
+
+SHAP mean absolute values represent the magnitude of feature contribution to model output.
+
+They do **not**, by themselves, establish:
+
+* whether increasing the feature increases risk;
+* whether decreasing the feature increases risk;
+* causality.
+
+### Model Prediction
+
+A model-generated probability or classification is an output of the trained model.
+
+It is not equivalent to a clinical diagnosis.
+
+### Causal Evidence
+
+The project does not claim that an observational association or model feature importance establishes causation.
+
+---
+
+## 9.4 Current GenAI Limitation
+
+The Evidence-First architecture reduces the risk of unsupported quantitative evidence entering the LLM context, but it does not guarantee that every generated sentence will be interpreted correctly.
+
+For example, SHAP magnitude can still be incorrectly described as directional if the generated narrative is not sufficiently constrained.
+
+Therefore:
+
+> Quantitative evidence should be validated against the deterministic analytical outputs before being treated as a final business or clinical conclusion.
+
+A production implementation should add structured output validation or deterministic post-generation checks before responses are presented to decision-makers.
+
+### Status
+
+**Controlled — additional production-grade validation remains a future enhancement**
+
+---
+
+# 10. Model Governance
+
+## 10.1 Classification Model
+
+The project uses XGBoost for 30-day readmission classification.
+
+Current recorded evaluation results include:
+
+* ROC-AUC: approximately **0.95**
+* Accuracy: approximately **87.7%**
+
+The exact evaluation artifacts should remain the authoritative source for reported metrics.
+
+Model metadata is stored under:
+
+```text
+models/classification_metadata.json
+```
+
+Model artifact:
+
+```text
+models/classification_model.pkl
+```
+
+---
+
+## 10.2 Explainability
+
+SHAP is used to provide model explainability.
+
+The project stores:
+
+```text
+docs/shap_feature_importance.csv
+docs/shap_summary.png
+```
+
+The current analysis identifies the most influential features by mean absolute SHAP magnitude.
+
+These results are interpreted as **model explanations**, not causal relationships.
+
+---
+
+## 10.3 Clustering
+
+A Gaussian Mixture Model (GMM) is used for population segmentation.
+
+The clustering workflow stores:
+
+```text
+models/clustering_model.pkl
+models/clustering_scaler.pkl
+data/processed/clustered_dataset.parquet
+docs/cluster_distribution.png
+```
+
+The current clustering evaluation reports a silhouette score of approximately:
+
+```text
+0.35
+```
+
+The high-risk segment designation refers to the segment identified through the project's analytical segmentation criteria.
+
+It should not be interpreted as a clinical diagnosis.
+
+---
+
+## 10.4 Monte Carlo Simulation
+
+Monte Carlo simulation is used to project healthcare admission-cost distributions.
+
+The project produces:
+
+```text
+data/processed/monte_carlo_results.json
+data/processed/monte_carlo_projection.png
+```
+
+The simulation reports a prediction interval based on the fitted historical cost distribution.
+
+The projection is a statistical scenario estimate, not a guaranteed future financial outcome.
+
+---
+
+# 11. Statistical & Analytical Limitations
+
+The following limitations are material to interpretation of the project.
+
+### 11.1 Synthetic Data
+
+The project uses CMS SynPUF public-use synthetic data.
+
+Therefore, findings should not be presented as evidence of actual current healthcare utilization patterns in a real patient population.
+
+### 11.2 Historical Coverage
+
+The available data provides a limited historical window.
+
+Consequently, time-series forecasts should not be interpreted as long-term structural forecasts without additional real-world data.
+
+### 11.3 Observational Data
+
+The project does not establish causal relationships between utilization variables and readmission.
+
+### 11.4 Model Performance
+
+Model performance metrics describe performance on the project's evaluation datasets.
+
+They do not establish guaranteed performance after deployment to a different population or production environment.
+
+### 11.5 SHAP Interpretation
+
+SHAP feature importance identifies model contribution magnitude.
+
+It does not independently establish feature direction, causation, or intervention effectiveness.
+
+### 11.6 Cluster Interpretation
+
+GMM clusters are analytical segments produced by the selected features, preprocessing, and model configuration.
+
+They should not be interpreted as formally validated clinical risk categories.
+
+---
+
+# 12. Recommendations Governance
+
+Recommendations generated by the project are treated as **analytical hypotheses for stakeholder consideration**, not guaranteed interventions.
+
+A recommendation should therefore connect:
+
+```text
+Observed Evidence
+        ↓
+Analytical Interpretation
+        ↓
+Potential Business Action
+        ↓
+Proposed KPI
+        ↓
+Future Validation
+```
+
+The project does not claim that a particular intervention will reduce readmissions, costs, or utilization unless such an effect has been separately demonstrated through appropriate evaluation.
+
+Potential operational KPIs should be defined and tested with real operational data before being assigned numerical targets.
+
+---
+
+# 13. Fairness & Responsible AI Considerations
+
+Fairness is treated as a governance consideration for future validation rather than as a completed fairness certification.
+
+The current project does **not** claim that the models have passed a formal demographic fairness audit.
+
+A production healthcare deployment should evaluate, where legally and ethically appropriate:
+
+* performance across relevant demographic groups;
+* false-positive and false-negative rates;
+* calibration across groups;
+* feature and proxy-variable risks;
+* potential disparities in intervention allocation;
+* human oversight requirements.
+
+Because the current dataset is synthetic and the project has not established a formal fairness evaluation framework, no claim of demographic fairness is made here.
+
+---
+
+# 14. Access, Secrets & Environment Configuration
+
+Environment-specific configuration is separated from source code.
+
+Project configuration files include:
+
+```text
+.env
+.env.example
+.gitignore
+```
+
+Secrets and environment-specific values should not be committed to source control.
+
+The project's `.gitignore` should continue to exclude:
+
+* credentials;
+* API keys;
+* local environment files where appropriate;
+* virtual environments;
+* generated caches;
+* other machine-specific artifacts.
+
+---
+
+# 15. Reproducibility & Evidence Artifacts
+
+The project maintains generated analytical artifacts alongside the source code.
+
+### Data
+
+```text
+data/raw/
+data/processed/
+```
+
+### Models
+
+```text
+models/
+```
+
+### Analytical Documentation
+
+```text
+docs/data_dictionary.md
+docs/data_governance_audit.md
+docs/compliance_and_audit.md
+```
+
+### Forecasting Evidence
+
+```text
+docs/timeseries_forecast.csv
+docs/timeseries_forecast.png
+docs/timeseries_holdout_evaluation.csv
+docs/timeseries_model_metadata.json
+docs/timeseries_model_metrics.csv
+```
+
+### Explainability Evidence
+
+```text
+docs/shap_feature_importance.csv
+docs/shap_summary.png
+```
+
+### Simulation Evidence
+
+```text
+data/processed/monte_carlo_results.json
+data/processed/monte_carlo_projection.png
+```
+
+### Model Artifacts
+
+```text
+models/classification_model.pkl
+models/classification_metadata.json
+models/clustering_model.pkl
+models/clustering_scaler.pkl
+models/timeseries_model.pkl
+```
+
+---
+
+# 16. Project Audit Status
+
+| Area                                | Current Status                     | Evidence                             |
+|-------------------------------------|------------------------------------|--------------------------------------|
+| Source-data availability            | Addressed                          | `data/raw/synpuf/`                   |
+| Data preprocessing                  | Implemented                        | `src/data/make_dataset.py`           |
+| Data validation                     | Implemented                        | `src/data/validate_data.py`          |
+| Cost-distribution handling          | Addressed                          | `src/data/monte_carlo_simulation.py` |
+| Classification modelling            | Implemented                        | `src/models/train_classification.py` |
+| Clustering                          | Implemented                        | `src/models/train_clustering.py`     |
+| Time-series modelling               | Implemented                        | `src/models/train_timeseries.py`     |
+| SHAP explainability                 | Implemented                        | `docs/shap_feature_importance.csv`   |
+| Agentic AI evidence routing         | Implemented                        | `src/ai_agent/agent_graph.py`        |
+| GenAI evidence controls             | Implemented with known limitations | `src/ai_agent/agent_graph.py`        |
+| Formal fairness audit               | Not completed                      | Future control                       |
+| Production AWS/SageMaker deployment | Not completed                      | Future deployment                    |
+| Production compliance certification | Not applicable                     | Portfolio project                    |
+
+---
+
+# 17. Future Production Controls
+
+If the project were promoted from a portfolio prototype to a production healthcare analytics platform, the following controls would be required before deployment:
+
+1. Formal data classification and privacy assessment.
+2. Appropriate identity and access management.
+3. Encryption at rest and in transit.
+4. Centralized audit logging.
+5. Model registry and model-version governance.
+6. Dataset and feature lineage.
+7. Automated data-quality thresholds and alerts.
+8. Model drift monitoring.
+9. Bias/fairness evaluation using an appropriate real-world population.
+10. Human review for high-impact decisions.
+11. Structured validation of LLM-generated responses.
+12. Production monitoring and incident management.
+13. Formal regulatory and organizational review.
+14. Reproducible cloud deployment and infrastructure-as-code.
+15. Formal model approval and change-control procedures.
+
+---
+
+# 18. Evidence-Based Governance Principle
+
+The central governance principle of ValueAI is:
+
+> **The analytical system produces the evidence; the AI explains the evidence.**
+
+The LLM should not be treated as the authoritative source of numerical project results.
+
+For quantitative claims, the authoritative sources are the deterministic analytical pipelines and their generated artifacts.
+
+This separation is intended to improve:
+
+* traceability;
+* reproducibility;
+* explainability;
+* stakeholder communication;
+* responsible GenAI usage;
+* analytical integrity.
+
+---
+
+## Document Status
+
+**Current status:** Governance documentation implemented for the portfolio project.
+
+**Important limitation:** This document records development controls and issue resolution. It does not represent a formal regulatory, legal, clinical, security, or production-compliance certification.
+
 ```
 
 
@@ -257,6 +1411,287 @@ Automated validation suite executed post-ingestion. Key assertions passed:
 # File: docs\executive_summary.md
 
 ```md
+# EXECUTIVE SUMMARY: ValueAI Risk Stratification & Agentic AI Intelligence Platform
+
+**Project:** ValueAI Risk Stratification & Agentic AI Platform
+**Author:** Antony Henry Oduor Onyango
+**Date:** September 2026
+**Purpose:** Demonstrate an end-to-end data science capability spanning big-data engineering, statistical analysis, predictive modelling, segmentation, forecasting, simulation, explainable AI, and GenAI-enabled decision support.
+
+---
+
+## 1. BUSINESS PROBLEM
+
+Value-based programs require organizations to transform large and complex datasets into actionable insights that support proactive intervention, resource allocation, risk management, and improved business performance.
+
+The ValueAI project was developed as an end-to-end analytical solution to demonstrate how fragmented claims data can be transformed into:
+
+* Risk-stratified population segments.
+* Predictive estimates of 30-day readmission risk.
+* Statistical projections of future healthcare costs.
+* Quantitative uncertainty estimates through simulation.
+* Explainable model outputs for stakeholder interpretation.
+* Natural-language access to verified analytical findings through an Agentic AI interface.
+
+The project deliberately combines statistical modelling, data mining, visualization, big-data processing, and practical GenAI into a single analytical workflow.
+
+---
+
+## 2. DATA & BIG-DATA ENGINEERING
+
+The project uses the CMS Synthetic Medicare Public Use Files (SynPUF), a synthetic and de-identified dataset suitable for demonstrating healthcare analytics workflows without processing real patient identities.
+
+Using **PySpark**, the pipeline ingested, cleaned, transformed, and integrated multiple claims sources, including:
+
+* Beneficiary summary data.
+* Inpatient claims.
+* Outpatient claims.
+* Prescription drug events.
+* Carrier claims data where applicable.
+
+The resulting analytical workflow processed **more than 6.5 million records** and produced optimized **Parquet** datasets for downstream modelling.
+
+The pipeline was designed to handle practical data-engineering issues encountered during implementation, including:
+
+* Missing legacy source files.
+* Schema differences between source datasets.
+* Null and invalid values.
+* Duplicate submission risks.
+* Non-positive cost observations.
+* Data-quality validation requirements.
+* Train/validation/test dataset separation.
+
+This established the foundation required for scalable statistical analysis and machine-learning workflows.
+
+---
+
+## 3. STATISTICAL MODELLING & DATA MINING
+
+### Population Segmentation
+
+A **Gaussian Mixture Model (GMM)** was developed to identify distinct population segments based on utilization and risk-related characteristics.
+
+The clustering workflow included feature preparation, scaling, model fitting, cluster profiling, and evaluation using the **Silhouette Score**.
+
+The resulting model achieved a Silhouette Score of approximately **0.35**, providing a quantitative basis for interpreting the resulting population segments.
+
+Cluster profiles were subsequently made available to the downstream analytical and Agentic AI components.
+
+### Predictive Modelling
+
+An **XGBoost classification model** was developed to predict 30-day readmission risk.
+
+The modelling workflow included:
+
+* Feature engineering.
+* Label construction.
+* Train/validation/test separation.
+* Model training.
+* Performance evaluation.
+* Feature-importance analysis.
+* SHAP-based explainability.
+
+The evaluated model achieved approximately:
+
+* **AUC: 0.95**
+* **Accuracy: 87.7%**
+
+SHAP analysis was incorporated to help explain which model features contributed most strongly to predictions, supporting communication of analytical findings to non-technical stakeholders.
+
+Importantly, model explanations were treated as measures of predictive contribution rather than evidence of causal relationships.
+
+---
+
+## 4. TIME-SERIES ANALYSIS & ECONOMETRIC PROJECTIONS
+
+A time-series forecasting workflow was developed to project healthcare cost patterns.
+
+The project evaluated an **ARIMA(1,1,1)** model using an out-of-sample holdout period and compared its performance against a naive forecasting baseline.
+
+The final evaluation demonstrated approximately a **14.9% RMSE improvement over the selected naive baseline**.
+
+During model development, the underlying synthetic dataset was also examined for structural changes in the later observation period. A decline in late-period synthetic claim volume was identified and documented rather than being treated as an unquestioned representation of real-world future behaviour.
+
+This provided an important analytical control against producing misleading projections from artificial data characteristics.
+
+---
+
+## 5. MONTE CARLO SIMULATION & UNCERTAINTY ANALYSIS
+
+A Monte Carlo simulation was developed to estimate the distribution of potential future healthcare admission costs.
+
+The workflow:
+
+1. Loaded historical admission-cost observations.
+2. Validated and filtered non-positive cost values before fitting.
+3. Fitted a log-normal distribution to eligible historical costs.
+4. Generated repeated simulated cost outcomes.
+5. Produced a 12-month projection.
+6. Quantified uncertainty using a **95% prediction interval**.
+7. Saved the resulting projection and supporting metadata for downstream use.
+
+The simulation complements point forecasting by providing a distribution of possible outcomes rather than relying solely on a single expected value.
+
+---
+
+## 6. DATA QUALITY, GOVERNANCE & AUDITABILITY
+
+Data quality was treated as a core component of the analytical workflow rather than a separate final-stage activity.
+
+The project includes automated validation through **Great Expectations**, together with documented data-governance and audit considerations.
+
+Several implementation issues were identified and resolved during development, including:
+
+* Missing beneficiary source data.
+* Invalid/non-positive cost observations affecting distribution fitting.
+* Time-series model complexity relative to the available observations.
+* Potential hallucination risk when using an LLM to communicate quantitative model results.
+
+The project maintains supporting documentation covering data definitions, analytical outputs, model metadata, and governance considerations.
+
+Where source-data limitations were identified, they were documented rather than hidden from downstream analysis.
+
+---
+
+## 7. GENAI & AGENTIC AI DECISION SUPPORT
+
+The third phase extended the analytical platform with a practical **Agentic AI** interface.
+
+A **LangGraph** workflow was integrated with a locally hosted **Qwen 2.5 7B** model through Ollama.
+
+The objective was not to allow the LLM to independently invent analytical conclusions, but to create a natural-language interface over verified analytical outputs.
+
+### Evidence-First Architecture
+
+The Agentic AI workflow retrieves verified analytical artifacts before generating its response.
+
+Available evidence includes:
+
+* GMM cluster profiles.
+* SHAP feature-importance results.
+* Time-series forecast outputs.
+* Model evaluation information.
+* Other validated project artifacts.
+
+This architecture separates:
+
+**Analytical computation → Evidence retrieval → Natural-language interpretation**
+
+rather than asking the LLM to independently calculate or invent quantitative findings.
+
+This provides a practical approach for reducing hallucination risk when exposing data-science outputs to non-technical users.
+
+### Stakeholder Interaction
+
+The system supports natural-language questions such as:
+
+* Which population segment has the highest observed risk characteristics?
+* What factors contribute most strongly to the readmission model?
+* What does the cost forecast indicate?
+* What strategic considerations arise from the model outputs?
+
+The assistant can also synthesize verified analytical evidence into structured business-oriented responses.
+
+---
+
+## 8. STAKEHOLDER COMMUNICATION & VISUALIZATION
+
+The project incorporates **Streamlit** to provide a stakeholder-facing interface for analytical results.
+
+The existing analytical artifacts include visualizations covering:
+
+* Population cluster distribution.
+* SHAP feature importance.
+* Time-series forecasts.
+* Monte Carlo cost projections.
+
+The platform is designed to bridge the gap between technical analytical outputs and business stakeholders by presenting model findings in an accessible format.
+
+This reflects the broader objective of the project: **turning advanced analytical methods into usable business intelligence rather than producing models in isolation.**
+
+---
+
+## 9. KEY ANALYTICAL OUTPUTS
+
+| Capability              | Implementation           | Output                                |
+|-------------------------|--------------------------|---------------------------------------|
+| Big-data processing     | PySpark                  | 6.5M+ claims records processed        |
+| Data transformation     | PySpark / Parquet        | Reusable analytical datasets          |
+| Population segmentation | Gaussian Mixture Model   | Risk/utilization clusters             |
+| Predictive modelling    | XGBoost                  | 30-day readmission classifier         |
+| Model explainability    | SHAP                     | Feature contribution analysis         |
+| Time-series analysis    | ARIMA(1,1,1)             | Cost projection                       |
+| Forecast evaluation     | Holdout + naive baseline | 14.9% RMSE improvement                |
+| Uncertainty modelling   | Monte Carlo simulation   | 95% prediction interval               |
+| Data quality            | Great Expectations       | Automated validation                  |
+| GenAI                   | Qwen 2.5 7B              | Natural-language analytical interface |
+| Agent orchestration     | LangGraph                | Evidence-first analytical workflow    |
+| Visualization           | Streamlit / Matplotlib   | Stakeholder-facing analytical views   |
+
+---
+
+## 10. BUSINESS VALUE
+
+The ValueAI platform demonstrates how a data-science function can move from raw data to decision support through a connected analytical lifecycle:
+
+**Large-scale data → Data quality → Feature engineering → Statistical modelling → Prediction → Segmentation → Forecasting → Explainability → GenAI interpretation → Stakeholder insight**
+
+The resulting capability can support business use cases such as:
+
+* Population risk stratification.
+* Targeted resource allocation.
+* Identification of high-utilization segments.
+* Readmission-risk analysis.
+* Cost projection and scenario analysis.
+* Executive analytical reporting.
+* Self-service access to verified data-science findings.
+
+The recommendations generated by the system are intended to support business decision-making and should be validated against the organization's actual operational, clinical, financial, regulatory, and strategic requirements before implementation.
+
+---
+
+## 11. LIMITATIONS & ANALYTICAL CONTROLS
+
+The project uses **synthetic Medicare claims data**, meaning its analytical findings should not be interpreted as direct evidence about real-world patient populations or actual healthcare outcomes.
+
+Accordingly:
+
+* Model performance metrics describe this project's evaluation dataset.
+* Forecasts should not be treated as real-world financial projections.
+* Correlation or predictive contribution should not be interpreted as causation.
+* Synthetic-data artefacts were explicitly considered during time-series analysis.
+* Business recommendations require validation against real organizational data before operational deployment.
+
+These controls are important to ensure that analytical sophistication does not create false confidence in the underlying evidence.
+
+---
+
+## 12. CONCLUSION
+
+ValueAI demonstrates practical capability across the principal areas required of a modern Data Scientist & Analytics function:
+
+**advanced statistical modelling, data mining, large-scale data processing, visualization, predictive analytics, segmentation, sampling and simulation, time-series forecasting, explainable machine learning, stakeholder communication, and practical GenAI/Agentic AI implementation.**
+
+The project establishes a reusable technical foundation for extending analytical models into governed, stakeholder-facing decision-support capabilities while maintaining traceability between business questions, data, models, evidence, and recommendations.
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: docs\mlflow_run_summary.json
+
+```json
+{
+  "experiment": "ValueAI",
+  "tracking_uri": "sqlite:///C:/Data/ValueAI_Project/mlflow.db",
+  "artifact_location": "file:///C:/Data/ValueAI_Project/mlruns",
+  "runs": {
+    "clustering": "9306991c4a004ec2abe99c13ddbb2621",
+    "classification": "400afad306b044288d1c52f43a9cbc9e",
+    "timeseries": "083e11b2b5c04747a519be6e5a946c70"
+  }
+}
 ```
 
 
@@ -346,7 +1781,8 @@ $ExcludedFiles = @(
     "db.sqlite3",
     ".secrets.toml", 
     "Codebase.md",
-    "Codebase.pdf"
+    "Codebase.pdf",
+    ".env"
 )
 
 # Delete old markdown if it exists
@@ -513,6 +1949,5769 @@ if ($GeneratePdf) {
 
     }
 
+}
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\083e11b2b5c04747a519be6e5a946c70\artifacts\timeseries_model_metadata.json
+
+```json
+{
+  "model_type": "ARIMA",
+  "order": [
+    1,
+    1,
+    1
+  ],
+  "historical_start": "2008-01-01",
+  "historical_end": "2010-12-01",
+  "historical_observations": 36,
+  "holdout_months": 6,
+  "forecast_horizon_months": 12,
+  "naive_rmse": 6327247.040082546,
+  "naive_mae": 5409680.0,
+  "naive_mape_percent": 138.33737733035917,
+  "arima_rmse": 5382314.0647497885,
+  "arima_mae": 4487614.259303573,
+  "arima_mape_percent": 117.68687238056526,
+  "arima_rmse_improvement_vs_naive_percent": 14.934346159501773,
+  "forecast_total": -4414162.18412317,
+  "forecast_average_monthly": -367846.8486769308
+}
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-41fbd938513f4332af5908a91111b274\artifacts\conda.yaml
+
+```yaml
+channels:
+- conda-forge
+dependencies:
+- python=3.13.15
+- pip<=26.2.1
+- pip:
+  - mlflow==3.16.1
+  - numpy==2.5.3
+  - pandas==2.3.3
+  - pytest==9.1.1
+  - scikit-learn==1.9.1
+  - scipy==1.18.1
+  - skops==0.15.0
+name: mlflow-env
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-41fbd938513f4332af5908a91111b274\artifacts\MLmodel
+
+```text
+artifact_path: file:///C:/Data/ValueAI_Project/mlruns/models/m-41fbd938513f4332af5908a91111b274/artifacts
+flavors:
+  sklearn:
+    code: null
+    pickled_model: model.skops
+    serialization_format: skops
+    sklearn_version: 1.9.1
+    skops_trusted_types: null
+mlflow_version: 3.16.1
+model_id: m-41fbd938513f4332af5908a91111b274
+model_size_bytes: 7975
+model_uuid: m-41fbd938513f4332af5908a91111b274
+prompts: null
+run_id: 9306991c4a004ec2abe99c13ddbb2621
+utc_time_created: '2026-09-22 20:09:27.542902'
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-41fbd938513f4332af5908a91111b274\artifacts\model.skops
+
+```skops
+PK     -�6]� �Ԉ   �      1507578888944.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+    P/APK     -�6]��z�   �      1507578719056.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (8,), }                                                            
+B����hR@�I*�{�?���<�@q�����@�S��?�I*�{�?�1���@0���H@PK     -�6]1�g
+�   �      1507578719920.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (8,), }                                                            
+N�&V}�c@D�&�b�?��wS}�A��u�Q@���8pL-@D�&�b�?|W׍)O@��p�Ϝ�@PK     -�6]P*��   �      1507578720112.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (8,), }                                                            
+�{Y��	)@p�˜��?��*��@�V�
+"� @󛚣��@p�˜��?�� fГ@�'�[�J@PK     -�6]���t/  /     schema.json{
+  "__class__": "StandardScaler",
+  "__module__": "sklearn.preprocessing._data",
+  "__loader__": "ObjectNode",
+  "content": {
+    "__class__": "dict",
+    "__module__": "builtins",
+    "__loader__": "DictNode",
+    "content": {
+      "with_mean": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "true",
+        "is_json": true,
+        "__id__": 140711809978800
+      },
+      "with_std": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "true",
+        "is_json": true,
+        "__id__": 140711809978800
+      },
+      "copy": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "true",
+        "is_json": true,
+        "__id__": 140711809978800
+      },
+      "feature_names_in_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "content": [
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"AGE\"",
+            "is_json": true,
+            "__id__": 1507578318160
+          },
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"TOTAL_ADMISSIONS\"",
+            "is_json": true,
+            "__id__": 1509233823216
+          },
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"AVG_ADMISSION_COST\"",
+            "is_json": true,
+            "__id__": 1509233823280
+          },
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"UNIQUE_DIAGNOSES_COUNT\"",
+            "is_json": true,
+            "__id__": 1509233823344
+          },
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"AVG_LENGTH_OF_STAY\"",
+            "is_json": true,
+            "__id__": 1509233823408
+          },
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"INPATIENT_CLAIM_COUNT\"",
+            "is_json": true,
+            "__id__": 1509233823536
+          },
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"OUTPATIENT_CLAIM_COUNT\"",
+            "is_json": true,
+            "__id__": 1509233823600
+          },
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"DRUG_CLAIM_COUNT\"",
+            "is_json": true,
+            "__id__": 1509233823664
+          }
+        ],
+        "type": "json",
+        "shape": {
+          "__class__": "tuple",
+          "__module__": "builtins",
+          "__loader__": "TupleNode",
+          "content": [
+            {
+              "__class__": "str",
+              "__module__": "builtins",
+              "__loader__": "JsonNode",
+              "content": "8",
+              "is_json": true,
+              "__id__": 140711810868360
+            }
+          ],
+          "__id__": 1507595505904
+        },
+        "__id__": 1507578719824
+      },
+      "n_features_in_": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "8",
+        "is_json": true,
+        "__id__": 140711810868360
+      },
+      "n_samples_seen_": {
+        "__class__": "float64",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "1507578888944.npy",
+        "__id__": 1507578888944
+      },
+      "mean_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "1507578719056.npy",
+        "__id__": 1507578719056
+      },
+      "var_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "1507578719920.npy",
+        "__id__": 1507578719920
+      },
+      "scale_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "1507578720112.npy",
+        "__id__": 1507578720112
+      },
+      "_sklearn_version": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "\"1.9.1\"",
+        "is_json": true,
+        "__id__": 1509232996448
+      }
+    },
+    "key_types": {
+      "__class__": "list",
+      "__module__": "builtins",
+      "__loader__": "ListNode",
+      "content": [
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        }
+      ],
+      "__id__": 1507606647424
+    },
+    "__id__": 1507592166400
+  },
+  "__id__": 1509099072080,
+  "protocol": 2,
+  "_skops_version": "0.15.0"
+}PK      -�6]� �Ԉ   �              �    1507578888944.npyPK      -�6]��z�   �              ��   1507578719056.npyPK      -�6]1�g
+�   �              ��  1507578719920.npyPK      -�6]P*��   �              ��  1507578720112.npyPK      -�6]���t/  /             ��  schema.jsonPK      5  �    
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-41fbd938513f4332af5908a91111b274\artifacts\python_env.yaml
+
+```yaml
+python: 3.13.15
+build_dependencies:
+- pip==26.2.1
+- setuptools
+- wheel
+dependencies:
+- -r requirements.txt
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-41fbd938513f4332af5908a91111b274\artifacts\requirements.txt
+
+```txt
+mlflow==3.16.1
+numpy==2.5.3
+pandas==2.3.3
+pytest==9.1.1
+scikit-learn==1.9.1
+scipy==1.18.1
+skops==0.15.0
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-4aaa60b08d234a5e95ef71833e223980\artifacts\conda.yaml
+
+```yaml
+channels:
+- conda-forge
+dependencies:
+- python=3.13.15
+- pip<=26.2.1
+- pip:
+  - mlflow==3.16.1
+  - numpy==2.5.3
+  - pandas==2.3.3
+  - pytest==9.1.1
+  - scikit-learn==1.9.1
+  - scipy==1.18.1
+  - skops==0.15.0
+name: mlflow-env
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-4aaa60b08d234a5e95ef71833e223980\artifacts\MLmodel
+
+```text
+artifact_path: file:///C:/Data/ValueAI_Project/mlruns/models/m-4aaa60b08d234a5e95ef71833e223980/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.skops
+    predict_fn: predict
+    python_version: 3.13.15
+  sklearn:
+    code: null
+    pickled_model: model.skops
+    serialization_format: skops
+    sklearn_version: 1.9.1
+    skops_trusted_types: null
+mlflow_version: 3.16.1
+model_id: m-4aaa60b08d234a5e95ef71833e223980
+model_size_bytes: 26780
+model_uuid: m-4aaa60b08d234a5e95ef71833e223980
+prompts: null
+run_id: 9306991c4a004ec2abe99c13ddbb2621
+utc_time_created: '2026-09-22 20:09:17.856541'
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-4aaa60b08d234a5e95ef71833e223980\artifacts\model.skops
+
+```skops
+PK     *�6]�V��   �      1509226194736.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (3,), }                                                            
+r�ݞ΋�?3tyv�?O��?PK     *�6]՚ƣ@  @     1507557076176.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (3, 8), }                                                          
+��������3~d���7��k߿��r ���z�|�ܿ�3~d����<ֹѿ���Ҹ�G6��?�w�'s��?�?D;�?�Z��s�?�\os�?�w�'s��?N5�� �?�Oï�?rt�(m�?��3C� @��x�Y��?�ʶ��� @�
+G�@�?��3C� @�����>�?�$�����?PK     *�6]n񡤀  �     1507578719152.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (3, 8, 8), }                                                       
+��0����?M{ڏ+��9���3��9?]K �9M{ڏ+��9M{ڏ+��9�z&��i�?�5s�ד�?$�ݨҌ�9����ư>�����Y :������":������ :������ :8��A�:�&Ly��9��R�8��9�����Y :����ư>�����":�����Y :�����Y :��M�̤:Q��jZV�9WuL���9������":�����":����ư>������":������":��SC�}:�_yp�`�9$�ݨҌ�9������ :�����Y :������":����ư>������ :8��A�:�&Ly��9$�ݨҌ�9������ :�����Y :������":������ :����ư>8��A�:�&Ly��9�z&��i�?t;�"u�:��:��::��چ:t;�"u�:t;�"u�:��T�?�c�Zy�?�5s�ד�?90ne��9ҽj�d�9 ���g�990ne��990ne��9�c�Zy�?&=����?� ��1�?�|����9�Iw��&�?��ci�zl?Cs�V�^��|����9���"1b�?X8�Ӭ��껖�9����ư>d�s"�9ƪ�2��9!�r��9������9�G��`m�9%����X�9�Iw��&�?�g���9�2�[Ch @A׿�_�?�c5"*�?�g���9.u�*R��qxw������ci�zl?�[r��9A׿�_�?�A|��?�n�~j�?�[r��9%�9N`��?u������?3s�V�^�%2��3��9�c5"*�?�n�~j�?��;��@%2��3��9Iii��۟�*
+k
+�C�?�껖�9������9d�s"�9ƪ�2��9!�r��9����ư>�G��`m�9%����X�9���"1b�?uh[�&l�9.u�*R��#�9N`��?Jii��۟�uh[�&l�9(3X�B�?e�����?X8�Ӭ��o{	>L�9qxw����t������?*
+k
+�C�?�o{	>L�9h�����?��	��N�?k���Vl�?��a�?a�9�{�i?�*��_d�?��>����a�?��a�Ȑ��l������a�?�}�����?�3�u�?�qS���?6���%�?x,���?-���K��?b�t�~�?a�9�{�i?�3�u�?�������?tg�{��?�ī�S�?�3�u�?ڋ��y<?[z꜄���*��_d�?�qS���?tg�{��?�@��¡�?�0����?�qS���?x
+�I��?K�5���?��>��6���%�?�ī�S�?�0����?���p���?6���%�?7Y�<ᐿ��霁N�?��a�?x,���?�3�u�?�qS���?6���%�?�}�����?-���K��?b�t�~�?��a�Ȑ�-���K��?ڋ��y<?x
+�I��?7Y�<ᐿ-���K��?6)Ʉ���?N\�U[��?�l����b�t�~�?[z꜄��K�5���?��霁N�?b�t�~�?N\�U[��?u,�4}��?PK     *�6]���S�  �     1507578719344.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (3, 8, 8), }                                                       
+̦�P�?�?�ڃ����G�A���n�&@���?�ڃ��?�ڃ�l�rb<���.۠%��             @�@��Xu������I����ڶ�����ڶ���{�x��$W���J�#_�                     @�@����da���Xu����Xu��Q$iW�h"�v�                             @�@����I������I���&�oelZ�kN ݨ�                                     @�@��ڶ���{�x��$W���J�#_�                                             @�@{�x��$W���J�#_�                                                �0����?$;>N�ѿ                                                        �ǸxQ��?�R�ƚ��?�S1ޞ>W�',�:/}�B	:I�������"�x?{_���wK�`����}���|�̬?             @�@
+"�*2���/E�uA�YS-���
+���O���̻��[�"�yf�h��:                �+�9kX�?d] K�5��2��.п1؅ѵ���<�g�ה?J�3ҁR�?                        �Ps��@u�2*�Tl�h�ºO�'�IOѿ�D�D�п                                �O��:�?r�k�d�3<���n�?����k��                                             @�@�2�{j"�\�dķ��:                                                �ah���?�=ѯw�̿                                                        wx�\?��?��:�D��?�	)!���M�d�Ҿ��{�����,�{�?�O����>��қ�?�^7Vf�?        ��5�?�82���*��S|��rʜ���?Z#0y����w��Ɨ�K���J�?                &�6��1�?B5v�?pǿ��'Y�׿!�=Y�/?��I���i?#�K~^C�?                        ��<T0@�����!ԿLr��r��W��ſ�-�T���                                t�<�r�?�r�4~"?���3B�?�AiT���                                        �&���@�b��Ɨ�����J�?                                                7�V��8�?m��[ǿ                                                        �I?8E�?PK     *�6]f� �  �     1507578719536.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (3, 8, 8), }                                                       
+,���5��?�!������
+�Qc�iPh�����!������!��������+������듿�!�����    ��.A�?&J�����C�(����`������`���� �N	6-\�1�*���
+�Qc��?&J���    ��.A�jf����?&J����?&J���|px�$\����X���iPh������C�(���jf���    ��.A��C�(����C�(��T��7`��p{x�C��!�������`�����?&J�����C�(��    ��.A��`���� �N	6-\�1�*���!�������`�����?&J�����C�(����`����    ��.A �N	6-\�1�*�����+�� �N	6-\�|px�$\�T��7`� �N	6-\� �N	6-\����J�z�?|���ҿ����듿1�*�����X����p{x�C�1�*��1�*��|���ҿπ���G�?��i�K��?���I_�床=W���j����l5����{����h?9nծ��n�ܢ����<��]��?���I_��    ��.Anŉ� �cN}@��a�r�{���:��3l����R�"�p��S9��:�=W���j�nŉ� �V����	�?��fU'ӿ�2�ǿI%�L�� ��m��? �N��?���l5���cN}@��a���fU'ӿo���{x2@*��ۿ[^� b���rb<˿�^���ο�{����h?r�{���2�ǿ*��ۿh�9��?�(������jl�?����l���9nծ���:��3l�I%�L�� �[^� b��(�����    ��.A%Z�ѭ�"�`���r��:n�ܢ������R�"��m��?��rb<˿�jl�?%Z�ѭ�"���&i?��?�f����˿�<��]��?p��S9��: �N��?�^���ο����l���`���r��:�f����˿mN7Z���?�΀���?ɑ�)u(�?'���!�]?ڰT��`��#�bI�̐?�V�)u(�?�q~�c?�Ȗe�ԯ?ɑ�)u(�?R3W���A��g}��?
+���"
+�r�:	�?���Zy��c�W��N����/�j��?'���!�]?��g}��?���Zoo�?�g &ulؿ��]��ؿ*��g}��?�l�7唿�Y��v��?ڰT��`��
+���"
+��g &ulؿ���@�8��9�ԿUuΆ"
+�y�p'd��9��떵�#�bI�̐?r�:	�?��]��ؿ�8��9�Կ���P���?Qi:	�?\پG�?I�����V�)u(�?���Zy��*��g}��?UuΆ"
+�Qi:	�?X3W���A�R<��N��k�R�j��?�q~�c?c�W��N���l�7唿y�p'd��\پG�?�R<��N����W���?�~��]ſ�Ȗe�ԯ?��/�j��?�Y��v��?9��떵�I����k�R�j��?�~��]ſ����?PK     *�6]qG�   �      1509232552400.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�z��0@PK     *�6]�f�q�   �      1509232553264.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+0p�_��?PK     *�6]6���   �      1509232554512.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�@K�s@PK     *�6]��U�   �      1509232554672.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+L�8�,@PK     *�6]5Y��   �      1509232556592.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+���L�/@PK     *�6]י���   �      1507577855408.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+n�]�0@PK     *�6]@�@��   �      1507577854320.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+^���l�0@PK     *�6]K����   �      1507577854832.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+C�(��0@PK     *�6]^?9�   �      1507578888432.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+��]�*�0@PK     *�6]��!�   �      1507578888400.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+-�1�0@PK     *�6]���%�   �      1507578888464.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�t �0@PK     *�6]`���   �      1507578888496.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+3�N<�0@PK     *�6]mp+z�   �      1507578888528.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�!+�"�0@PK     *�6]H|Rt�   �      1507578888560.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+��J���0@PK     *�6]�0W7�   �      1507578888592.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�U���0@PK     *�6]��HW�   �      1507578888624.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�	^$Z�0@PK     *�6]D�D��   �      1507578888656.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�,ݾ��0@PK     *�6]���   �      1507578888688.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+��=�0@PK     *�6]����   �      1507578888720.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�X��0@PK     *�6]�6��   �      1507578888752.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+��K���0@PK     *�6]=�$��   �      1507578888784.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+��&�0@PK     *�6]�����   �      1507578888816.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�B�0@PK     *�6]����;  �;     schema.json{
+  "__class__": "GaussianMixture",
+  "__module__": "sklearn.mixture._gaussian_mixture",
+  "__loader__": "ObjectNode",
+  "content": {
+    "__class__": "dict",
+    "__module__": "builtins",
+    "__loader__": "DictNode",
+    "content": {
+      "n_components": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "3",
+        "is_json": true,
+        "__id__": 140711810868200
+      },
+      "tol": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "0.001",
+        "is_json": true,
+        "__id__": 1507577853488
+      },
+      "reg_covar": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "1e-06",
+        "is_json": true,
+        "__id__": 1509232553872
+      },
+      "max_iter": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "100",
+        "is_json": true,
+        "__id__": 140711810871304
+      },
+      "n_init": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "10",
+        "is_json": true,
+        "__id__": 140711810868424
+      },
+      "init_params": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "\"kmeans\"",
+        "is_json": true,
+        "__id__": 1509237159616
+      },
+      "random_state": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "42",
+        "is_json": true,
+        "__id__": 140711810869448
+      },
+      "warm_start": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "false",
+        "is_json": true,
+        "__id__": 140711809978832
+      },
+      "verbose": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "0",
+        "is_json": true,
+        "__id__": 140711810868104
+      },
+      "verbose_interval": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "10",
+        "is_json": true,
+        "__id__": 140711810868424
+      },
+      "covariance_type": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "\"full\"",
+        "is_json": true,
+        "__id__": 1507578769360
+      },
+      "weights_init": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "means_init": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "precisions_init": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "n_features_in_": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "8",
+        "is_json": true,
+        "__id__": 140711810868360
+      },
+      "converged_": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "true",
+        "is_json": true,
+        "__id__": 140711809978800
+      },
+      "weights_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "1509226194736.npy",
+        "__id__": 1509226194736
+      },
+      "means_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "1507557076176.npy",
+        "__id__": 1507557076176
+      },
+      "covariances_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "1507578719152.npy",
+        "__id__": 1507578719152
+      },
+      "precisions_cholesky_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "1507578719344.npy",
+        "__id__": 1507578719344
+      },
+      "precisions_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "1507578719536.npy",
+        "__id__": 1507578719536
+      },
+      "n_iter_": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "22",
+        "is_json": true,
+        "__id__": 140711810868808
+      },
+      "lower_bound_": {
+        "__class__": "float64",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "1509232552400.npy",
+        "__id__": 1509232552400
+      },
+      "lower_bounds_": {
+        "__class__": "list",
+        "__module__": "builtins",
+        "__loader__": "ListNode",
+        "content": [
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1509232553264.npy",
+            "__id__": 1509232553264
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1509232554512.npy",
+            "__id__": 1509232554512
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1509232554672.npy",
+            "__id__": 1509232554672
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1509232556592.npy",
+            "__id__": 1509232556592
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507577855408.npy",
+            "__id__": 1507577855408
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507577854320.npy",
+            "__id__": 1507577854320
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507577854832.npy",
+            "__id__": 1507577854832
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507578888432.npy",
+            "__id__": 1507578888432
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507578888400.npy",
+            "__id__": 1507578888400
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507578888464.npy",
+            "__id__": 1507578888464
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507578888496.npy",
+            "__id__": 1507578888496
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507578888528.npy",
+            "__id__": 1507578888528
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507578888560.npy",
+            "__id__": 1507578888560
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507578888592.npy",
+            "__id__": 1507578888592
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507578888624.npy",
+            "__id__": 1507578888624
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507578888656.npy",
+            "__id__": 1507578888656
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507578888688.npy",
+            "__id__": 1507578888688
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507578888720.npy",
+            "__id__": 1507578888720
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507578888752.npy",
+            "__id__": 1507578888752
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507578888784.npy",
+            "__id__": 1507578888784
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1507578888816.npy",
+            "__id__": 1507578888816
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "1509232552400.npy",
+            "__id__": 1509232552400
+          }
+        ],
+        "__id__": 1509232885952
+      },
+      "_sklearn_version": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "\"1.9.1\"",
+        "is_json": true,
+        "__id__": 1509232996448
+      }
+    },
+    "key_types": {
+      "__class__": "list",
+      "__module__": "builtins",
+      "__loader__": "ListNode",
+      "content": [
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        }
+      ],
+      "__id__": 1507592534592
+    },
+    "__id__": 1507591346368
+  },
+  "__id__": 1507578241984,
+  "protocol": 2,
+  "_skops_version": "0.15.0"
+}PK      *�6]�V��   �              �    1509226194736.npyPK      *�6]՚ƣ@  @             ��   1507557076176.npyPK      *�6]n񡤀  �             �6  1507578719152.npyPK      *�6]���S�  �             ��  1507578719344.npyPK      *�6]f� �  �             ��  1507578719536.npyPK      *�6]qG�   �              �C  1509232552400.npyPK      *�6]�f�q�   �              ��  1509232553264.npyPK      *�6]6���   �              ��  1509232554512.npyPK      *�6]��U�   �              �h  1509232554672.npyPK      *�6]5Y��   �              �  1509232556592.npyPK      *�6]י���   �              ��  1507577855408.npyPK      *�6]@�@��   �              ��  1507577854320.npyPK      *�6]K����   �              �D  1507577854832.npyPK      *�6]^?9�   �              ��  1507578888432.npyPK      *�6]��!�   �              ��  1507578888400.npyPK      *�6]���%�   �              �i  1507578888464.npyPK      *�6]`���   �              �   1507578888496.npyPK      *�6]mp+z�   �              ��  1507578888528.npyPK      *�6]H|Rt�   �              ��  1507578888560.npyPK      *�6]�0W7�   �              �E   1507578888592.npyPK      *�6]��HW�   �              ��   1507578888624.npyPK      *�6]D�D��   �              ��!  1507578888656.npyPK      *�6]���   �              �j"  1507578888688.npyPK      *�6]����   �              �!#  1507578888720.npyPK      *�6]�6��   �              ��#  1507578888752.npyPK      *�6]=�$��   �              ��$  1507578888784.npyPK      *�6]�����   �              �F%  1507578888816.npyPK      *�6]����;  �;             ��%  schema.jsonPK      �  �a    
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-4aaa60b08d234a5e95ef71833e223980\artifacts\python_env.yaml
+
+```yaml
+python: 3.13.15
+build_dependencies:
+- pip==26.2.1
+- setuptools
+- wheel
+dependencies:
+- -r requirements.txt
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-4aaa60b08d234a5e95ef71833e223980\artifacts\requirements.txt
+
+```txt
+mlflow==3.16.1
+numpy==2.5.3
+pandas==2.3.3
+pytest==9.1.1
+scikit-learn==1.9.1
+scipy==1.18.1
+skops==0.15.0
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-814015a0b7864a089a8145fda63e6bbd\artifacts\conda.yaml
+
+```yaml
+channels:
+- conda-forge
+dependencies:
+- python=3.13.15
+- pip<=26.2.1
+- pip:
+  - mlflow==3.16.1
+  - numpy==2.5.3
+  - pandas==2.3.3
+  - scipy==1.18.1
+  - statsmodels==0.15.0
+name: mlflow-env
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-814015a0b7864a089a8145fda63e6bbd\artifacts\MLmodel
+
+```text
+artifact_path: file:///C:/Data/ValueAI_Project/mlruns/models/m-814015a0b7864a089a8145fda63e6bbd/artifacts
+flavors:
+  python_function:
+    data: model.statsmodels
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.statsmodels
+    python_version: 3.13.15
+  statsmodels:
+    code: null
+    data: model.statsmodels
+    statsmodels_version: 0.15.0
+mlflow_version: 3.16.1
+model_id: m-814015a0b7864a089a8145fda63e6bbd
+model_size_bytes: 137959
+model_uuid: m-814015a0b7864a089a8145fda63e6bbd
+prompts: null
+run_id: 083e11b2b5c04747a519be6e5a946c70
+utc_time_created: '2026-09-22 20:09:40.695850'
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-814015a0b7864a089a8145fda63e6bbd\artifacts\model.statsmodels
+
+```statsmodels
+��n     �statsmodels.tsa.arima.model��ARIMAResultsWrapper���)��}�(�_results�h �ARIMAResults���)��}�(�data��statsmodels.base.data��
+PandasData���)��}�(�
+orig_endog��pandas.core.series��Series���)��}�(�_mgr��pandas.core.internals.managers��SingleBlockManager���)��(]��pandas.core.indexes.base��
+_new_Index����pandas.core.indexes.range��
+RangeIndex���}�(�name�N�start�K �stop�K$�step�Ku��R�a]��numpy._core.numeric��_frombuffer���(�           2�kA   �]	oA    �sA   �ųtA   @$/wA   `)vA   �z�uA   `	�vA   @�9uA   ��rvA   ���tA   ���uA   ��uA   �sA    �uA   �jytA   �;vtA   @�esA   `@�sA   ��tA   `SfsA   �#�rA   @E7qA   ���qA   �	qA   ��kA   ��XnA   @X�lA    ��jA   @v�gA   �P�eA    �cA    s�`A    sVA    ��OA    2�AA��numpy��dtype����f8�����R�(K�<�NNNJ����J����K t�bK$���C�t�R�a]�hh!}�(h#Nh$K h%K$h&Ku��R�a}��0.14.1�}�(�axes�h�blocks�]�}�(�values�h9�mgr_locs��builtins��slice���K K$K��R�uaust�b�_typ��series��	_metadata�]��_name�a�attrs�}��_flags�}��allows_duplicate_labels��shQ�y�ub�	orig_exog�N�endog�h,(�           2�kA   �]	oA    �sA   �ųtA   @$/wA   `)vA   �z�uA   `	�vA   @�9uA   ��rvA   ���tA   ���uA   ��uA   �sA    �uA   �jytA   �;vtA   @�esA   `@�sA   ��tA   `SfsA   �#�rA   @E7qA   ���qA   �	qA   ��kA   ��XnA   @X�lA    ��jA   @v�gA   �P�eA    �cA    s�`A    sVA    ��OA    2�AA�h3K$��h7t�R��exog�N�	const_idx�N�
+k_constant�K �_cache�}�(�
+row_labels�h(�ynames�hWu�dates�N�freq�N�_param_names�]�(�ar.L1��ma.L1��sigma2�e�predict_start�K$�predict_end�K/�predict_dates�hh!}�(h#Nh$K$h%K0h&Ku��R�ub�params�h,(�       ������?������:�^(IzB�h3K��h7t�R��model�h �ARIMA���)��}�(�_spec_arima��#statsmodels.tsa.arima.specification��SARIMAXSpecification���)��}�(�enforce_stationarity�N�enforce_invertibility�N�concentrate_scale���trend_offset�K�order�KKK���ar_order�K�diff�K�ma_order�K�seasonal_order�(K K K K t��seasonal_ar_order�K �seasonal_diff�K �seasonal_ma_order�K �seasonal_periods�K �ar_lags�]�Ka�ma_lags�]�Ka�seasonal_ar_lags�]��seasonal_ma_lags�]��max_ar_order�K�max_ma_order�K�max_seasonal_ar_order�K �max_seasonal_ma_order�K �max_reduced_ar_order�K�max_reduced_ma_order�K�trend��n��
+trend_poly�h,(�        �h3K ��h7t�R��trend_terms�h,(�        �h0�i8�����R�(Kh4NNNJ����J����K t�bK ��h7t�R��k_trend�K �trend_order�N�trend_degree�N�k_exog�K �_model��statsmodels.tsa.base.tsa_model��TimeSeriesModel���)��}�(h
+h)��}�(hhhXNhYh,(�           2�kA   �]	oA    �sA   �ųtA   @$/wA   `)vA   �z�uA   `	�vA   @�9uA   ��rvA   ���tA   ���uA   ��uA   �sA    �uA   �jytA   �;vtA   @�esA   `@�sA   ��tA   `SfsA   �#�rA   @E7qA   ���qA   �	qA   ��kA   ��XnA   @X�lA    ��jA   @v�gA   �P�eA    �cA    s�`A    sVA    ��OA    2�AA�h3K$��h7t�R�h^Nh_Nh`K ha}�hch(sheNhfNub�
+k_constant�K �exog�N�endog�h,(�           2�kA   �]	oA    �sA   �ųtA   @$/wA   `)vA   �z�uA   `	�vA   @�9uA   ��rvA   ���tA   ���uA   ��uA   �sA    �uA   �jytA   �;vtA   @�esA   `@�sA   ��tA   `SfsA   �#�rA   @E7qA   ���qA   �	qA   ��kA   ��XnA   @X�lA    ��jA   @v�gA   �P�eA    �cA    s�`A    sVA    ��OA    2�AA�h3K$��h7t�R��
+_data_attr�]�(h^hY�	data.exog��
+data.endog��data.orig_endog��data.orig_exog�e�
+_init_keys�]��_index�h(�_index_generated���_index_none���_index_int64���_index_dates���_index_freq�N�_index_inferred_freq��ubh�h,(�           2�kA   �]	oA    �sA   �ųtA   @$/wA   `)vA   �z�uA   `	�vA   @�9uA   ��rvA   ���tA   ���uA   ��uA   �sA    �uA   �jytA   �;vtA   @�esA   `@�sA   ��tA   `SfsA   �#�rA   @E7qA   ���qA   �	qA   ��kA   ��XnA   @X�lA    ��jA   @v�gA   �P�eA    �cA    s�`A    sVA    ��OA    2�AA�h3K$��h7t�R�h�N�_has_missing��numpy._core.multiarray��scalar���h0�b1�����R�(K�|�NNNJ����J����K t�bC ���R�ub�_spec�h)��}�(h�Nh�Nh��h�Kh�KKK��h�Kh�Kh�Kh�(K K K K t�h�K h�K h�K h�K h�]�Kah�]�Kah�]�h�]�h�Kh�Kh�K h�K h�Kh�Kh�Nh�h,(�        �h3K ��h7t�R�h�h,(�        �h�K ��h7t�R�h�K h�Nh�Nh�K h�h�)��}�(h
+h)��}�(hhhXNhYh,(�           2�kA   �]	oA    �sA   �ųtA   @$/wA   `)vA   �z�uA   `	�vA   @�9uA   ��rvA   ���tA   ���uA   ��uA   �sA    �uA   �jytA   �;vtA   @�esA   `@�sA   ��tA   `SfsA   �#�rA   @E7qA   ���qA   �	qA   ��kA   ��XnA   @X�lA    ��jA   @v�gA   �P�eA    �cA    s�`A    sVA    ��OA    2�AA�h3K$��h7t�R�h^Nh_Nh`K ha}�(hch(�xnames�NuheNhfNubh�K h�Nh�h,(�           2�kA   �]	oA    �sA   �ųtA   @$/wA   `)vA   �z�uA   `	�vA   @�9uA   ��rvA   ���tA   ���uA   ��uA   �sA    �uA   �jytA   �;vtA   @�esA   `@�sA   ��tA   `SfsA   �#�rA   @E7qA   ���qA   �	qA   ��kA   ��XnA   @X�lA    ��jA   @v�gA   �P�eA    �cA    s�`A    sVA    ��OA    2�AA�h3K$��h7t�R�h�]�(h^hYh�h�h�h�eh�]�h�h(hЉhщh҉hӉh�NhՉubh�h,(�           2�kA   �]	oA    �sA   �ųtA   @$/wA   `)vA   �z�uA   `	�vA   @�9uA   ��rvA   ���tA   ���uA   ��uA   �sA    �uA   �jytA   �;vtA   @�esA   `@�sA   ��tA   `SfsA   �#�rA   @E7qA   ���qA   �	qA   ��kA   ��XnA   @X�lA    ��jA   @v�gA   �P�eA    �cA    s�`A    sVA    ��OA    2�AA�h3K$��h7t�R�h�Nh�h�ub�_params��statsmodels.tsa.arima.params��SARIMAXParams���)��}�(�spec�h�
+exog_names�]��ar_names�]��ar.L1�a�ma_names�]��ma.L1�a�seasonal_ar_names�]��seasonal_ma_names�]��param_names�]�(�ar.L1��ma.L1�hke�k_exog_params�K �k_ar_params�K�k_ma_params�K�k_seasonal_ar_params�K �k_seasonal_ma_params�K �k_params�K�_params_split�}�(�exog_params�h,(�        �h3K ��h7t�R��	ar_params�h,(�             �h3K��h7t�R��	ma_params�h,(�             �?�h3K��h7t�R��seasonal_ar_params�h,(�        �h3K ��h7t�R��seasonal_ma_params�h,(�        �h3K ��h7t�R�hkG�      uj  Nubh�h�h�h�h�K �measurement_error���time_varying_regression���mle_regression���simple_differencing��h��h���hamilton_representation��h���use_exact_diffuse���polynomial_ar�h,(�             �?      �?�h3K��h7t�R��_polynomial_ar�h,(�             �?�����鿔h3K��h7t�R��polynomial_ma�h,(�             �?      �?�h3K��h7t�R��_polynomial_ma�h,(�             �?�����忔h3K��h7t�R��polynomial_seasonal_ar�h,(�             �?�h3K��h7t�R��_polynomial_seasonal_ar�h,(�             �?�h3K��h7t�R��polynomial_seasonal_ma�h,(�             �?�h3K��h7t�R��_polynomial_seasonal_ma�h,(�             �?�h3K��h7t�R�h�h�h�K�polynomial_trend�h,(�        �h3K ��h7t�R�h�K �_polynomial_trend�h,(�        �h3K ��h7t�R��_k_trend�K �k_ar�Kj#  K�k_diff�K�k_ma�Kj$  K�k_seasonal_ar�K j%  K �k_seasonal_diff�K �k_seasonal_ma�K j&  K �_k_diff�K�_k_seasonal_diff�K �_k_order�K�_k_exog�K h�K �state_regression���state_error���_loglikelihood_burn�Nj'  K�
+orig_endog�h�	orig_exog�N�orig_k_diff�K�orig_k_seasonal_diff�K �_k_states_diff�K�nobs�K$�k_states�K�k_posdef�Kh
+hh�K h�Nh�h,(�           2�kA   �]	oA    �sA   �ųtA   @$/wA   `)vA   �z�uA   `	�vA   @�9uA   ��rvA   ���tA   ���uA   ��uA   �sA    �uA   �jytA   �;vtA   @�esA   `@�sA   ��tA   `SfsA   �#�rA   @E7qA   ���qA   �	qA   ��kA   ��XnA   @X�lA    ��jA   @v�gA   �P�eA    �cA    s�`A    sVA    ��OA    2�AA�h3K$K��h7t�R�h�]�(h^hYh�h�h�h�eh�]�(�order��seasonal_order��trend��enforce_stationarity��enforce_invertibility��concentrate_scale��trend_offset�e�_polynomial_ar_idx�h,(�              �h�K��h7t�R��_polynomial_ma_idx�h,(�              �h�K��h7t�R��_polynomial_seasonal_ar_idx�h,(�        �h�K ��h7t�R��_polynomial_seasonal_ma_idx�h,(�        �h�K ��h7t�R��transition_ar_params_idx��
+transition�hIKKN��R�K���selection_ma_params_idx��	selection�hIKKN��R�K ��h�h(hЉhщh҉hӉh�NhՉ�_init_kwargs�}��k_posdef�Ks�_trend_data�h,(�        �h3K$K ��h7t�R��ssm��.statsmodels.tsa.statespace.simulation_smoother��SimulationSmoother���)��}�(�shapes�}�(�obs�KK$���design�KKK���obs_intercept�KK���obs_cov�KKK��j�  KKK���state_intercept�KK��j�  KKK���	state_cov�KKK��u�k_endog�Kj�  K$j�  Kj�  K�_design�h,(�             �?      �?        �h3KKK��h7t�R��_obs_intercept�h,(�               �h3KK��h7t�R��_obs_cov�h,(�               �h3KKK��h7t�R��_transition�h,(�H             �?                      �?������?                      �?        �h3KKK���F�t�R��_state_intercept�h,(�                               �h3KK��h7t�R��
+_selection�h,(�                     �?�����忔h3KKK��h7t�R��
+_state_cov�h,(�       :�^(IzB�h3KKK��h7t�R��initial_variance�GA.��    �prefix_statespace_map�}�(�s��*statsmodels.tsa.statespace._representation��sStatespace����d�j  �dStatespace����c�j  �cStatespace����z�j  �zStatespace���u�initialization��)statsmodels.tsa.statespace.initialization��Initialization���)��}�(j�  K�_states�h�h0�i8�����R�(Kh4NNNJ����J����K t�bC        ���R�h�j  C       ���R�h�j  C       ���R����_initialization�hی_reconstruct���h.�ndarray���K ��Cb���R�(KK��h0�O8�����R�(Kh�NNNJ����J����K?t�b�]�(h�j  C        ���R���h�j  C       ���R�h�j  C       ���R���j=  et�bhB}�(j  ��j  )��}�(j�  Kj  h�j  C        ���R���j$  j&  j(  K ��j*  ��R�(KK��h0�O8�����R�(Kh�NNNJ����J����K?t�b�]�Nat�bhB}��initialization_type��approximate_diffuse��constant�h,(�               �h3K��h7t�R��stationary_cov�h,(�               �h3KK��h7t�R��approximate_diffuse_variance�GA.��    �prefix_initialization_map�}�(j  �*statsmodels.tsa.statespace._initialization��sInitialization���j  ja  �dInitialization���j	  ja  �cInitialization���j  ja  �zInitialization���u�_representations�}�(j  }�(�constant�h,(�               �h3K��h7t�R��stationary_cov�h,(�               �h3KK��h7t�R�uj  }�(jm  h,(�                       �h0�c16�����R�(Kh4NNNJ����J����K t�bK��h7t�R�jr  h,(�                       �j{  KK��h7t�R�uu�_initializations�}�(j  je  (Kh,(�               �h0�f8�����R�(Kh4NNNJ����J����K t�bK��h7t�R�h,(�               �j�  KK��h7t�R�GA.��    t�R�}�(�_tmp_transition�h,(�               �j�  KK��h7t�R��_tmp_selected_state_cov�h,(�               �j�  KK��h7t�R�ubj  ji  (Kh,(�                       �h0�c16�����R�(Kh4NNNJ����J����K t�bK��h7t�R�h,(�                       �j�  KK��h7t�R�GA.��    t�R�}�(j�  h,(�                       �j�  KK��h7t�R�j�  h,(�                       �j�  KK��h7t�R�ubuubj  j"  ��j  )��}�(j�  Kj  h�j  C        ���R�h�j  C       ���R���j$  j&  j(  K ��j*  ��R�(KK��h0�O8�����R�(Kh�NNNJ����J����K?t�b�]�(NNet�bhB}�jR  �
+stationary�jT  h,(�                       �h3K��h7t�R�jY  h,(�                                        �h3KK��h7t�R�j^  GA.��    j_  }�(j  jc  j  je  j	  jg  j  ji  ujj  }�(j  }�(jm  h,(�                       �h3K��h7t�R�jr  h,(�                                        �h3KK��j�  t�R�uj  }�(jm  h,(�                                        �j{  K��h7t�R�jr  h,(�@                                                                       �j{  KK��j�  t�R�uuj�  }�(j  je  (Kh,(�                       �j�  K��h7t�R�h,(�                                        �j�  KK��j�  t�R�GA.��    t�R�}�(j�  h,(�        ���혻�        ��_ߎ��?      �j�  KK��j�  t�R�j�  h,(�        ��yd��{Bù*q�ù*q��� �fB�j�  KK��j�  t�R�ubj  ji  (Kh,(�                                        �j�  K��h7t�R�h,(�@                                                                       �j�  KK��j�  t�R�GA.��    t�R�}�(j�  h,(�@       ���혻�                        ��_ߎ��?              �        �j�  KK��j�  t�R�j�  h,(�@       ��yd��{B��yd���@ù*q�ù*��ù*q�ù*������ �fB���� ��@�j�  KK��j�  t�R�ubuubujR  NjT  h,(�                               �h3K��h7t�R�jY  h,(�H                                                                               �h3KK��h7t�R�j^  GA.��    j_  }�(j  jc  j  je  j	  jg  j  ji  ujj  }�j�  }�ubjj  }�(j  }�(j�  h,(�           2�kA   �]	oA    �sA   �ųtA   @$/wA   `)vA   �z�uA   `	�vA   @�9uA   ��rvA   ���tA   ���uA   ��uA   �sA    �uA   �jytA   �;vtA   @�esA   `@�sA   ��tA   `SfsA   �#�rA   @E7qA   ���qA   �	qA   ��kA   ��XnA   @X�lA    ��jA   @v�gA   �P�eA    �cA    s�`A    sVA    ��OA    2�AA�h3KK$��h7t�R�j�  h,(�             �?      �?        �h3KKK��h7t�R�j�  h,(�               �h3KK��h7t�R�j�  h,(�               �h3KKK��h7t�R�j�  h,(�H             �?                      �?������?                      �?        �h3KKK��j�  t�R�j�  h,(�                               �h3KK��h7t�R�j�  h,(�                     �?�����忔h3KKK��h7t�R�j�  h,(�       :�^(IzB�h3KKK��h7t�R�uj  }�(j�  h,(�@          2�kA           �]	oA            �sA           �ųtA           @$/wA           `)vA           �z�uA           `	�vA           @�9uA           ��rvA           ���tA           ���uA           ��uA           �sA            �uA           �jytA           �;vtA           @�esA           `@�sA           ��tA           `SfsA           �#�rA           @E7qA           ���qA           �	qA           ��kA           ��XnA           @X�lA            ��jA           @v�gA           �P�eA            �cA            s�`A            sVA            ��OA            2�AA        �j{  KK$��h7t�R�j�  h,(�0             �?              �?                        �j{  KKK��h7t�R�j�  h,(�                       �j{  KK��h7t�R�j�  h,(�                       �j{  KKK��h7t�R�j�  h,(��             �?                                              �?        ������?                                              �?                        �j{  KKK��j�  t�R�j�  h,(�0                                                       �j{  KK��h7t�R�j�  h,(�0                             �?        ������        �j{  KKK��h7t�R�j�  h,(�       :�^(IzB:�^(I�@�j{  KKK��h7t�R�uu�_statespaces�}�(j  j  (h,(�           2�kA   �]	oA    �sA   �ųtA   @$/wA   `)vA   �z�uA   `	�vA   @�9uA   ��rvA   ���tA   ���uA   ��uA   �sA    �uA   �jytA   �;vtA   @�esA   `@�sA   ��tA   `SfsA   �#�rA   @E7qA   ���qA   �	qA   ��kA   ��XnA   @X�lA    ��jA   @v�gA   �P�eA    �cA    s�`A    sVA    ��OA    2�AA�j�  KK$��h7t�R�h,(�             �?      �?        �j�  KKK��h7t�R�h,(�               �j�  KK��h7t�R�h,(�               �j�  KKK��h7t�R�h,(�H             �?                      �?������?                      �?        �j�  KKK��j�  t�R�h,(�                               �j�  KK��h7t�R�h,(�                     �?�����忔j�  KKK��h7t�R�h,(�       :�^(IzB�j�  KKK��h7t�R�J����t�R�}�(�initialized�K�initialized_diffuse�K �initialized_stationary�K�initial_state�h,(�                               �j�  K��h7t�R��initial_state_cov�h,(�H           ��.A                        ��yd��{Bù*q�        ù*q��� �fB�j�  KK��j�  t�R��initial_diffuse_state_cov�h,(�H                                                                               �j�  KK��j�  t�R��missing�h,(��                                                                                                                                                       �h0�i4�����R�(Kh4NNNJ����J����K t�bKK$��h7t�R��nmissing�h,(��                                                                                                                                                       �j�  K$��h7t�R��has_missing�K �tmp�h,(�H               :�^(IzBﰑù*q�                                                �j�  KK��j�  t�R��selected_state_cov�h,(�H                                       :�^(IzBﰑù*q�        ﰑù*q��� �fB�j�  KKK��j�  t�R��selected_obs�h,(�               �j�  K��h7t�R��selected_obs_intercept�h,(�               �j�  K��h7t�R��selected_design�h,(�                               �j�  K��h7t�R��selected_obs_cov�h,(�               �j�  K��h7t�R��transform_cholesky�h,(�               �j�  KK��h7t�R��transform_obs_cov�h,(�               �j�  KK��h7t�R��transform_design�h,(�                               �j�  KK��h7t�R��collapse_obs�h,(�                               �j�  K��h7t�R��collapse_obs_tmp�h,(�                               �j�  K��h7t�R��collapse_design�h,(�H                                                                               �j�  KK��j�  t�R��collapse_obs_cov�h,(�H                                                                               �j�  KK��j�  t�R��collapse_cholesky�h,(�H                                                                               �j�  KK��j�  t�R��t�K �collapse_loglikelihood�G        �companion_transition�K �transform_determinant�G        ubj  j  (h,(�@          2�kA           �]	oA            �sA           �ųtA           @$/wA           `)vA           �z�uA           `	�vA           @�9uA           ��rvA           ���tA           ���uA           ��uA           �sA            �uA           �jytA           �;vtA           @�esA           `@�sA           ��tA           `SfsA           �#�rA           @E7qA           ���qA           �	qA           ��kA           ��XnA           @X�lA            ��jA           @v�gA           �P�eA            �cA            s�`A            sVA            ��OA            2�AA        �j�  KK$��h7t�R�h,(�0             �?              �?                        �j�  KKK��h7t�R�h,(�                       �j�  KK��h7t�R�h,(�                       �j�  KKK��h7t�R�h,(��             �?                                              �?        ������?                                              �?                        �j�  KKK��j�  t�R�h,(�0                                                       �j�  KK��h7t�R�h,(�0                             �?        ������        �j�  KKK��h7t�R�h,(�       :�^(IzB:�^(I�@�j�  KKK��h7t�R�J����t�R�}�(j�  Kj�  K j�  Kj�  h,(�0                                                       �j�  K��h7t�R�j�  h,(��           ��.A                                                        ��yd��{B��yd���@ù*q�ù*��                ù*q�ù*������ �fB���� ��@�j�  KK��j�  t�R�j�  h,(��                                                                                                                                                       �j�  KK��j�  t�R�j�  h,(��                                                                                                                                                       �j�  KK$��h7t�R�j�  h,(��                                                                                                                                                       �j�  K$��h7t�R�j�  K j�  h,(��                       :�^(IzB:�^(I�@ﰑù*q�ﰑù*��                                                                                                �j�  KK��j�  t�R�j�  h,(��                                                                       :�^(IzB:�^(I�@ﰑù*q�ﰑù*��                ﰑù*q�ﰑù*������ �fB���� ��@�j�  KKK��j�  t�R�j�  h,(�                       �j�  K��h7t�R�j�  h,(�                       �j�  K��h7t�R�j�  h,(�0                                                       �j�  K��h7t�R�j�  h,(�                       �j�  K��h7t�R�j�  h,(�                       �j�  KK��h7t�R�j�  h,(�                       �j�  KK��h7t�R�j�  h,(�0                                                       �j�  KK��h7t�R�j�  h,(�0                                                       �j�  K��h7t�R�j�  h,(�0                                                       �j�  K��h7t�R�j�  h,(��                                                                                                                                                       �j�  KK��j�  t�R�j�  h,(��                                                                                                                                                       �j�  KK��j�  t�R�j�  h,(��                                                                                                                                                       �j�  KK��j�  t�R�j�  K#j�  hG�complex���G        G        ��R�j�  K j�  j]  G        G        ��R�ubu�_time_invariant�N�_kalman_filters�}�(j  �)statsmodels.tsa.statespace._kalman_filter��dKalmanFilter���(j�  KK	KK K G;���O�ҬKt�R�}�(j�  K �nobs_diffuse�K �	converged�K �converged_determinant�G        �determinant�G@<6�>���period_converged�K �converged_filtered_state_cov�h,(�H                                                                               �j�  KK��j�  t�R��converged_forecast_error_cov�h,(�               �j�  KK��h7t�R��converged_kalman_gain�h,(�                               �j�  KK��h7t�R��converged_M�h,(�                               �j�  KK��h7t�R��converged_predicted_state_cov�h,(�H                                                                               �j�  KK��j�  t�R��filtered_state�h,(�`      n�ج^~@�
+1�kA�s��F'a�    2�kA    ^�:Ag�W��>"A   �]	oA   ��QAJv�}� :�    �sA   �(A���Q�(A   �ųtA   ��CAu��"'�   @$/wA   ��2�͘�Ȕ�9A   `)vA   ����AGx+�+A   �z�uA   ��*Aє�@l�   `	�vA   �9����B�4A   @�9uA������3A��*�)�   ��rvA   �8�Q3��XE2A   ���tA�����#A��۫-!�   ���uA   ` ���״��A   ��uA�����q?�r{Ї�4A   �sA   Bq@Aw'���9�    �uA    T�$��^9<�A   �jytA@����w���tsi��   �;vtA   �1��^u!�%A   @�esA    �1A���P��	�   `@�sA����'�"A��8]�n�   ��tA������&�Ad��A   `SfsA
+   �*�<��JA   �#�rA�����5�!PӔ��(A   @E7qA   N A�y�lp!�   ���qA����#&�Ї67fA   �	qA�����H�F܉�0�>A   ��kA������3A�~�3�����XnA����s�)��%m?NA   @X�lA   $/�U�3xmeA    ��jA������6�ʢ�z��'A   @v�gA   .3��;ANon A   �P�eA�����T)�����u�A    �cA�����:��?U�\*A    s�`A������E����b7A   sVA   \�:� ���*�#A    ��OA������;��S���$A�j�  KK$��j�  t�R��filtered_state_cov�h,(� 
+      %^�~�.A$^�~�.�1��5�"A%^�~�.�   �~�.A  �5�"�2��5�"A  �5�"� ���V%B    ��     ��>z�?���     ��>                z�?���        �E����B������>������0�#&���������                �0�#&���         LX�r�A������������>e�g����     ��>                e�g����         ��Z@�A������>�������EJ��Ҿ������                �EJ��Ҿ         ��s��A������������>�{��ҍ��������>                �{��ҍ��         �_�ޢ�A������>������<�)*��>������                <�)*��>         �Q�  �A������������>�<hf��������>                �<hf��         `��zq�A������>������ �Q�>������                � �Q�>          �{��A������������>¸����������>                ø����          �ihvA������>������g�ڟ20�>������                h�ڟ20�>          �pM cA������������>��V��������>                ��V��          X���PA������>������\KS��>������                �\KS��>          ����<A������������>*z�3���������>                )z�3���          ���(A������>������h��%��>������                h��%��>          ���A������������>�*�oy��������>                �*�oy��          ���A������>������CD�����>������                CD�����>          ��%�@������������>gg"ȅM�������>                hg"ȅM�           �D��@������>�����򾊍�,v
+�>������                ���,v
+�>           �8�@������������>Z� ��6�������>      0?        [� ��6�      0�   �C��@����/1?����/1�Ժm �.-?    /1�      0?      0�ֺm �.-?      0�   �#+�@     ��     ��>���3��������>                ���3��           @�x�@������>������V�Iu.���������      0?      0�V�Iu.���      0�   ��A{@����ۡ-?����ۡ-��M3g�?����ۡ-�      @?      0��M3g�?      0�    a�g@����/1?����/1�!���V�,?����/1�      0?      0�!���V�,?      0�    rT@������������>Y�X;:�������>      0?        Y�X;:�      0�    4�A@����/1?����/1���y�k#+?����/1�      0?        ��y�k#+?      0�    P�.@������������>|�dx%?������>                }�dx%?            ��@������>�������"$?������              0?�"$?            �@������������>� 0�?������>                � 0�?      0�    ���?������>������lؒ�	��������                lؒ�	��             B�?������������>�8�ib4��������>                �8�ib4��             ��?������>������90p��>������              0?90p��>             ع?������������>P��@�?������>              0�P��@�?             p�?������>���������Y~��������      0?        ���Y~��      0�     `�?   ܡ-?   ܡ-�@<"r2'?   ܡ-�      0?      0�@<"r2'?      0�     ��?�j�  KKK$��j�  t�R��forecast�h,(�               ��T�hpA���~qqAޞo���uA��=�\vA��i��uxA�-�m�vA�{S�avA���2wA���q�BuA5ǚH4�vA>0'��tA�[���uA�6����tA���S�rA���Ly5uAHΣZ�otA#@h��otA���lZ9sAsXy�psA�(K��"tA,MZOsA�o��brA*��#��pAu���?�qA�=��O�pA�+z��jA��a���mA5p>lA�-�U�.jA�b� �gA�O�dAk/�i%cAj}�m�8_A�k��~SA���s��IA�j�  KK$��h7t�R��forecast_error�h,(�           2�kA���j�l,�8�2EDA���6}�2���"Ly�1AP�O[}C� ���1�'��!k�zA@�1�L�?�p'b�3APs����;�@8���&A@q˵e!�@h#�ݒ>� ��_�CA����ف'� ��p���@0�8�0�@��|�A��Ԑ]�%A e	&�'���)���'�а�և�2����3�*A���?h�!� ��d<.G�p�.$��<A �7:#�P��a'��mɭH�1�@+V	(�(��Rb�	 �X{��4���ۂ�A��_�@��-��7�ω�/��j�  KK$��h7t�R��forecast_error_cov�h,(�       �ǝX²{B�����zBQ�X�X]zB����4zB$�Ui#zB.��i�zB*e>��zBXl*YzB�CI�zBΐ�'|zB�=_zB�Q��RzBPE�LMzB�v�JzB7�-�IzB�mv~IzB~ئMIzB��8IzBtj\/IzB��e+IzBz=�)IzBU��(IzBv��(IzB��y(IzB�fj(IzB��c(IzB��`(IzB��_(IzB}_(IzB@�^(IzB'�^(IzBۡ^(IzB��^(IzBؚ^(IzB�^(IzB��^(IzB�j�  KKK$��h7t�R��forecast_error_fac�h,(�               �j�  KK��h7t�R��forecast_error_ipiv�h,(�           �j�  K��h7t�R��forecast_error_work�h,(�               �j�  KK��h7t�R��kalman_gain�h,(�`            �?� G����?        �������?D1|
+��?              �?<�5V:��?              �?��=�?              �?༣�?              �?@�j���?              �?4Fz���?              �?�q���?              �?����?              �?h�Pm���?              �?!?z��?              �?p��Q��?              �?<%k#@��?              �?�U��8��?              �?�N>F5��?              �?��L�3��?              �?D�<3��?              �?<�q�2��?              �?H���2��?        �������?PP�2��?              �? r��2��?              �?�&�2��?        �������?���2��?        �������?`���2��?              �?��v�2��?        �������?4a�2��?              �?��W�2��?              �?\�S�2��?              �?$
+R�2��?              �?�GQ�2��?              �?d�P�2��?              �?��P�2��?              �?�P�2��?              �?H�P�2��?        �������?L�P�2��?              �?�P�2��?        �j�  KKK$��j�  t�R��univariate_filter�h,(��                                                                                                                                                       �j�  K$��h7t�R��loglikelihood�h,(�       ��k\k�Q��
+���.��պí�0����]�.�S�]���.���X�S�0�Qq��c.��D��b(.�����80��q�.�U+IH�/�Twq?�].��̊&�;.�ϗ��c%0��Fө�0���3b.�4��.�Ơn���.����b.�TW�2U.���)
+�b.���I�&d.�Y;�k'�.��NX'y.�G��=.�k5�ޙ1�R���0��[@�'F.�eY�mA_.�@Z��.����Mm.��*� .��i'�/�M֧;U�0�_<N�+�.�IH�ۨ.��j�  K$��h7t�R��predicted_state�h,(�x                                  2�kA𽦚ߋDA           �]	oA�����>A            �sA���6��>A           �ųtA�Zݳl6A           @$/wA����Vj4A           `)vA���a[%A           �z�uAL�ޔ�hA           `	�vA�<��j�A           @�9uA`��cr�@           ��rvAD�cMD
+A           ���tA0���x`��           ���uA��\[N�@           ��uA ������           �sA���B��            �uA ���,��@           �jytA�oc�J���           �;vtA�u�^����           @�esA`2&�iA�           `@�sA ����9��           ��tApE�,���@           `SfsALԲ�B���           �#�rA^yHC�           @E7qAz�Gd�           ���qANE �:�           �	qA��iZ�           ��kA�D]H�"�        ����XnA@ӗg�	�           @X�lAo��1��            ��jA�I�Hն�           @v�gA��S�gt�           �P�eAR�����            �cA�:�?S�            s�`A����� �           sVA:�D��'�            ��OA�U0�e'�           2�AAiɶ�]�'�        �j�  KK%��j�  t�R��predicted_state_cov�h,(�h
+          ��.A                        ��yd��{Bù*q�        ù*q��� �fB     ��z�o����        z�o���������zBﰑù*q�        ﰑù*q��� �fB������>�u���        �u���Q�X�X]zBﰑù*q�        ﰑù*q��� �fB������e��~B�        e��~B�����4zBﰑù*q�        ﰑù*q��� �fB������>������        ������$�Ui#zBﰑù*q�        ﰑù*q��� �fB�������Ф�\��        �Ф�\��.��i�zBﰑù*q�        ﰑù*q��� �fB������>�2U��        �2U��*e>��zBﰑù*q�        ﰑù*q��� �fB����������#�        ����#�Xl*YzBﰑù*q�        ﰑù*q��� �fB������>LuFp<̾        LuFp<̾�CI�zBﰑù*q�        ﰑù*q��� �fB������^w7�McԾ        ^w7�McԾΐ�'|zBﰑù*q�        ﰑù*q��� �fB������>��M\��        ��M\���=_zBﰑù*q�        ﰑù*q��� �fB������6�/Q,Jɾ        6�/Q,Jɾ�Q��RzBﰑù*q�        ﰑù*q��� �fB������>0k���>        0k���>PE�LMzBﰑù*q�        ﰑù*q��� �fB������&�e���¾        &�e���¾�v�JzBﰑù*q�        ﰑù*q��� �fB������>4��/�>        4��/�>7�-�IzBﰑù*q�        ﰑù*q��� �fB������@�I�\��        @�I�\���mv~IzBﰑù*q�        ﰑù*q��� �fB������>���!"�>        ���!"�>~ئMIzBﰑù*q�        ﰑù*q��� �fB������l��� ټ�        l��� ټ���8IzBﰑù*q�        ﰑù*q��� �fB������>D�#`���>        D�#`���>tj\/IzBﰑù*q�        ﰑù*q��� �fB������4u::<»�        4u::<»���e+IzBﰑù*q�        ﰑù*q��� �fB    /1?q����?        q����?y=�)IzBﰑù*q�        ﰑù*q��� �fB     ���R����        ��R����U��(IzBﰑù*q�        ﰑù*q��� �fB������>f	��        f	��v��(IzBﰑù*q�        ﰑù*q��� �fB    ܡ-?�@m�O��        �@m�O����y(IzBﰑù*q�        ﰑù*q��� �fB    /1?�zK�O?        �zK�O?�fj(IzBﰑù*q�        ﰑù*q��� �fB������|��5T��        |��5T����c(IzBﰑù*q�        ﰑù*q��� �fB����/1?N��o}?        N��o}?��`(IzBﰑù*q�        ﰑù*q��� �fB������{<n�v?        {<n�v?��_(IzBﰑù*q�        ﰑù*q��� �fB������>pyn�Ա	?        pyn�Ա	?}_(IzBﰑù*q�        ﰑù*q��� �fB�������F¥��#?        �F¥��#?>�^(IzBﰑù*q�        ﰑù*q��� �fB������>�,]��        �,]��'�^(IzBﰑù*q�        ﰑù*q��� �fB������x��Q�        x��Q�ۡ^(IzBﰑù*q�        ﰑù*q��� �fB������>�+[?�߾        �+[?�߾��^(IzBﰑù*q�        ﰑù*q��� �fB�������$�I��?        �$�I��?ؚ^(IzBﰑù*q�        ﰑù*q��� �fB������>Ш�� �        Ш�� ��^(IzBﰑù*q�        ﰑù*q��� �fB   ܡ-?>���#y?        >���#y?��^(IzBﰑù*q�        ﰑù*q��� �fB������> X�
+���         X�
+���[�^(IzBﰑù*q�        ﰑù*q��� �fB�j�  KKK%��j�  t�R��standardized_forecast_error�h,(�       ~�� �%@v0ؼ`�忏ڌ�B�?62{�J���md��?�H����أ���⿬q'䈼�?���8һ��܌�����?��������P���?�ؐ��>ۿ��Z����������?����h�0@V���?Dm��@r����?�~ـ!��?䓈IRs⿈9���]`\��M��P����?�G��ۿ��7�l'��A�Ў��?+���޿|�('O�nt����QЫ���A�δ�:ѿ���=�_���eC{�����fT6���Y�返j�  KK$��h7t�R��predicted_diffuse_state_cov�h,(�h
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              �j�  KKK%��j�  t�R��forecast_error_diffuse_cov�h,(�                                                                                                                                                                                                                                                                                                       �j�  KKK$��h7t�R��tmp0�h,(�H       	   �C+?�1�U?        �1�U?      �?                                �j�  KK��j�  t�R��tmp00�h,(�H                                                                               �j�  KK��j�  t�R��tmp1�h,(�`          ��.A��yd��{Bù*q�z�o�=�������zBﰑù*q��u��(�Q�X�X]zBﰑù*q�d��~҆�����4zBﰑù*q��r�
+�mܾ$�Ui#zBﰑù*q�jhRv�n�.��i�zBﰑù*q�5�ͪXI�>*e>��zBﰑù*q��Y���Xl*YzBﰑù*q§b��0��>�CI�zBﰑù*q���y�	��ΐ�'|zBﰑù*q·�u�`�>�=_zBﰑù*q���%�e���Q��RzBﰑù*q�V#����>PE�LMzBﰑù*q����4�C���v�JzBﰑù*q����4�>7�-�IzBﰑù*q��ޘ�����mv~IzBﰑù*q¶X"Bq�>~ئMIzBﰑù*q��K9�����8IzBﰑù*q�_:����>tj\/IzBﰑù*q�N���C����e+IzBﰑù*q��|E,6?y=�)IzBﰑù*q·�R�^�U��(IzBﰑù*q��0Hɾv��(IzBﰑù*qº_�4=%?��y(IzBﰑù*q� ��R�6?�fj(IzBﰑù*q�d��5�7���c(IzBﰑù*q��3�Ͳ�4?��`(IzBﰑù*q�yܰot?��_(IzBﰑù*q¨<�r2�?}_(IzBﰑù*q��F¥��!??�^(IzBﰑù*q������㹾'�^(IzBﰑù*q¡M����ۡ^(IzBﰑù*q´iR�8��>��^(IzBﰑù*q��$�IWB?ؚ^(IzBﰑù*q��Q�?~P���^(IzBﰑù*q�60x�1?��^(IzBﰑù*qj�  KKK$��j�  t�R��tmp2�h,(�       z{�q���>�ū'f��K��"Z�>ZV� ����������>�;�g�ⷾ��5��'�=�>���^���Ly�P�>�l&8i��8oХ��>�,>RV��
+IIZt���o�U�\�>����՜�R� 蹗N>��G"�^��N��2�>JI����>���j.朾5ɳ�p*��T�@�"��y��@�>w���	ϕ���_Mo��}�m���>㉉�啗�����~T����N���f���_,���������𑨾�mT�������4�-�����g]����j�  KK$��h7t�R��tmp3�h,(�`      M\�"|b=M\�"|b=        �V��$c=�V��$c=        �"0�kc=�"0�kc=        �8����c=�8����c=        �3\��c=�3\��c=        �'��$�c=�'��$�c=        ���ۏ�c=���ۏ�c=        �7Tћ�c=�7Tћ�c=        �q��c=�q��c=        ��>B�c=��>B�c=        |n��W�c=|n��W�c=        ݂P<a�c=݂P<a�c=        C��Pe�c=C��Pe�c=        ���g�c=���g�c=        �ߘ�g�c=�ߘ�g�c=        �f-h�c=�f-h�c=        �Rh�c=�Rh�c=        �'bh�c=�'bh�c=        C�hh�c=C�hh�c=        ���kh�c=���kh�c=        �*/mh�c=�*/mh�c=        �U�mh�c=�U�mh�c=        U�mh�c=U�mh�c=        /.nh�c=/.nh�c=        ��"nh�c=��"nh�c=        o�'nh�c=o�'nh�c=        �*nh�c=�*nh�c=        K�*nh�c=K�*nh�c=        �_+nh�c=�_+nh�c=        H�+nh�c=H�+nh�c=        �+nh�c=�+nh�c=        j�+nh�c=j�+nh�c=        �+nh�c=�+nh�c=        ��+nh�c=��+nh�c=        a�+nh�c=a�+nh�c=        ��+nh�c=��+nh�c=        �j�  KKK$��j�  t�R��tmp4�h,(�                                                                                                                                                                                                                                                                                                       �j�  KKK$��h7t�R��M�h,(�`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      �j�  KKK$��j�  t�R��M_inf�h,(�`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      �j�  KKK$��j�  t�R��tmpK0�h,(�                               �j�  K��h7t�R��tmpK1�h,(�                               �j�  K��h7t�R��tmpL0�h,(�H                                                                               �j�  KK��j�  t�R��tmpL1�h,(�H                                                                               �j�  KK��j�  t�R�ubj  je  �zKalmanFilter���(j  KKKM�K G;���O�ҬKt�R�}�(j�  K$jk  K jl  K jm  j]  G        G        ��R�jn  j]  G@<6�>��G>P      ��R�jo  K jp  h,(��                                                                                                                                                       �j�  KK��j�  t�R�ju  h,(�                       �j�  KK��h7t�R�jz  h,(�0                                                       �j�  KK��h7t�R�j  h,(�0                                                       �j�  KK��h7t�R�j�  h,(��                                                                                                                                                       �j�  KK��j�  t�R�j�  h,(�`           ��OA$�"qv+<    ��;� ���uG<�S���$A     �=    ��OA$�"qv+<    ��;� ���uG<�S���$A     �=�j�  KK��j�  t�R�j�  h,(�          ܡ-?��,C�3�=   ܡ-���,C�3���)ŭͮ,?T,d�V+�=	   ܡ-���,C�3��      0?      �=      0�      ���)ŭͮ,?T,d�V+�=      0�      ��      �?     @�=   ܡ-?��,C�3�=   ܡ-���,C�3���)ŭͮ,?T,d�V+�=	   ܡ-���,C�3��      0?      �=      0�      ���)ŭͮ,?T,d�V+�=      0�      ��      �?     @�=�j�  KKK��j�  t�R�j�  h,(�@                      ��T�hpA�p�kA�V>���~qqAS�Q�kM>ݞo���uAƑ1[;�B>��=�\vA�-���8>��i��uxA���a�(0>�-�m�vA_����a%>�{S�avAY��զ*>���2wA��g �>���q�BuA��Q�i>4ǚH4�vA��G >>0'��tA;B��$�=�[���uA�ޔ�t��=�6����tAp��ZO�=���S�rAbŹ�0�=���Ly5uA�؋I���=HΣZ�otA\�TX��=#@h��otA��Οx�=���lZ9sAɧ�^��=sXy�psAf�3��ʧ=�(K��"tAݗ��LP�=,MZOsA��X<��=�o��brA�@�M��=*��#��pA�v"$�؁=u���?�qA\3D�-}w=�=��O�pA���n=�+z��jA�J��Wd=��a���mA����Z=5p>lAY)�
+��Q=�-�U�.jA�k���0G=�b� �gA���6A�>=�O�dA�K��4=k/�i%cA ���o*=j}�m�8_A�aWN>e!=�k��~SAhi���=���s��IA�M��� =�j�  KK$��h7t�R�j�  h,(�@          2�kA        ���j�l,��p�kA�V�0�2EDAS�Q�kM����6}�2�Ƒ1[;�B�p�"Ly�1A�-���8�H�O[}C����a�(0�@���1�'�_����a%��!k�zAY��զ*�@�1�L�?���g ��p'b�3A��Q�i�@s����;���G �@8���&A;B��$��@q˵e!��ޔ�t��@h#�ݒ>�p��ZO� ��_�CAbŹ�0ؽ����ف'��؋I��Ͻ ��p���@\�TX�Ľ0�8�0���Οx��@��|�Aɧ�^�����Ԑ]�%Af�3��ʧ� e	&�'�ݗ��LP����)���'���X<���а�և�2��@�M������3�*A�v"$�؁����?h�!�\3D�-}w� ��d<.G����n�h�.$��<A�J��Wd�0�7:#�����Z�P��a'�Y)�
+��Q��mɭH�1��k���0G�@+V	(�(����6A�>��Rb�	 ��K��4�X{��4� ���o*���ۂ�A��aWN>e!��_�@��-�hi�����7�ω�/��M��� ��j�  KK$��h7t�R�j�  h,(�        ��^(IzB��^(I�@��^(IzB��^(I�@�j�  KKK��h7t�R�j�  h,(�                       �j�  KK��h7t�R�j�  h,(�           �j�  K��h7t�R�j�  h,(�                       �j�  KK��h7t�R�j�  h,(�0             �?��\2����P�2��?V��-I��                �j�  KKK��h7t�R�j�  h,(��                                                                                                                                                       �j�  K$��h7t�R�j�  h,(�@      �k\k�Q��o�ӡg�>�
+���.�ȗ����0��պí�0�Vd o�V>���]�.��F��-��Q�]���.���HJ� ���X�S�0���œ�U>Rq��c.�>J���>5��D��b(.���^i��<�����80�xw�J<F>�q�.�h��T�4�S+IH�/��?��;>Twq?�].�0�8܈�5��̊&�;.�x�_`e3:�ϗ��c%0��]����C>�Fө�0�st���S>��3b.��8p!�h5�4��.��-n�?�Ơn���.�Doi�%�%����b.���I��">�TW�2U.��"��7���)
+�b.�j�:գ\5���I�&d.���AP'*5�Y;�k'�.�H7�w^���NX'y.�����2�G��=.��/�9�k5�ޙ1�	��F�`>Q���0���tO|@>�[@�'F.��O�p�8�eY�mA_.��eZf��5�@Z��.�00hX 0����Mm.�'q_�4��*� .��hH�I�=��i'�/�Ih;O��M֧;U�0��ܨ�$3O>_<N�+�.�΋��S.�IH�ۨ.��C4')��j�  K$��h7t�R�j�  h,(��           ��OAl_R��4<�U0�e'���: =                    2�AA,	5<kɶ�]�'��7U)/�=                    2�AA,	5<kɶ�]�'��7U)/�=                �j�  KK��j�  t�R�j�  h,(��      
+   ܡ-? �,C�3�=�[t��?�<Bd�y}=                �[t��?�<Bd�y}=��^(IzB��^(I�@ﰑù*q�ﰑù*��                ﰑù*q�ﰑù*������ �fB���� ��@������> ӼK̞=���og��и�rT�=                ���og��и�rT�=[�^(IzB[�^(I�@ﰑù*q�ﰑù*��                ﰑù*q�ﰑù*������ �fB���� ��@������> ӼK̞=���og��и�rT�=                ���og��и�rT�=[�^(IzB[�^(I�@ﰑù*q�ﰑù*��                ﰑù*q�ﰑù*������ �fB���� ��@�j�  KKK��j�  t�R�j�  h,(�@      z�� �%@��g�u��0ؼ`��9
+PU\�5>~ڌ�B�?�:&S�BO�2{�J������H�=>�md��?'�'��;��H����3�d�N>���Y[��2>�q'䈼�?'𑔉�$����8һ���7�һH>ی�����?ų鬓�=��������*��E>��P���?le����1��ؐ��>ۿ��ƭ�>+>��Z������TW��G>������?����M�����h����h2>,@V���?�����Dm���
+�:>Cr����?� ���~ـ!��?��n�!�0�瓈IRs��{&IRs2>�9���6����2>_`\��M���1��M=>�P����?�D���4��G��ۿ^}���+>��7�l'�4�l'R>}A�Ў��?!=�Ў�F�G���޿5b��.>|�('O�[^%'O2>lt����D/���<>OЫ����Q���3>X�δ�:ѿ �̴�:!>���=�_�	��=�_?>��eC{��t�eC{K>���fT6�Im�fT67>$��Y����Y�8>�j�  KK$��h7t�R�j�  h,(��                                                                                                                                                                                                                                                                                                                                                                                                                                                      �j�  KKK��j�  t�R�j�  h,(�                                        �j�  KKK��h7t�R�j�  h,(��          �C+?�L�.1����KbȺ?��T��Y�                ��KbȺ?��T��Y�     ��?     ��=                                                                �j�  KK��j�  t�R�j�  h,(��       �>Y���?�u���=                                                                                                                                �j�  KK��j�  t�R�j�  h,(�0       6���5?8o=�2��=��^(IzB��^(I�@ﰑù*q�ﰑù*���j�  KKK��h7t�R�j�  h,(�       ���g]���-��g]�=�j�  KK��h7t�R�j�  h,(�0       ��+nh�c=��+nh�û��+nh�c=��+nh�û                �j�  KKK��h7t�R�j�  h,(�                       �j�  KKK��h7t�R�j�  h,(�`                                                                                                       �j�  KKK��j�  t�R�j�  h,(�`                                                                                                       �j�  KKK��j�  t�R�j  h,(�0                                                       �j�  K��h7t�R�j  h,(�0                                                       �j�  K��h7t�R�j  h,(��                                                                                                                                                       �j�  KK��j�  t�R�j  h,(��                                                                                                                                                       �j�  KK��j�  t�R�ubu�loglikelihood_burn�K�results_class��*statsmodels.tsa.statespace.kalman_smoother��SmootherResults����prefix_kalman_filter_map�}�(j  je  �sKalmanFilter���j  jg  j	  je  �cKalmanFilter���j  j  u�	tolerance�G;���O�Ҭ�_scale�N�prefix_kalman_smoother_map�}�(j  �+statsmodels.tsa.statespace._kalman_smoother��sKalmanSmoother���j  j�  �dKalmanSmoother���j	  j�  �cKalmanSmoother���j  j�  �zKalmanSmoother���u�_kalman_smoothers�}�j  j�  (j�  ji  KK t�R�}�(j�  J�����_smooth_method�K�scaled_smoothed_estimator�h,(�x      :���% �>[K' ��>�(n#�b�n�6`���(n#�b���
+º�>�y_�1�>��
+º�>"s��h���o������"s��h���.��줾��v,�>�.��줾 �V6,���h������ �V6,����_������d|�c����_�������s�p��th��s��>��s�p����&C(��C���Hm����&C(��@���f�X>��W��\�>@���f�X>�� ���A�-����� ��`����B� wZ��?�>`����B���ȥ�\*�\����ȥ���*㠾���2����*㠾oL#T�>n�����>oL#T�>��޽e��	�xV�И���޽e�����aH�����@>}>���aH��jڼt�����{� ��jڼt��pU��ej���p���>pU��ej��ZH�e��{�kp�բ>�ZH�e��U_>8�����ͥ�d��U_>8���WN���ӱ���˰H���WN���ӱ�A�����j.�K뤾A�����Y⌑��\d��d��>�Y⌑���8��Ҷ�n�d(y��8��Ҷ�w�ڇ�e���2u/伾w�ڇ�e���kS>�ň>�0q�w �>�kS>�ň>%���t;���*Uꁾ%���t;����Q��Ҹ�^� ㈾��Q��Ҹ����.�������4������.����{6�,J=���������{6�,J=��ٺ]��2���	��3x>ٺ]��2��BH�9���B�tNq��BH�9����
+������W��<���
+������������ܚ�����������g]������g]������g]���                                �j�  KK%��j�  t�R��scaled_smoothed_estimator_cov�h,(�h
+      H�}�g�c=u�Q�9X]=��� �H�u�Q�9X]=j��&�7o=os���d=��� �H�os���d='��ӌ�p=�6�qd=)��4(_=�yGJ{8F�)��4(_='��ӌ�p=�.����e=�yGJ{8F��.����e=�Ւ�k�p=�e?ԩ<d=�Px!�_=C���
+0E��Px!�_=�Ւ�k�p=�	�`\f=C���
+0E��	�`\f=<�t��+q=t�@kQd=�Ϭ$`=	����D��Ϭ$`=<�t��+q=$���I�f=	����D�$���I�f=2��?q=�`<�Yd=Q���6`=��z
+�D�Q���6`=2��?q=�P��f=��z
+�D��P��f=�H�kHq=�#p��]d=gB?`=�Rx�vvD�gB?`=�H�kHq=h2�f=�Rx�vvD�h2�f=���.Lq=)!�u_d=G����B`=6_��)mD�G����B`=���.Lq=���z�f=6_��)mD����z�f=����Mq=]G�.`d=�M,!D`=����"iD��M,!D`=����Mq=����,�f=����"iD�����,�f=kD��Nq=/�}`d=�3j��D`=�%�sdgD��3j��D`=kD��Nq=��yM�f=�%�sdgD���yM�f=>��<�Nq=>Y�H�`d=�R�9E`=V�(�fD��R�9E`=>��<�Nq=]�"��f=V�(�fD�]�"��f=Y���Nq=�j�;�`d=:84E`=f�gfOfD�:84E`=Y���Nq=Cq���f=f�gfOfD�Cq���f=�t�Oq=;�̴�`d=��E�AE`=c�$+fD���E�AE`=�t�Oq=�����f=c�$+fD������f=B�zOq=�+p��`d=��S�GE`=���pfD���S�GE`=B�zOq=	�K��f=���pfD�	�K��f=��+�
+Oq=MM&��`d=���ZJE`=�E8�fD����ZJE`=��+�
+Oq=�3:���f=�E8�fD��3:���f=W��Oq=��?�`d=~ �yKE`=ރ��fD�~ �yKE`=W��Oq=�_s��f=ރ��fD��_s��f=ձ1Oq=҅vy�`d=G7��KE`=��&[fD�G7��KE`=ձ1Oq=��	��f=��&[fD���	��f=e,v�Oq=�JБ�`d=��U1LE`=����fD���U1LE`=e,v�Oq=�.NE��f=����fD��.NE��f=$ٿ�Oq=Ɓ���`d=a6�QLE`=#��@fD�a6�QLE`=$ٿ�Oq=��'��f=#��@fD���'��f=�}=�Oq= ����`d=�j�pLE`=�=եfD��j�pLE`=�}=�Oq= �K���f=�=եfD� �K���f=���&Oq=�KБ�`d=�#�LE`=J�qfD��#�LE`=���&Oq=��`��f=J�qfD���`��f=��-Oq=�vy�`d=��ME`=L�U�
+fD���ME`=��-Oq=b�Sf��f=L�U�
+fD�b�Sf��f=Duk�Oq=��?�`d=M�NE`=����fD�M�NE`=Duk�Oq=W�5���f=����fD�W�5���f=��Oq=�X&��`d=��xwPE`=8esG�eD���xwPE`=��Oq=&����f=8esG�eD�&����f=��f��Nq=�Ep��`d=	���UE`=�4hP�eD�	���UE`=��f��Nq=1��f=�4hP�eD�1��f=c���Nq=�ʹ�`d=m�ibE`=��1�eD�m�ibE`=c���Nq=� �9�f=��1�eD�� �9�f=���Nq=���;�`d=���TE`=��*j�dD����TE`=���Nq=�Mipu�f=��*j�dD��Mipu�f=�$�Nq=P��H�`d=��V�E`=����CcD���V�E`=�$�Nq=���!��f=����CcD����!��f=�v�i�Lq=(�1�}`d=�MnQ\F`=�/�(�_D��MnQ\F`=�v�i�Lq=x�W��f=�/�(�_D�x�W��f=R��Iq=&�.`d=���j�G`=�q��%WD����j�G`=R��Iq=�"@(�f=�q��%WD��"@(�f=k'deBq=u�"�u_d=�8���J`=$�8�CD��8���J`=k'deBq=u�TZ�f=$�8�CD�u�TZ�f=�A��1q=d���]d=B���aR`=�XǈD�B���aR`=�A��1q=�����nf=�XǈD������nf=���q=,?`<�Yd=��2��c`=����j�C���2��c`=���q=�+�x��e=����j�C��+�x��e=
+V`9�p=J- lQd=x�T��`=�0L��B�x�T��`=
+V`9�p=��n58�d=�0L��B���n58�d= �}�l�o=JL�թ<d=<���g�`=#E�ƒ@�<���g�`= �}�l�o=6�S.�b=#E�ƒ@�6�S.�b=&ᩈ4 l=T�2�qd=�hu�T�a=�skWW!7��hu�T�a=&ᩈ4 l=bXA��Y=�skWW!7�bXA��Y=��+nh�c=��+nh�c=��+nh�c=        ��+nh�c=��+nh�c=                                                                                                        �j�  KKK%��j�  t�R��smoothing_error�h,(�       �� ��P�>�}`��¾��#t��>�GO����Y��z���>X�H8	�����kĩ�`����M�>:������e#�z40�> }�ס��,���/n�>x_���>��DE|Ǿ�9o�J�>z�Ts����Cħ>ǧ�J櫾���� ����RC0�>��ܯpeU>���N�>���B���K���>�`,��S�>�1s�E�Ⱦ2t�n�=�>	��k>�x��O�>@V���>N^�ԕ�ް\�?�> �\@�>��}u�+����g��>���g]����j�  KK$��h7t�R��smoothed_state�h,(�`      -��Ǆ@���1�kA]��_(a�    2�kA   ^�:A/j�E��"A   �]	oA   ��QA3ڡT�C:�    �sA   �(Ax�r'�(A   �ųtA   ��CAW�c�9'�   @$/wA
+   ��2�"yA���9A   `)vA   �����Z Z)A   �z�uA   ��*A�ySsn�   `	�vA   �9�[d%-D�4A   @�9uA������3A�-G)�   ��rvA   �8��tM�XE2A   ���tA�����#A0DT�8!�   ���uA   ` ��?���A   ��uA�����q?�A�sJ�4A   �sA   Bq@A�
+�3�9�    �uA    T�$��˦�;�A   �jytA@����w��0D4vi��   �;vtA   �1��u�t!�%A   @�esA    �1A���Y��	�   `@�sA����'�"A89oc�n�   ��tA������&�d�s�A   `SfsA   �*��M��JA   �#�rA�����5��Ի���(A   @E7qA   N AvG��lp!�   ���qA����#&����57fA   �	qA�����H��I��0�>A   ��kA������3A
+h�~�3�����XnA����s�)��#m?NA   @X�lA
+   $/�4�2xmeA    ��jA������6�jf�z��'A   @v�gA   .3�� ANon A   �P�eA�����T)�����u�A    �cA   ��:�.9U�\*A    s�`A������E�i���b7A   sVA   \�:�����*�#A    ��OA������;��S���$A�j�  KK$��j�  t�R��smoothed_state_cov�h,(� 
+      RHe�~�.ARHe�~�.�.]�ĺ'#ARHe�~�.�!Lc�~�.A�S�ĺ'#�/]�ĺ'#Ao��ĺ'#� �r�T"$B    ��    ��>�r_NV�     ��>o�$��5?g��9��#��r_NV�l^r���aRpB������>������>U����������jQz��?�{�O^m�6?<U�����}���>��BO�4�A������    ��>��z��    ��>fSf�jcC�B�-��,;?��z��R�7!�B?�"E#)�A������>�������$�r�Ҿ������<�t�%�	?���as��$�r�Ҿ��o��&?{(*�T��A������     ��>K��C���     ��>��?u�4����\-?L��C����{yӟ�1?�u�J���A������>������#(����>������V��I%?���0gO��#(����>��+XP0?�5E���A������������>Ş��J��������>C���j�0��R���%'?Ş��J�������!?H�=�p�A������>������p���9Q�>������/�[�0�B������8?o���9Q�>���{-W=?�� �Y�A������������>]�W��������>^m���#?�K�7�^�^�W��p�������pGvA������>������Nw^�60�>��������˺���>��kn!׾Nw^�60�>VU��/��=A cA������������>[}'Z�������>��(N�3?��j��)�Z}'Z��sl�N7�ȋ���PA������>������nWE�S��>������|��R�;?���q�B2�oWE�S��>��q�.����~�<A������������>���U���������>���b�$�W�K�?���U���֕ ��1??vu���(A������>����������%��>�������s���!?=u�v������%��>��i���}S��A������������>��|wy��������><͗��1?�?��k'���|wy�뾼���X���r�A������>������R򣛝��>������j��/�<i��$?S򣛝��>��0b5?���%�@������������>E��ɅM�������>3�;畉;��U22?D��ɅM뾘����+�zf�D��@������>������cc�-v
+�>����������;1��x�ߌ&?cc�-v
+�>��ӫSU�E�/�8�@������������>Xk��6�������>�
+"~"$�����?Xk��6�,z��f3��]M�C��@����/1?����/1���^ �.-?    /1�����%?��x�$���^ �.-?:�͖���:{�y#+�@     ��     ��>oÍ�3��������>�!�Z]3?�����%�oÍ�3�� ���+?��9=�x�@������>     ��4+Jt.�����������7�1C?�JKZ8�>+Jt.����T�cu��(���A{@����ۡ-?����ۡ-��Cg�?����ۡ-���z]H�3?�[��`{$��Cg�? �zT��>h2�^�g@����/1?����/1����V�,?����/1�2{���fƾ�Ye��~����V�,?X� kNc"�{��frT@������������>*�X;:�������>˳��o?��è���	*�X;:��!��s(?Hǩ3�A@����/1?����/1��y�k#+?����/1����5S�{�7�Н���y�k#+?���$� �v�;�W�.@�����������>
+dx%?������>��!z9�P&�϶t+?
+dx%?�Wa��0?��U֞�@������>�������"$?������5�s���>�q����"$?�u�6�j	?�͌h@������������>��/�?������>�����>3x ������/�?PI�P���`��g��?������>������mB��	��������^|o�~%��0��%?iB��	���� [V?5��C�A�?������������>�6�ib4��������>�P�
+d��6�y��?�6�ib4��t���` )?몑-���?������>������s0p��>������逘d/?�	~�� $�u0p��>K��g0��حR��?������������>RO��@�?������>�.*�!��(�g(��>RO��@�?�1S0e�����z/n�?������>��������Y~��������~A��*��xA�rQ%?���Y~�����k`?�)��/T�?   ܡ-?   ܡ-�@<"r2'?   ܡ-�x-�7 x$?ﰑù*!�A<"r2'?      0�     ��?�j�  KKK$��j�  t�R�� smoothed_measurement_disturbance�h,(�                                                                                                                                                                                                                                                                                                       �j�  KK$��h7t�R��smoothed_state_disturbance�h,(�       Z���`,�Y���CA���_t�2�OƑ��1AXd�zFwC��|c4?�'�[�x�3}A:�
+��?��E�3A�\����;�?��F��&Aw��d!��?ܗܒ>�8E���CAO�ف'�c�i���@�İ8�0�3�|�A���]�%A\�I&�'������'�-��և�2�4v&�3�*AB�?h�!����d<.G��4.$��<A2a�7:#��Y �a'��ɭH�1���U	(�(�Fb�	 ��s��4�9�ۂ�A�w^�@��-��7�ω�/�        �j�  KK$��h7t�R��$smoothed_measurement_disturbance_cov�h,(�                                                                                                                                                                                                                                                                                                       �j�  KKK$��h7t�R��smoothed_state_disturbance_cov�h,(�        �-�I"$B RpB �BO�4�A ""E#)�A $*�T��A p�J���A 5E���A  �=�p�A  �Y�A  �pGvA  A cA  ��PA  �~�<A  ����(A  ���A  �r�A   �%�@   �D��@    �8�@   �C��@   `#+�@   ��x�@    �A{@    b�g@    rT@    8�A@     �.@     �@    �@     ��?     @�?     ��?     �?     ��?     ��?:�^(IzB�j�  KKK$��h7t�R��smoothed_state_autocov�h,(� 
+      �(�j���        ی剌���Əj��=        W4剌�@Z�����>        ƨ$��B7�+L��һ0�r���;���l:n������*?�����*�j��Xkr!?�g���
+!��f�ۚ� ?��O�H�B�Æ�J���f��~B�;8������                        S��>�> LX�rξ������AN�M-H~�        ��O�4�                        ��Tn>        �i�!7�AT��b���Ф�\�;�i�ê.꾛�J�5#�;      ���K�%?ov��tf> ��s����P/���A|]�M/��2U瘔�y�LcL۾                        �[��> �_�ޢs>N_F�ӹA���9��g�����#�;�VW��.پ                        �A.:5> �Q�  q�RR};U^�A��jp~v4;OuFp<�;�!��q¾                        �Q��1~� `��zq]�C	.��_�A6��*LS�^w7�Mc��Ły���ʾ                        �w��">  �{�9>W��fǀA%zB�QS;        �p�ዸ��                        �9dd��        j�]jmA0�נD�7�/Q,J���9�e]���                        ��E�3�=  �pM #>���,YA,�ь$��lP���q;;���Q�>                        �1�ǃ�Ž  ���> r�<(�EA��I6<�+�e����;��j�u��                        ���m\ǵ=  ������p�B��2A�\\�+�7��/d;��Ʊ���>                        �>:��  ����=�qՌ�Z A�9���7�C�I�\o�>f0<i���                        ���䝏=  ����=iİ��SA�;��4�0����!"x��P��>                        �-��r9z�  ���½�$Fk���@Yﴕ��4�i��� �|;��+����                        �h�=�_g=  ��%���E�u�?�@ �A;2�L�#`��y�I���L�>                        ��\��S�   �D������
+>g�@�f-+�3�2u::<�{;�.�WD��                        ]�=�kA=   �8��}�����@���I�����Ӧ�VS�;i!�\�>��e+I*?��e+I*���c��3?���Ź*!�.U�Ĺ*!?XXg@ͭ�����;z�����;�9�j��>                        >��\�<=   p#+b=z&�iy�@�}�:�s�f	��51�                        � ��
+=   @�x?=��K����@:�bL޻z;�0Hy;��R�5��u��(I*?t��(I*��=�ù*!?�ù*!�ù*!?�bH��q@0շ
+J?�;�_�4=ջ����j
+���y(I*?��y(I*������3?�I�ù*!�ù*!?H�a��_@I,c���;C��e����n��/0�>                        �8:���<    r�X�u{��J@i�WշQ��c��5�7�;���
+���c(I*?��c(I*������3?#�ù*!�ù*!?�.�6N7@�z�)��r;��:U�L�;�Gp��ƾa��IՍѻ      �i���%?��j�l�м    0��(�%�9/$@ ��))��        �ߞ� ?                        u�Gp��        x`O�P{@XR@���76.��;�����j�>�9T�<�      �;�����%?8���    ��<b"���G�?�^hj�ߔ;        ���C�?                        �F�v	�n<        ]��>�9�?�P��{�        ;�?�z�                        ���}7m<         s�����?%蒉P�';        �''��Ծ                        |t�KeY�        ��j}��?NyBS�b�;�َ���K0�Yվ��t��Oۻ      �;�����%?�����f�     �i<��ܼ�?�n8��C�;�+p�oԻ1C�ym�
+?�b�**��      �;����%�:5~��&5<     pf��)B�Ї�?sx�@���;���{���ӣ	����^(I*?�^(I*�1��ù*!?V��ù*!�;��ù*!?{�ʾ�(�?        j5)3�`վ                                             ��?        �j�  KKK$��j�  t�R��innovations_transition�h,(� 
+      �(�j���        ی剌���Əj��=        W4剌�@Z�����>        ƨ$��B7�+L��һ0�r���;���l:n������*?�����*�j��Xkr!?�g���
+!��f�ۚ� ?��O�H�B�Æ�J���f��~B�;8������                        S��>�> LX�rξ������AN�M-H~�        ��O�4�                        ��Tn>        �i�!7�AT��b���Ф�\�;�i�ê.꾛�J�5#�;      ���K�%?ov��tf> ��s����P/���A|]�M/��2U瘔�y�LcL۾                        �[��> �_�ޢs>N_F�ӹA���9��g�����#�;�VW��.پ                        �A.:5> �Q�  q�RR};U^�A��jp~v4;OuFp<�;�!��q¾                        �Q��1~� `��zq]�C	.��_�A6��*LS�^w7�Mc��Ły���ʾ                        �w��">  �{�9>W��fǀA%zB�QS;        �p�ዸ��                        �9dd��        j�]jmA0�נD�7�/Q,J���9�e]���                        ��E�3�=  �pM #>���,YA,�ь$��lP���q;;���Q�>                        �1�ǃ�Ž  ���> r�<(�EA��I6<�+�e����;��j�u��                        ���m\ǵ=  ������p�B��2A�\\�+�7��/d;��Ʊ���>                        �>:��  ����=�qՌ�Z A�9���7�C�I�\o�>f0<i���                        ���䝏=  ����=iİ��SA�;��4�0����!"x��P��>                        �-��r9z�  ���½�$Fk���@Yﴕ��4�i��� �|;��+����                        �h�=�_g=  ��%���E�u�?�@ �A;2�L�#`��y�I���L�>                        ��\��S�   �D������
+>g�@�f-+�3�2u::<�{;�.�WD��                        ]�=�kA=   �8��}�����@���I�����Ӧ�VS�;i!�\�>��e+I*?��e+I*���c��3?���Ź*!�.U�Ĺ*!?XXg@ͭ�����;z�����;�9�j��>                        >��\�<=   p#+b=z&�iy�@�}�:�s�f	��51�                        � ��
+=   @�x?=��K����@:�bL޻z;�0Hy;��R�5��u��(I*?t��(I*��=�ù*!?�ù*!�ù*!?�bH��q@0շ
+J?�;�_�4=ջ����j
+���y(I*?��y(I*������3?�I�ù*!�ù*!?H�a��_@I,c���;C��e����n��/0�>                        �8:���<    r�X�u{��J@i�WշQ��c��5�7�;���
+���c(I*?��c(I*������3?#�ù*!�ù*!?�.�6N7@�z�)��r;��:U�L�;�Gp��ƾa��IՍѻ      �i���%?��j�l�м    0��(�%�9/$@ ��))��        �ߞ� ?                        u�Gp��        x`O�P{@XR@���76.��;�����j�>�9T�<�      �;�����%?8���    ��<b"���G�?�^hj�ߔ;        ���C�?                        �F�v	�n<        ]��>�9�?�P��{�        ;�?�z�                        ���}7m<         s�����?%蒉P�';        �''��Ծ                        |t�KeY�        ��j}��?NyBS�b�;�َ���K0�Yվ��t��Oۻ      �;�����%?�����f�     �i<��ܼ�?�n8��C�;�+p�oԻ1C�ym�
+?�b�**��      �;����%�:5~��&5<     pf��)B�Ї�?sx�@���;���{���ӣ	����^(I*?�^(I*�1��ù*!?V��ù*!�;��ù*!?{�ʾ�(�?        j5)3�`վ                                             ��?        �j�  KKK$��j�  t�R��tmp_autocov�h,(�H               !qlrΧ�                   rΧA                0���G%B        �j�  KK��j�  t�R��!scaled_smoothed_diffuse_estimator�h,(�x                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              �j�  KK%��j�  t�R��&scaled_smoothed_diffuse1_estimator_cov�h,(�h
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              �j�  KKK%��j�  t�R��&scaled_smoothed_diffuse2_estimator_cov�h,(�h
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              ���     j�  KKK%��j�  t�R��tmpL�h,(�H       �9�4\�?�@�����?�9�����        �++B��?                      �?        �j�  KK��j�  t�R��tmpL2�h,(�H                                                                               �j�  KK��j�  t�R�j�  h,(�H               :�^(IzBﰑù*q�_U�7��<        ���=�)�?��ː<$ƃI�H��,�i�?�j�  KK��j�  t�R�j�  h,(�                               �j�  KK��h7t�R��tmp000�h,(�                               �j�  KK��h7t�R�ubs�simulation_smooth_results_class�j�  �SimulationSmoothResults����prefix_simulation_smoother_map�}�(j  �/statsmodels.tsa.statespace._simulation_smoother��sSimulationSmoother���j  j'  �dSimulationSmoother���j	  j'  �cSimulationSmoother���j  j'  �zSimulationSmoother���u�_simulators�}��_complex_endog��h�h,(�           2�kA   �]	oA    �sA   �ųtA   @$/wA   `)vA   �z�uA   `	�vA   @�9uA   ��rvA   ���tA   ���uA   ��uA   �sA    �uA   �jytA   �;vtA   @�esA   `@�sA   ��tA   `SfsA   �#�rA   @E7qA   ���qA   �	qA   ��kA   ��XnA   @X�lA    ��jA   @v�gA   �P�eA    �cA    s�`A    sVA    ��OA    2�AA�h3KK$��h7t�R�ubj�  K�_has_fixed_params���_fixed_params�N�_params_index�N�_fixed_params_index�N�_free_params_index�N�_input_exog�N�_input_exog_names�Nubh�K h�]�(�filtered_state��filtered_state_cov��predicted_state��predicted_state_cov��	forecasts��forecasts_error��forecasts_error_cov��standardized_forecasts_error��forecasts_error_diffuse_cov��predicted_diffuse_state_cov��scaled_smoothed_estimator��scaled_smoothed_estimator_cov��smoothing_error��smoothed_state��smoothed_state_cov��smoothed_state_autocov�� smoothed_measurement_disturbance��smoothed_state_disturbance��$smoothed_measurement_disturbance_cov��smoothed_state_disturbance_cov��filter_results��smoother_results�e�_data_in_cache�]�(�fittedvalues��resid��wresid�e�normalized_cov_params�N�scale�G?�      �_use_t��j7  �j:  Nj;  Nj8  N�fixed_params�]�j  ]�(hihjhke�filter_results�j�  )��}�(hwj�  �prefix�j  �dtype�h.�float64���j�  K$j�  Kj�  Kj�  K�time_invariant��h�h,(�           2�kA   �]	oA    �sA   �ųtA   @$/wA   `)vA   �z�uA   `	�vA   @�9uA   ��rvA   ���tA   ���uA   ��uA   �sA    �uA   �jytA   �;vtA   @�esA   `@�sA   ��tA   `SfsA   �#�rA   @E7qA   ���qA   �	qA   ��kA   ��XnA   @X�lA    ��jA   @v�gA   �P�eA    �cA    s�`A    sVA    ��OA    2�AA�h3KK$��h7t�R��design�h,(�             �?      �?        �h3KKK��h7t�R��obs_intercept�h,(�               �h3KK��h7t�R��obs_cov�h,(�               �h3KKK��h7t�R��
+transition�h,(�H             �?      �?                ������?      �?                        �h3KKK��h7t�R��state_intercept�h,(�                               �h3KK��h7t�R��	selection�h,(�                     �?�����忔h3KKK��h7t�R��	state_cov�h,(�       :�^(IzB�h3KKK��h7t�R�j�  h,(��                                                                                                                                                       �h0�i4�����R�(Kh4NNNJ����J����K t�bKK$��h7t�R�j�  h,(��                                                                                                                                                       �j�  K$��h7t�R�j�  }�(j�  KK$��j�  KKK��j�  KK��j�  KKK��j�  KKK��j�  KK��j�  KKK��j�  KKK��uj  j  j�  h,(�                               �h3K��h7t�R�j�  h,(�H           ��.A                        ��yd��{Bù*q�        ù*q��� �fB�h3KK��j�  t�R�j�  N�smoother_output�Nj�  h,(�`      n�6`���(n#�b���
+º�>�y_�1�>��
+º�>"s��h���o������"s��h���.��줾��v,�>�.��줾 �V6,���h������ �V6,����_������d|�c����_�������s�p��th��s��>��s�p����&C(��C���Hm����&C(��@���f�X>��W��\�>@���f�X>�� ���A�-����� ��`����B� wZ��?�>`����B���ȥ�\*�\����ȥ���*㠾���2����*㠾oL#T�>n�����>oL#T�>��޽e��	�xV�И���޽e�����aH�����@>}>���aH��jڼt�����{� ��jڼt��pU��ej���p���>pU��ej��ZH�e��{�kp�բ>�ZH�e��U_>8�����ͥ�d��U_>8���WN���ӱ���˰H���WN���ӱ�A�����j.�K뤾A�����Y⌑��\d��d��>�Y⌑���8��Ҷ�n�d(y��8��Ҷ�w�ڇ�e���2u/伾w�ڇ�e���kS>�ň>�0q�w �>�kS>�ň>%���t;���*Uꁾ%���t;����Q��Ҹ�^� ㈾��Q��Ҹ����.�������4������.����{6�,J=���������{6�,J=��ٺ]��2���	��3x>ٺ]��2��BH�9���B�tNq��BH�9����
+������W��<���
+������������ܚ�����������g]������g]������g]���                                �h3KK$��j�  t�R�j�  h,(� 
+      �6�qd=)��4(_=�yGJ{8F�)��4(_='��ӌ�p=�.����e=�yGJ{8F��.����e=�Ւ�k�p=�e?ԩ<d=�Px!�_=C���
+0E��Px!�_=�Ւ�k�p=�	�`\f=C���
+0E��	�`\f=<�t��+q=t�@kQd=�Ϭ$`=	����D��Ϭ$`=<�t��+q=$���I�f=	����D�$���I�f=2��?q=�`<�Yd=Q���6`=��z
+�D�Q���6`=2��?q=�P��f=��z
+�D��P��f=�H�kHq=�#p��]d=gB?`=�Rx�vvD�gB?`=�H�kHq=h2�f=�Rx�vvD�h2�f=���.Lq=)!�u_d=G����B`=6_��)mD�G����B`=���.Lq=���z�f=6_��)mD����z�f=����Mq=]G�.`d=�M,!D`=����"iD��M,!D`=����Mq=����,�f=����"iD�����,�f=kD��Nq=/�}`d=�3j��D`=�%�sdgD��3j��D`=kD��Nq=��yM�f=�%�sdgD���yM�f=>��<�Nq=>Y�H�`d=�R�9E`=V�(�fD��R�9E`=>��<�Nq=]�"��f=V�(�fD�]�"��f=Y���Nq=�j�;�`d=:84E`=f�gfOfD�:84E`=Y���Nq=Cq���f=f�gfOfD�Cq���f=�t�Oq=;�̴�`d=��E�AE`=c�$+fD���E�AE`=�t�Oq=�����f=c�$+fD������f=B�zOq=�+p��`d=��S�GE`=���pfD���S�GE`=B�zOq=	�K��f=���pfD�	�K��f=��+�
+Oq=MM&��`d=���ZJE`=�E8�fD����ZJE`=��+�
+Oq=�3:���f=�E8�fD��3:���f=W��Oq=��?�`d=~ �yKE`=ރ��fD�~ �yKE`=W��Oq=�_s��f=ރ��fD��_s��f=ձ1Oq=҅vy�`d=G7��KE`=��&[fD�G7��KE`=ձ1Oq=��	��f=��&[fD���	��f=e,v�Oq=�JБ�`d=��U1LE`=����fD���U1LE`=e,v�Oq=�.NE��f=����fD��.NE��f=$ٿ�Oq=Ɓ���`d=a6�QLE`=#��@fD�a6�QLE`=$ٿ�Oq=��'��f=#��@fD���'��f=�}=�Oq= ����`d=�j�pLE`=�=եfD��j�pLE`=�}=�Oq= �K���f=�=եfD� �K���f=���&Oq=�KБ�`d=�#�LE`=J�qfD��#�LE`=���&Oq=��`��f=J�qfD���`��f=��-Oq=�vy�`d=��ME`=L�U�
+fD���ME`=��-Oq=b�Sf��f=L�U�
+fD�b�Sf��f=Duk�Oq=��?�`d=M�NE`=����fD�M�NE`=Duk�Oq=W�5���f=����fD�W�5���f=��Oq=�X&��`d=��xwPE`=8esG�eD���xwPE`=��Oq=&����f=8esG�eD�&����f=��f��Nq=�Ep��`d=	���UE`=�4hP�eD�	���UE`=��f��Nq=1��f=�4hP�eD�1��f=c���Nq=�ʹ�`d=m�ibE`=��1�eD�m�ibE`=c���Nq=� �9�f=��1�eD�� �9�f=���Nq=���;�`d=���TE`=��*j�dD����TE`=���Nq=�Mipu�f=��*j�dD��Mipu�f=�$�Nq=P��H�`d=��V�E`=����CcD���V�E`=�$�Nq=���!��f=����CcD����!��f=�v�i�Lq=(�1�}`d=�MnQ\F`=�/�(�_D��MnQ\F`=�v�i�Lq=x�W��f=�/�(�_D�x�W��f=R��Iq=&�.`d=���j�G`=�q��%WD����j�G`=R��Iq=�"@(�f=�q��%WD��"@(�f=k'deBq=u�"�u_d=�8���J`=$�8�CD��8���J`=k'deBq=u�TZ�f=$�8�CD�u�TZ�f=�A��1q=d���]d=B���aR`=�XǈD�B���aR`=�A��1q=�����nf=�XǈD������nf=���q=,?`<�Yd=��2��c`=����j�C���2��c`=���q=�+�x��e=����j�C��+�x��e=
+V`9�p=J- lQd=x�T��`=�0L��B�x�T��`=
+V`9�p=��n58�d=�0L��B���n58�d= �}�l�o=JL�թ<d=<���g�`=#E�ƒ@�<���g�`= �}�l�o=6�S.�b=#E�ƒ@�6�S.�b=&ᩈ4 l=T�2�qd=�hu�T�a=�skWW!7��hu�T�a=&ᩈ4 l=bXA��Y=�skWW!7�bXA��Y=��+nh�c=��+nh�c=��+nh�c=        ��+nh�c=��+nh�c=                                                                                                        �h3KKK$��j�  t�R�j�  h,(�       �� ��P�>�}`��¾��#t��>�GO����Y��z���>X�H8	�����kĩ�`����M�>:������e#�z40�> }�ס��,���/n�>x_���>��DE|Ǿ�9o�J�>z�Ts����Cħ>ǧ�J櫾���� ����RC0�>��ܯpeU>���N�>���B���K���>�`,��S�>�1s�E�Ⱦ2t�n�=�>	��k>�x��O�>@V���>N^�ԕ�ް\�?�> �\@�>��}u�+����g��>���g]����h3KK$��h7t�R�j�  h,(�`      -��Ǆ@���1�kA]��_(a�    2�kA   ^�:A/j�E��"A   �]	oA   ��QA3ڡT�C:�    �sA   �(Ax�r'�(A   �ųtA   ��CAW�c�9'�   @$/wA
+   ��2�"yA���9A   `)vA   �����Z Z)A   �z�uA   ��*A�ySsn�   `	�vA   �9�[d%-D�4A   @�9uA������3A�-G)�   ��rvA   �8��tM�XE2A   ���tA�����#A0DT�8!�   ���uA   ` ��?���A   ��uA�����q?�A�sJ�4A   �sA   Bq@A�
+�3�9�    �uA    T�$��˦�;�A   �jytA@����w��0D4vi��   �;vtA   �1��u�t!�%A   @�esA    �1A���Y��	�   `@�sA����'�"A89oc�n�   ��tA������&�d�s�A   `SfsA   �*��M��JA   �#�rA�����5��Ի���(A   @E7qA   N AvG��lp!�   ���qA����#&����57fA   �	qA�����H��I��0�>A   ��kA������3A
+h�~�3�����XnA����s�)��#m?NA   @X�lA
+   $/�4�2xmeA    ��jA������6�jf�z��'A   @v�gA   .3�� ANon A   �P�eA�����T)�����u�A    �cA   ��:�.9U�\*A    s�`A������E�i���b7A   sVA   \�:�����*�#A    ��OA������;��S���$A�h3KK$��j�  t�R�j�  h,(� 
+      RHe�~�.ARHe�~�.�.]�ĺ'#ARHe�~�.�!Lc�~�.A�S�ĺ'#�/]�ĺ'#Ao��ĺ'#� �r�T"$B    ��    ��>�r_NV�     ��>o�$��5?g��9��#��r_NV�l^r���aRpB������>������>U����������jQz��?�{�O^m�6?<U�����}���>��BO�4�A������    ��>��z��    ��>fSf�jcC�B�-��,;?��z��R�7!�B?�"E#)�A������>�������$�r�Ҿ������<�t�%�	?���as��$�r�Ҿ��o��&?{(*�T��A������     ��>K��C���     ��>��?u�4����\-?L��C����{yӟ�1?�u�J���A������>������#(����>������V��I%?���0gO��#(����>��+XP0?�5E���A������������>Ş��J��������>C���j�0��R���%'?Ş��J�������!?H�=�p�A������>������p���9Q�>������/�[�0�B������8?o���9Q�>���{-W=?�� �Y�A������������>]�W��������>^m���#?�K�7�^�^�W��p�������pGvA������>������Nw^�60�>��������˺���>��kn!׾Nw^�60�>VU��/��=A cA������������>[}'Z�������>��(N�3?��j��)�Z}'Z��sl�N7�ȋ���PA������>������nWE�S��>������|��R�;?���q�B2�oWE�S��>��q�.����~�<A������������>���U���������>���b�$�W�K�?���U���֕ ��1??vu���(A������>����������%��>�������s���!?=u�v������%��>��i���}S��A������������>��|wy��������><͗��1?�?��k'���|wy�뾼���X���r�A������>������R򣛝��>������j��/�<i��$?S򣛝��>��0b5?���%�@������������>E��ɅM�������>3�;畉;��U22?D��ɅM뾘����+�zf�D��@������>������cc�-v
+�>����������;1��x�ߌ&?cc�-v
+�>��ӫSU�E�/�8�@������������>Xk��6�������>�
+"~"$�����?Xk��6�,z��f3��]M�C��@����/1?����/1���^ �.-?    /1�����%?��x�$���^ �.-?:�͖���:{�y#+�@     ��     ��>oÍ�3��������>�!�Z]3?�����%�oÍ�3�� ���+?��9=�x�@������>     ��4+Jt.�����������7�1C?�JKZ8�>+Jt.����T�cu��(���A{@����ۡ-?����ۡ-��Cg�?����ۡ-���z]H�3?�[��`{$��Cg�? �zT��>h2�^�g@����/1?����/1����V�,?����/1�2{���fƾ�Ye��~����V�,?X� kNc"�{��frT@������������>*�X;:�������>˳��o?��è���	*�X;:��!��s(?Hǩ3�A@����/1?����/1��y�k#+?����/1����5S�{�7�Н���y�k#+?���$� �v�;�W�.@�����������>
+dx%?������>��!z9�P&�϶t+?
+dx%?�Wa��0?��U֞�@������>�������"$?������5�s���>�q����"$?�u�6�j	?�͌h@������������>��/�?������>�����>3x ������/�?PI�P���`��g��?������>������mB��	��������^|o�~%��0��%?iB��	���� [V?5��C�A�?������������>�6�ib4��������>�P�
+d��6�y��?�6�ib4��t���` )?몑-���?������>������s0p��>������逘d/?�	~�� $�u0p��>K��g0��حR��?������������>RO��@�?������>�.*�!��(�g(��>RO��@�?�1S0e�����z/n�?������>��������Y~��������~A��*��xA�rQ%?���Y~�����k`?�)��/T�?   ܡ-?   ܡ-�@<"r2'?   ܡ-�x-�7 x$?ﰑù*!�A<"r2'?      0�     ��?�h3KKK$��j�  t�R�j�  h,(� 
+      �(�j���        ی剌���Əj��=        W4剌�@Z�����>        ƨ$��B7�+L��һ0�r���;���l:n������*?�����*�j��Xkr!?�g���
+!��f�ۚ� ?��O�H�B�Æ�J���f��~B�;8������                        S��>�> LX�rξ������AN�M-H~�        ��O�4�                        ��Tn>        �i�!7�AT��b���Ф�\�;�i�ê.꾛�J�5#�;      ���K�%?ov��tf> ��s����P/���A|]�M/��2U瘔�y�LcL۾                        �[��> �_�ޢs>N_F�ӹA���9��g�����#�;�VW��.پ                        �A.:5> �Q�  q�RR};U^�A��jp~v4;OuFp<�;�!��q¾                        �Q��1~� `��zq]�C	.��_�A6��*LS�^w7�Mc��Ły���ʾ                        �w��">  �{�9>W��fǀA%zB�QS;        �p�ዸ��                        �9dd��        j�]jmA0�נD�7�/Q,J���9�e]���                        ��E�3�=  �pM #>���,YA,�ь$��lP���q;;���Q�>                        �1�ǃ�Ž  ���> r�<(�EA��I6<�+�e����;��j�u��                        ���m\ǵ=  ������p�B��2A�\\�+�7��/d;��Ʊ���>                        �>:��  ����=�qՌ�Z A�9���7�C�I�\o�>f0<i���                        ���䝏=  ����=iİ��SA�;��4�0����!"x��P��>                        �-��r9z�  ���½�$Fk���@Yﴕ��4�i��� �|;��+����                        �h�=�_g=  ��%���E�u�?�@ �A;2�L�#`��y�I���L�>                        ��\��S�   �D������
+>g�@�f-+�3�2u::<�{;�.�WD��                        ]�=�kA=   �8��}�����@���I�����Ӧ�VS�;i!�\�>��e+I*?��e+I*���c��3?���Ź*!�.U�Ĺ*!?XXg@ͭ�����;z�����;�9�j��>                        >��\�<=   p#+b=z&�iy�@�}�:�s�f	��51�                        � ��
+=   @�x?=��K����@:�bL޻z;�0Hy;��R�5��u��(I*?t��(I*��=�ù*!?�ù*!�ù*!?�bH��q@0շ
+J?�;�_�4=ջ����j
+���y(I*?��y(I*������3?�I�ù*!�ù*!?H�a��_@I,c���;C��e����n��/0�>                        �8:���<    r�X�u{��J@i�WշQ��c��5�7�;���
+���c(I*?��c(I*������3?#�ù*!�ù*!?�.�6N7@�z�)��r;��:U�L�;�Gp��ƾa��IՍѻ      �i���%?��j�l�м    0��(�%�9/$@ ��))��        �ߞ� ?                        u�Gp��        x`O�P{@XR@���76.��;�����j�>�9T�<�      �;�����%?8���    ��<b"���G�?�^hj�ߔ;        ���C�?                        �F�v	�n<        ]��>�9�?�P��{�        ;�?�z�                        ���}7m<         s�����?%蒉P�';        �''��Ծ                        |t�KeY�        ��j}��?NyBS�b�;�َ���K0�Yվ��t��Oۻ      �;�����%?�����f�     �i<��ܼ�?�n8��C�;�+p�oԻ1C�ym�
+?�b�**��      �;����%�:5~��&5<     pf��)B�Ї�?sx�@���;���{���ӣ	����^(I*?�^(I*�1��ù*!?V��ù*!�;��ù*!?{�ʾ�(�?        j5)3�`վ                                             ��?        �h3KKK$��j�  t�R�j�  h,(�                                                                                                                                                                                                                                                                                                       �h3KK$��h7t�R�j�  h,(�       Z���`,�Y���CA���_t�2�OƑ��1AXd�zFwC��|c4?�'�[�x�3}A:�
+��?��E�3A�\����;�?��F��&Aw��d!��?ܗܒ>�8E���CAO�ف'�c�i���@�İ8�0�3�|�A���]�%A\�I&�'������'�-��և�2�4v&�3�*AB�?h�!����d<.G��4.$��<A2a�7:#��Y �a'��ɭH�1���U	(�(�Fb�	 ��s��4�9�ۂ�A�w^�@��-��7�ω�/�        �h3KK$��h7t�R�j�  h,(�                                                                                                                                                                                                                                                                                                       �h3KKK$��h7t�R�j�  h,(�        �-�I"$B RpB �BO�4�A ""E#)�A $*�T��A p�J���A 5E���A  �=�p�A  �Y�A  �pGvA  A cA  ��PA  �~�<A  ����(A  ���A  �r�A   �%�@   �D��@    �8�@   �C��@   `#+�@   ��x�@    �A{@    b�g@    rT@    8�A@     �.@     �@    �@     ��?     @�?     ��?     �?     ��?     ��?:�^(IzB�h3KKK$��h7t�R�j�  h,(� 
+              � G���ǿ                �++B��?                      �?              �<D1|
+�Ŀ              �<Z�Ab��?                      �?                <�5V:�ÿ                �S��?                      �?                ��=ÿ                %.�Y`��?                      �?                ༣ÿ                s8�D�?                      �?                @�j��¿                �4��D
+�?                      �?                4Fz��¿                bB���?                      �?                �q��¿                %��\��?                      �?                ���¿                �2��x�?                      �?                h�Pm��¿                �ʌ���?                      �?                !?z�¿                f+Q��?                      �?                p��Q�¿                O�-��?                      �?                <%k#@�¿                \*���?                      �?                �U��8�¿                >�5s��?                      �?                �N>F5�¿                �_QE��?                      �?                ��L�3�¿                ;�M���?                      �?                D�<3�¿                Zy����?                      �?                <�q�2�¿                �v����?                      �?                H���2�¿                Y (���?                      �?              �<PP�2�¿              �<�[���?                      �?                 r��2�¿                +׽���?                      �?                �&�2�¿                �rW���?                      �?              �<���2�¿              �<������?                      �?              �<`���2�¿              �<Sƶ���?                      �?                ��v�2�¿                �?����?                      �?              �<4a�2�¿              �<������?                      �?                ��W�2�¿                ������?                      �?                \�S�2�¿                � ����?                      �?                $
+R�2�¿                "q����?                      �?                �GQ�2�¿                á����?                      �?                d�P�2�¿                Ҷ����?                      �?                ��P�2�¿                �����?                      �?                �P�2�¿                ������?                      �?                H�P�2�¿                ������?                      �?              �<L�P�2�¿              �<X�����?                      �?                �P�2�¿                ������?                      �?        �h3KKK$��j�  t�R�j�  N�filter_conventional���filter_exact_initial���filter_augmented���filter_square_root���filter_univariate���filter_collapsed���filter_extended���filter_unscented���filter_concentrated���filter_chandrasekhar���stability_force_symmetry���invert_univariate���solve_lu���	invert_lu���solve_cholesky���invert_cholesky���memory_store_all���memory_no_forecast_mean���memory_no_forecast_cov���memory_no_forecast���memory_no_predicted_mean���memory_no_predicted_cov���memory_no_predicted���memory_no_filtered_mean���memory_no_filtered_cov���memory_no_filtered���memory_no_likelihood���memory_no_gain���memory_no_smoothing���memory_no_std_forecast���memory_conserve���smoother_state���smoother_state_cov���smoother_state_autocov���smoother_disturbance���smoother_disturbance_cov���smoother_all���_smoothed_forecasts�N�_smoothed_forecasts_error�N�_smoothed_forecasts_error_cov�N�_kalman_gain�h,(�`            �?� G����?        �������?D1|
+��?              �?<�5V:��?              �?��=�?              �?༣�?              �?@�j���?              �?4Fz���?              �?�q���?              �?����?              �?h�Pm���?              �?!?z��?              �?p��Q��?              �?<%k#@��?              �?�U��8��?              �?�N>F5��?              �?��L�3��?              �?D�<3��?              �?<�q�2��?              �?H���2��?        �������?PP�2��?              �? r��2��?              �?�&�2��?        �������?���2��?        �������?`���2��?              �?��v�2��?        �������?4a�2��?              �?��W�2��?              �?\�S�2��?              �?$
+R�2��?              �?�GQ�2��?              �?d�P�2��?              �?��P�2��?              �?�P�2��?              �?H�P�2��?        �������?L�P�2��?              �?�P�2��?        �h3KKK$��j�  t�R��_standardized_forecasts_error�h,(�       ~�� �%@v0ؼ`�忏ڌ�B�?62{�J���md��?�H����أ���⿬q'䈼�?���8һ��܌�����?��������P���?�ؐ��>ۿ��Z����������?����h�0@V���?Dm��@r����?�~ـ!��?䓈IRs⿈9���]`\��M��P����?�G��ۿ��7�l'��A�Ў��?+���޿|�('O�nt����QЫ���A�δ�:ѿ���=�_���eC{�����fT6���Y�返h3KK$��h7t�R��filter_method�K�inversion_method�K	�stability_method�K�conserve_memory�K �filter_timing�K j�  G;���O�Ҭj�  Kjl  �jo  K j�  h,(��                                                                                                                                                       �j�  K$��h7t�R�j�  h,(�`      n�ج^~@�
+1�kA�s��F'a�    2�kA    ^�:Ag�W��>"A   �]	oA   ��QAJv�}� :�    �sA   �(A���Q�(A   �ųtA   ��CAu��"'�   @$/wA   ��2�͘�Ȕ�9A   `)vA   ����AGx+�+A   �z�uA   ��*Aє�@l�   `	�vA   �9����B�4A   @�9uA������3A��*�)�   ��rvA   �8�Q3��XE2A   ���tA�����#A��۫-!�   ���uA   ` ���״��A   ��uA�����q?�r{Ї�4A   �sA   Bq@Aw'���9�    �uA    T�$��^9<�A   �jytA@����w���tsi��   �;vtA   �1��^u!�%A   @�esA    �1A���P��	�   `@�sA����'�"A��8]�n�   ��tA������&�Ad��A   `SfsA
+   �*�<��JA   �#�rA�����5�!PӔ��(A   @E7qA   N A�y�lp!�   ���qA����#&�Ї67fA   �	qA�����H�F܉�0�>A   ��kA������3A�~�3�����XnA����s�)��%m?NA   @X�lA   $/�U�3xmeA    ��jA������6�ʢ�z��'A   @v�gA   .3��;ANon A   �P�eA�����T)�����u�A    �cA�����:��?U�\*A    s�`A������E����b7A   sVA   \�:� ���*�#A    ��OA������;��S���$A�h3KK$��j�  t�R�j�  h,(� 
+      %^�~�.A$^�~�.�1��5�"A%^�~�.�   �~�.A  �5�"�2��5�"A  �5�"� ���V%B    ��     ��>z�?���     ��>                z�?���        �E����B������>������0�#&���������                �0�#&���         LX�r�A������������>e�g����     ��>                e�g����         ��Z@�A������>�������EJ��Ҿ������                �EJ��Ҿ         ��s��A������������>�{��ҍ��������>                �{��ҍ��         �_�ޢ�A������>������<�)*��>������                <�)*��>         �Q�  �A������������>�<hf��������>                �<hf��         `��zq�A������>������ �Q�>������                � �Q�>          �{��A������������>¸����������>                ø����          �ihvA������>������g�ڟ20�>������                h�ڟ20�>          �pM cA������������>��V��������>                ��V��          X���PA������>������\KS��>������                �\KS��>          ����<A������������>*z�3���������>                )z�3���          ���(A������>������h��%��>������                h��%��>          ���A������������>�*�oy��������>                �*�oy��          ���A������>������CD�����>������                CD�����>          ��%�@������������>gg"ȅM�������>                hg"ȅM�           �D��@������>�����򾊍�,v
+�>������                ���,v
+�>           �8�@������������>Z� ��6�������>      0?        [� ��6�      0�   �C��@����/1?����/1�Ժm �.-?    /1�      0?      0�ֺm �.-?      0�   �#+�@     ��     ��>���3��������>                ���3��           @�x�@������>������V�Iu.���������      0?      0�V�Iu.���      0�   ��A{@����ۡ-?����ۡ-��M3g�?����ۡ-�      @?      0��M3g�?      0�    a�g@����/1?����/1�!���V�,?����/1�      0?      0�!���V�,?      0�    rT@������������>Y�X;:�������>      0?        Y�X;:�      0�    4�A@����/1?����/1���y�k#+?����/1�      0?        ��y�k#+?      0�    P�.@������������>|�dx%?������>                }�dx%?            ��@������>�������"$?������              0?�"$?            �@������������>� 0�?������>                � 0�?      0�    ���?������>������lؒ�	��������                lؒ�	��             B�?������������>�8�ib4��������>                �8�ib4��             ��?������>������90p��>������              0?90p��>             ع?������������>P��@�?������>              0�P��@�?             p�?������>���������Y~��������      0?        ���Y~��      0�     `�?   ܡ-?   ܡ-�@<"r2'?   ܡ-�      0?      0�@<"r2'?      0�     ��?�h3KKK$��j�  t�R�j�  h,(�x                                  2�kA𽦚ߋDA           �]	oA�����>A            �sA���6��>A           �ųtA�Zݳl6A           @$/wA����Vj4A           `)vA���a[%A           �z�uAL�ޔ�hA           `	�vA�<��j�A           @�9uA`��cr�@           ��rvAD�cMD
+A           ���tA0���x`��           ���uA��\[N�@           ��uA ������           �sA���B��            �uA ���,��@           �jytA�oc�J���           �;vtA�u�^����           @�esA`2&�iA�           `@�sA ����9��           ��tApE�,���@           `SfsALԲ�B���           �#�rA^yHC�           @E7qAz�Gd�           ���qANE �:�           �	qA��iZ�           ��kA�D]H�"�        ����XnA@ӗg�	�           @X�lAo��1��            ��jA�I�Hն�           @v�gA��S�gt�           �P�eAR�����            �cA�:�?S�            s�`A����� �           sVA:�D��'�            ��OA�U0�e'�           2�AAiɶ�]�'�        �h3KK%��j�  t�R�j�  h,(�h
+          ��.A                        ��yd��{Bù*q�        ù*q��� �fB     ��z�o����        z�o���������zBﰑù*q�        ﰑù*q��� �fB������>�u���        �u���Q�X�X]zBﰑù*q�        ﰑù*q��� �fB������e��~B�        e��~B�����4zBﰑù*q�        ﰑù*q��� �fB������>������        ������$�Ui#zBﰑù*q�        ﰑù*q��� �fB�������Ф�\��        �Ф�\��.��i�zBﰑù*q�        ﰑù*q��� �fB������>�2U��        �2U��*e>��zBﰑù*q�        ﰑù*q��� �fB����������#�        ����#�Xl*YzBﰑù*q�        ﰑù*q��� �fB������>LuFp<̾        LuFp<̾�CI�zBﰑù*q�        ﰑù*q��� �fB������^w7�McԾ        ^w7�McԾΐ�'|zBﰑù*q�        ﰑù*q��� �fB������>��M\��        ��M\���=_zBﰑù*q�        ﰑù*q��� �fB������6�/Q,Jɾ        6�/Q,Jɾ�Q��RzBﰑù*q�        ﰑù*q��� �fB������>0k���>        0k���>PE�LMzBﰑù*q�        ﰑù*q��� �fB������&�e���¾        &�e���¾�v�JzBﰑù*q�        ﰑù*q��� �fB������>4��/�>        4��/�>7�-�IzBﰑù*q�        ﰑù*q��� �fB������@�I�\��        @�I�\���mv~IzBﰑù*q�        ﰑù*q��� �fB������>���!"�>        ���!"�>~ئMIzBﰑù*q�        ﰑù*q��� �fB������l��� ټ�        l��� ټ���8IzBﰑù*q�        ﰑù*q��� �fB������>D�#`���>        D�#`���>tj\/IzBﰑù*q�        ﰑù*q��� �fB������4u::<»�        4u::<»���e+IzBﰑù*q�        ﰑù*q��� �fB    /1?q����?        q����?y=�)IzBﰑù*q�        ﰑù*q��� �fB     ���R����        ��R����U��(IzBﰑù*q�        ﰑù*q��� �fB������>f	��        f	��v��(IzBﰑù*q�        ﰑù*q��� �fB    ܡ-?�@m�O��        �@m�O����y(IzBﰑù*q�        ﰑù*q��� �fB    /1?�zK�O?        �zK�O?�fj(IzBﰑù*q�        ﰑù*q��� �fB������|��5T��        |��5T����c(IzBﰑù*q�        ﰑù*q��� �fB����/1?N��o}?        N��o}?��`(IzBﰑù*q�        ﰑù*q��� �fB������{<n�v?        {<n�v?��_(IzBﰑù*q�        ﰑù*q��� �fB������>pyn�Ա	?        pyn�Ա	?}_(IzBﰑù*q�        ﰑù*q��� �fB�������F¥��#?        �F¥��#?>�^(IzBﰑù*q�        ﰑù*q��� �fB������>�,]��        �,]��'�^(IzBﰑù*q�        ﰑù*q��� �fB������x��Q�        x��Q�ۡ^(IzBﰑù*q�        ﰑù*q��� �fB������>�+[?�߾        �+[?�߾��^(IzBﰑù*q�        ﰑù*q��� �fB�������$�I��?        �$�I��?ؚ^(IzBﰑù*q�        ﰑù*q��� �fB������>Ш�� �        Ш�� ��^(IzBﰑù*q�        ﰑù*q��� �fB   ܡ-?>���#y?        >���#y?��^(IzBﰑù*q�        ﰑù*q��� �fB������> X�
+���         X�
+���[�^(IzBﰑù*q�        ﰑù*q��� �fB�h3KKK%��j�  t�R�j�  h,(�`          ��.A��yd��{Bù*q�z�o�=�������zBﰑù*q��u��(�Q�X�X]zBﰑù*q�d��~҆�����4zBﰑù*q��r�
+�mܾ$�Ui#zBﰑù*q�jhRv�n�.��i�zBﰑù*q�5�ͪXI�>*e>��zBﰑù*q��Y���Xl*YzBﰑù*q§b��0��>�CI�zBﰑù*q���y�	��ΐ�'|zBﰑù*q·�u�`�>�=_zBﰑù*q���%�e���Q��RzBﰑù*q�V#����>PE�LMzBﰑù*q����4�C���v�JzBﰑù*q����4�>7�-�IzBﰑù*q��ޘ�����mv~IzBﰑù*q¶X"Bq�>~ئMIzBﰑù*q��K9�����8IzBﰑù*q�_:����>tj\/IzBﰑù*q�N���C����e+IzBﰑù*q��|E,6?y=�)IzBﰑù*q·�R�^�U��(IzBﰑù*q��0Hɾv��(IzBﰑù*qº_�4=%?��y(IzBﰑù*q� ��R�6?�fj(IzBﰑù*q�d��5�7���c(IzBﰑù*q��3�Ͳ�4?��`(IzBﰑù*q�yܰot?��_(IzBﰑù*q¨<�r2�?}_(IzBﰑù*q��F¥��!??�^(IzBﰑù*q������㹾'�^(IzBﰑù*q¡M����ۡ^(IzBﰑù*q´iR�8��>��^(IzBﰑù*q��$�IWB?ؚ^(IzBﰑù*q��Q�?~P���^(IzBﰑù*q�60x�1?��^(IzBﰑù*qh3KKK$��j�  t�R�j�  h,(�       z{�q���>�ū'f��K��"Z�>ZV� ����������>�;�g�ⷾ��5��'�=�>���^���Ly�P�>�l&8i��8oХ��>�,>RV��
+IIZt���o�U�\�>����՜�R� 蹗N>��G"�^��N��2�>JI����>���j.朾5ɳ�p*��T�@�"��y��@�>w���	ϕ���_Mo��}�m���>㉉�啗�����~T����N���f���_,���������𑨾�mT�������4�-�����g]����h3KK$��h7t�R�j�  h,(�`      M\�"|b=M\�"|b=        �V��$c=�V��$c=        �"0�kc=�"0�kc=        �8����c=�8����c=        �3\��c=�3\��c=        �'��$�c=�'��$�c=        ���ۏ�c=���ۏ�c=        �7Tћ�c=�7Tћ�c=        �q��c=�q��c=        ��>B�c=��>B�c=        |n��W�c=|n��W�c=        ݂P<a�c=݂P<a�c=        C��Pe�c=C��Pe�c=        ���g�c=���g�c=        �ߘ�g�c=�ߘ�g�c=        �f-h�c=�f-h�c=        �Rh�c=�Rh�c=        �'bh�c=�'bh�c=        C�hh�c=C�hh�c=        ���kh�c=���kh�c=        �*/mh�c=�*/mh�c=        �U�mh�c=�U�mh�c=        U�mh�c=U�mh�c=        /.nh�c=/.nh�c=        ��"nh�c=��"nh�c=        o�'nh�c=o�'nh�c=        �*nh�c=�*nh�c=        K�*nh�c=K�*nh�c=        �_+nh�c=�_+nh�c=        H�+nh�c=H�+nh�c=        �+nh�c=�+nh�c=        j�+nh�c=j�+nh�c=        �+nh�c=�+nh�c=        ��+nh�c=��+nh�c=        a�+nh�c=a�+nh�c=        ��+nh�c=��+nh�c=        �h3KKK$��j�  t�R�j�  h,(�                                                                                                                                                                                                                                                                                                       �h3KKK$��h7t�R�j�  h,(�`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      �h3KKK$��j�  t�R��	M_diffuse�h,(�`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      �h3KKK$��j�  t�R��	forecasts�h,(�               ��T�hpA���~qqAޞo���uA��=�\vA��i��uxA�-�m�vA�{S�avA���2wA���q�BuA5ǚH4�vA>0'��tA�[���uA�6����tA���S�rA���Ly5uAHΣZ�otA#@h��otA���lZ9sAsXy�psA�(K��"tA,MZOsA�o��brA*��#��pAu���?�qA�=��O�pA�+z��jA��a���mA5p>lA�-�U�.jA�b� �gA�O�dAk/�i%cAj}�m�8_A�k��~SA���s��IA�h3KK$��h7t�R��forecasts_error�h,(�           2�kA���j�l,�8�2EDA���6}�2���"Ly�1AP�O[}C� ���1�'��!k�zA@�1�L�?�p'b�3APs����;�@8���&A@q˵e!�@h#�ݒ>� ��_�CA����ف'� ��p���@0�8�0�@��|�A��Ԑ]�%A e	&�'���)���'�а�և�2����3�*A���?h�!� ��d<.G�p�.$��<A �7:#�P��a'��mɭH�1�@+V	(�(��Rb�	 �X{��4���ۂ�A��_�@��-��7�ω�/��h3KK$��h7t�R��forecasts_error_cov�h,(�       �ǝX²{B�����zBQ�X�X]zB����4zB$�Ui#zB.��i�zB*e>��zBXl*YzB�CI�zBΐ�'|zB�=_zB�Q��RzBPE�LMzB�v�JzB7�-�IzB�mv~IzB~ئMIzB��8IzBtj\/IzB��e+IzBz=�)IzBU��(IzBv��(IzB��y(IzB�fj(IzB��c(IzB��`(IzB��_(IzB}_(IzB@�^(IzB'�^(IzBۡ^(IzB��^(IzBؚ^(IzB�^(IzB��^(IzB�h3KKK$��h7t�R��llf_obs�h,(�       ��k\k�Q��
+���.��պí�0����]�.�S�]���.���X�S�0�Qq��c.��D��b(.�����80��q�.�U+IH�/�Twq?�].��̊&�;.�ϗ��c%0��Fө�0���3b.�4��.�Ơn���.����b.�TW�2U.���)
+�b.���I�&d.�Y;�k'�.��NX'y.�G��=.�k5�ޙ1�R���0��[@�'F.�eY�mA_.�@Z��.����Mm.��*� .��i'�/�M֧;U�0�_<N�+�.�IH�ۨ.��h3K$��h7t�R�jk  K �forecasts_error_diffuse_cov�Nj�  N�missing_forecasts�N�missing_forecasts_error�N�missing_forecasts_error_cov�N�collapsed_forecasts�N�collapsed_forecasts_error�N�collapsed_forecasts_error_cov�Nj[  G?�      �llf�h�j�  C? �A
+�����R�j�  Nj  Nj  N�#scaled_smoothed_estimator_presample�h,(�       :���% �>[K' ��>�(n#�b��h3K��h7t�R��'scaled_smoothed_estimator_cov_presample�h,(�H       H�}�g�c=u�Q�9X]=��� �H�u�Q�9X]=j��&�7o=os���d=��� �H�os���d='��ӌ�p=�h3KK��j�  t�R��/_SmootherResults__smoothed_state_autocovariance�}�ub�smoother_results�ja  j�  K$jk  K �_cache�}��cov_params_opg�h,(�H       �o�
+W��?��4�r���od�z.򼉆4�r�����J�6��?
+��,�H�<rd�z.���,�H�<\��=�JS:�h3KK��h7t�R�s�nobs_effective�K#�k_diffuse_states�K �df_model�K�df_resid�G�      �cov_kwds�}��description��QCovariance matrix calculated using the outer product of gradients (complex-step).�s�cov_type��opg��_cov_approx_complex_step���_cov_approx_centered���_rank�h�j  C       ���R��cov_params_default�h,(�H       �o�
+W��?��4�r���od�z.򼉆4�r�����J�6��?
+��,�H�<rd�z.���,�H�<\��=�JS:�h3KK��h7t�R�j�  h,(�`      n�ج^~@�
+1�kA�s��F'a�    2�kA    ^�:Ag�W��>"A   �]	oA   ��QAJv�}� :�    �sA   �(A���Q�(A   �ųtA   ��CAu��"'�   @$/wA   ��2�͘�Ȕ�9A   `)vA   ����AGx+�+A   �z�uA   ��*Aє�@l�   `	�vA   �9����B�4A   @�9uA������3A��*�)�   ��rvA   �8�Q3��XE2A   ���tA�����#A��۫-!�   ���uA   ` ���״��A   ��uA�����q?�r{Ї�4A   �sA   Bq@Aw'���9�    �uA    T�$��^9<�A   �jytA@����w���tsi��   �;vtA   �1��^u!�%A   @�esA    �1A���P��	�   `@�sA����'�"A��8]�n�   ��tA������&�Ad��A   `SfsA
+   �*�<��JA   �#�rA�����5�!PӔ��(A   @E7qA   N A�y�lp!�   ���qA����#&�Ї67fA   �	qA�����H�F܉�0�>A   ��kA������3A�~�3�����XnA����s�)��%m?NA   @X�lA   $/�U�3xmeA    ��jA������6�ʢ�z��'A   @v�gA   .3��;ANon A   �P�eA�����T)�����u�A    �cA�����:��?U�\*A    s�`A������E����b7A   sVA   \�:� ���*�#A    ��OA������;��S���$A�h3KK$��j�  t�R�j�  h,(� 
+      %^�~�.A$^�~�.�1��5�"A%^�~�.�   �~�.A  �5�"�2��5�"A  �5�"� ���V%B    ��     ��>z�?���     ��>                z�?���        �E����B������>������0�#&���������                �0�#&���         LX�r�A������������>e�g����     ��>                e�g����         ��Z@�A������>�������EJ��Ҿ������                �EJ��Ҿ         ��s��A������������>�{��ҍ��������>                �{��ҍ��         �_�ޢ�A������>������<�)*��>������                <�)*��>         �Q�  �A������������>�<hf��������>                �<hf��         `��zq�A������>������ �Q�>������                � �Q�>          �{��A������������>¸����������>                ø����          �ihvA������>������g�ڟ20�>������                h�ڟ20�>          �pM cA������������>��V��������>                ��V��          X���PA������>������\KS��>������                �\KS��>          ����<A������������>*z�3���������>                )z�3���          ���(A������>������h��%��>������                h��%��>          ���A������������>�*�oy��������>                �*�oy��          ���A������>������CD�����>������                CD�����>          ��%�@������������>gg"ȅM�������>                hg"ȅM�           �D��@������>�����򾊍�,v
+�>������                ���,v
+�>           �8�@������������>Z� ��6�������>      0?        [� ��6�      0�   �C��@����/1?����/1�Ժm �.-?    /1�      0?      0�ֺm �.-?      0�   �#+�@     ��     ��>���3��������>                ���3��           @�x�@������>������V�Iu.���������      0?      0�V�Iu.���      0�   ��A{@����ۡ-?����ۡ-��M3g�?����ۡ-�      @?      0��M3g�?      0�    a�g@����/1?����/1�!���V�,?����/1�      0?      0�!���V�,?      0�    rT@������������>Y�X;:�������>      0?        Y�X;:�      0�    4�A@����/1?����/1���y�k#+?����/1�      0?        ��y�k#+?      0�    P�.@������������>|�dx%?������>                }�dx%?            ��@������>�������"$?������              0?�"$?            �@������������>� 0�?������>                � 0�?      0�    ���?������>������lؒ�	��������                lؒ�	��             B�?������������>�8�ib4��������>                �8�ib4��             ��?������>������90p��>������              0?90p��>             ع?������������>P��@�?������>              0�P��@�?             p�?������>���������Y~��������      0?        ���Y~��      0�     `�?   ܡ-?   ܡ-�@<"r2'?   ܡ-�      0?      0�@<"r2'?      0�     ��?�h3KKK$��j�  t�R�j�  h,(�x                                  2�kA𽦚ߋDA           �]	oA�����>A            �sA���6��>A           �ųtA�Zݳl6A           @$/wA����Vj4A           `)vA���a[%A           �z�uAL�ޔ�hA           `	�vA�<��j�A           @�9uA`��cr�@           ��rvAD�cMD
+A           ���tA0���x`��           ���uA��\[N�@           ��uA ������           �sA���B��            �uA ���,��@           �jytA�oc�J���           �;vtA�u�^����           @�esA`2&�iA�           `@�sA ����9��           ��tApE�,���@           `SfsALԲ�B���           �#�rA^yHC�           @E7qAz�Gd�           ���qANE �:�           �	qA��iZ�           ��kA�D]H�"�        ����XnA@ӗg�	�           @X�lAo��1��            ��jA�I�Hն�           @v�gA��S�gt�           �P�eAR�����            �cA�:�?S�            s�`A����� �           sVA:�D��'�            ��OA�U0�e'�           2�AAiɶ�]�'�        �h3KK%��j�  t�R�j�  h,(�h
+          ��.A                        ��yd��{Bù*q�        ù*q��� �fB     ��z�o����        z�o���������zBﰑù*q�        ﰑù*q��� �fB������>�u���        �u���Q�X�X]zBﰑù*q�        ﰑù*q��� �fB������e��~B�        e��~B�����4zBﰑù*q�        ﰑù*q��� �fB������>������        ������$�Ui#zBﰑù*q�        ﰑù*q��� �fB�������Ф�\��        �Ф�\��.��i�zBﰑù*q�        ﰑù*q��� �fB������>�2U��        �2U��*e>��zBﰑù*q�        ﰑù*q��� �fB����������#�        ����#�Xl*YzBﰑù*q�        ﰑù*q��� �fB������>LuFp<̾        LuFp<̾�CI�zBﰑù*q�        ﰑù*q��� �fB������^w7�McԾ        ^w7�McԾΐ�'|zBﰑù*q�        ﰑù*q��� �fB������>��M\��        ��M\���=_zBﰑù*q�        ﰑù*q��� �fB������6�/Q,Jɾ        6�/Q,Jɾ�Q��RzBﰑù*q�        ﰑù*q��� �fB������>0k���>        0k���>PE�LMzBﰑù*q�        ﰑù*q��� �fB������&�e���¾        &�e���¾�v�JzBﰑù*q�        ﰑù*q��� �fB������>4��/�>        4��/�>7�-�IzBﰑù*q�        ﰑù*q��� �fB������@�I�\��        @�I�\���mv~IzBﰑù*q�        ﰑù*q��� �fB������>���!"�>        ���!"�>~ئMIzBﰑù*q�        ﰑù*q��� �fB������l��� ټ�        l��� ټ���8IzBﰑù*q�        ﰑù*q��� �fB������>D�#`���>        D�#`���>tj\/IzBﰑù*q�        ﰑù*q��� �fB������4u::<»�        4u::<»���e+IzBﰑù*q�        ﰑù*q��� �fB    /1?q����?        q����?y=�)IzBﰑù*q�        ﰑù*q��� �fB     ���R����        ��R����U��(IzBﰑù*q�        ﰑù*q��� �fB������>f	��        f	��v��(IzBﰑù*q�        ﰑù*q��� �fB    ܡ-?�@m�O��        �@m�O����y(IzBﰑù*q�        ﰑù*q��� �fB    /1?�zK�O?        �zK�O?�fj(IzBﰑù*q�        ﰑù*q��� �fB������|��5T��        |��5T����c(IzBﰑù*q�        ﰑù*q��� �fB����/1?N��o}?        N��o}?��`(IzBﰑù*q�        ﰑù*q��� �fB������{<n�v?        {<n�v?��_(IzBﰑù*q�        ﰑù*q��� �fB������>pyn�Ա	?        pyn�Ա	?}_(IzBﰑù*q�        ﰑù*q��� �fB�������F¥��#?        �F¥��#?>�^(IzBﰑù*q�        ﰑù*q��� �fB������>�,]��        �,]��'�^(IzBﰑù*q�        ﰑù*q��� �fB������x��Q�        x��Q�ۡ^(IzBﰑù*q�        ﰑù*q��� �fB������>�+[?�߾        �+[?�߾��^(IzBﰑù*q�        ﰑù*q��� �fB�������$�I��?        �$�I��?ؚ^(IzBﰑù*q�        ﰑù*q��� �fB������>Ш�� �        Ш�� ��^(IzBﰑù*q�        ﰑù*q��� �fB   ܡ-?>���#y?        >���#y?��^(IzBﰑù*q�        ﰑù*q��� �fB������> X�
+���         X�
+���[�^(IzBﰑù*q�        ﰑù*q��� �fB�h3KKK%��j�  t�R�j=  h,(�               ��T�hpA���~qqAޞo���uA��=�\vA��i��uxA�-�m�vA�{S�avA���2wA���q�BuA5ǚH4�vA>0'��tA�[���uA�6����tA���S�rA���Ly5uAHΣZ�otA#@h��otA���lZ9sAsXy�psA�(K��"tA,MZOsA�o��brA*��#��pAu���?�qA�=��O�pA�+z��jA��a���mA5p>lA�-�U�.jA�b� �gA�O�dAk/�i%cAj}�m�8_A�k��~SA���s��IA�h3KK$��h7t�R�jB  h,(�           2�kA���j�l,�8�2EDA���6}�2���"Ly�1AP�O[}C� ���1�'��!k�zA@�1�L�?�p'b�3APs����;�@8���&A@q˵e!�@h#�ݒ>� ��_�CA����ف'� ��p���@0�8�0�@��|�A��Ԑ]�%A e	&�'���)���'�а�և�2����3�*A���?h�!� ��d<.G�p�.$��<A �7:#�P��a'��mɭH�1�@+V	(�(��Rb�	 �X{��4���ۂ�A��_�@��-��7�ω�/��h3KK$��h7t�R�jG  h,(�       �ǝX²{B�����zBQ�X�X]zB����4zB$�Ui#zB.��i�zB*e>��zBXl*YzB�CI�zBΐ�'|zB�=_zB�Q��RzBPE�LMzB�v�JzB7�-�IzB�mv~IzB~ئMIzB��8IzBtj\/IzB��e+IzBz=�)IzBU��(IzBv��(IzB��y(IzB�fj(IzB��c(IzB��`(IzB��_(IzB}_(IzB@�^(IzB'�^(IzBۡ^(IzB��^(IzBؚ^(IzB�^(IzB��^(IzB�h3KKK$��h7t�R��standardized_forecasts_error�h,(�       ~�� �%@v0ؼ`�忏ڌ�B�?62{�J���md��?�H����أ���⿬q'䈼�?���8һ��܌�����?��������P���?�ؐ��>ۿ��Z����������?����h�0@V���?Dm��@r����?�~ـ!��?䓈IRs⿈9���]`\��M��P����?�G��ۿ��7�l'��A�Ў��?+���޿|�('O�nt����QЫ���A�δ�:ѿ���=�_���eC{�����fT6���Y�返h3KK$��h7t�R�jQ  Nj�  Nj�  h,(�`      n�6`���(n#�b���
+º�>�y_�1�>��
+º�>"s��h���o������"s��h���.��줾��v,�>�.��줾 �V6,���h������ �V6,����_������d|�c����_�������s�p��th��s��>��s�p����&C(��C���Hm����&C(��@���f�X>��W��\�>@���f�X>�� ���A�-����� ��`����B� wZ��?�>`����B���ȥ�\*�\����ȥ���*㠾���2����*㠾oL#T�>n�����>oL#T�>��޽e��	�xV�И���޽e�����aH�����@>}>���aH��jڼt�����{� ��jڼt��pU��ej���p���>pU��ej��ZH�e��{�kp�բ>�ZH�e��U_>8�����ͥ�d��U_>8���WN���ӱ���˰H���WN���ӱ�A�����j.�K뤾A�����Y⌑��\d��d��>�Y⌑���8��Ҷ�n�d(y��8��Ҷ�w�ڇ�e���2u/伾w�ڇ�e���kS>�ň>�0q�w �>�kS>�ň>%���t;���*Uꁾ%���t;����Q��Ҹ�^� ㈾��Q��Ҹ����.�������4������.����{6�,J=���������{6�,J=��ٺ]��2���	��3x>ٺ]��2��BH�9���B�tNq��BH�9����
+������W��<���
+������������ܚ�����������g]������g]������g]���                                �h3KK$��j�  t�R�j�  h,(� 
+      �6�qd=)��4(_=�yGJ{8F�)��4(_='��ӌ�p=�.����e=�yGJ{8F��.����e=�Ւ�k�p=�e?ԩ<d=�Px!�_=C���
+0E��Px!�_=�Ւ�k�p=�	�`\f=C���
+0E��	�`\f=<�t��+q=t�@kQd=�Ϭ$`=	����D��Ϭ$`=<�t��+q=$���I�f=	����D�$���I�f=2��?q=�`<�Yd=Q���6`=��z
+�D�Q���6`=2��?q=�P��f=��z
+�D��P��f=�H�kHq=�#p��]d=gB?`=�Rx�vvD�gB?`=�H�kHq=h2�f=�Rx�vvD�h2�f=���.Lq=)!�u_d=G����B`=6_��)mD�G����B`=���.Lq=���z�f=6_��)mD����z�f=����Mq=]G�.`d=�M,!D`=����"iD��M,!D`=����Mq=����,�f=����"iD�����,�f=kD��Nq=/�}`d=�3j��D`=�%�sdgD��3j��D`=kD��Nq=��yM�f=�%�sdgD���yM�f=>��<�Nq=>Y�H�`d=�R�9E`=V�(�fD��R�9E`=>��<�Nq=]�"��f=V�(�fD�]�"��f=Y���Nq=�j�;�`d=:84E`=f�gfOfD�:84E`=Y���Nq=Cq���f=f�gfOfD�Cq���f=�t�Oq=;�̴�`d=��E�AE`=c�$+fD���E�AE`=�t�Oq=�����f=c�$+fD������f=B�zOq=�+p��`d=��S�GE`=���pfD���S�GE`=B�zOq=	�K��f=���pfD�	�K��f=��+�
+Oq=MM&��`d=���ZJE`=�E8�fD����ZJE`=��+�
+Oq=�3:���f=�E8�fD��3:���f=W��Oq=��?�`d=~ �yKE`=ރ��fD�~ �yKE`=W��Oq=�_s��f=ރ��fD��_s��f=ձ1Oq=҅vy�`d=G7��KE`=��&[fD�G7��KE`=ձ1Oq=��	��f=��&[fD���	��f=e,v�Oq=�JБ�`d=��U1LE`=����fD���U1LE`=e,v�Oq=�.NE��f=����fD��.NE��f=$ٿ�Oq=Ɓ���`d=a6�QLE`=#��@fD�a6�QLE`=$ٿ�Oq=��'��f=#��@fD���'��f=�}=�Oq= ����`d=�j�pLE`=�=եfD��j�pLE`=�}=�Oq= �K���f=�=եfD� �K���f=���&Oq=�KБ�`d=�#�LE`=J�qfD��#�LE`=���&Oq=��`��f=J�qfD���`��f=��-Oq=�vy�`d=��ME`=L�U�
+fD���ME`=��-Oq=b�Sf��f=L�U�
+fD�b�Sf��f=Duk�Oq=��?�`d=M�NE`=����fD�M�NE`=Duk�Oq=W�5���f=����fD�W�5���f=��Oq=�X&��`d=��xwPE`=8esG�eD���xwPE`=��Oq=&����f=8esG�eD�&����f=��f��Nq=�Ep��`d=	���UE`=�4hP�eD�	���UE`=��f��Nq=1��f=�4hP�eD�1��f=c���Nq=�ʹ�`d=m�ibE`=��1�eD�m�ibE`=c���Nq=� �9�f=��1�eD�� �9�f=���Nq=���;�`d=���TE`=��*j�dD����TE`=���Nq=�Mipu�f=��*j�dD��Mipu�f=�$�Nq=P��H�`d=��V�E`=����CcD���V�E`=�$�Nq=���!��f=����CcD����!��f=�v�i�Lq=(�1�}`d=�MnQ\F`=�/�(�_D��MnQ\F`=�v�i�Lq=x�W��f=�/�(�_D�x�W��f=R��Iq=&�.`d=���j�G`=�q��%WD����j�G`=R��Iq=�"@(�f=�q��%WD��"@(�f=k'deBq=u�"�u_d=�8���J`=$�8�CD��8���J`=k'deBq=u�TZ�f=$�8�CD�u�TZ�f=�A��1q=d���]d=B���aR`=�XǈD�B���aR`=�A��1q=�����nf=�XǈD������nf=���q=,?`<�Yd=��2��c`=����j�C���2��c`=���q=�+�x��e=����j�C��+�x��e=
+V`9�p=J- lQd=x�T��`=�0L��B�x�T��`=
+V`9�p=��n58�d=�0L��B���n58�d= �}�l�o=JL�թ<d=<���g�`=#E�ƒ@�<���g�`= �}�l�o=6�S.�b=#E�ƒ@�6�S.�b=&ᩈ4 l=T�2�qd=�hu�T�a=�skWW!7��hu�T�a=&ᩈ4 l=bXA��Y=�skWW!7�bXA��Y=��+nh�c=��+nh�c=��+nh�c=        ��+nh�c=��+nh�c=                                                                                                        �h3KKK$��j�  t�R�j�  h,(�       �� ��P�>�}`��¾��#t��>�GO����Y��z���>X�H8	�����kĩ�`����M�>:������e#�z40�> }�ס��,���/n�>x_���>��DE|Ǿ�9o�J�>z�Ts����Cħ>ǧ�J櫾���� ����RC0�>��ܯpeU>���N�>���B���K���>�`,��S�>�1s�E�Ⱦ2t�n�=�>	��k>�x��O�>@V���>N^�ԕ�ް\�?�> �\@�>��}u�+����g��>���g]����h3KK$��h7t�R�j�  h,(�`      -��Ǆ@���1�kA]��_(a�    2�kA   ^�:A/j�E��"A   �]	oA   ��QA3ڡT�C:�    �sA   �(Ax�r'�(A   �ųtA   ��CAW�c�9'�   @$/wA
+   ��2�"yA���9A   `)vA   �����Z Z)A   �z�uA   ��*A�ySsn�   `	�vA   �9�[d%-D�4A   @�9uA������3A�-G)�   ��rvA   �8��tM�XE2A   ���tA�����#A0DT�8!�   ���uA   ` ��?���A   ��uA�����q?�A�sJ�4A   �sA   Bq@A�
+�3�9�    �uA    T�$��˦�;�A   �jytA@����w��0D4vi��   �;vtA   �1��u�t!�%A   @�esA    �1A���Y��	�   `@�sA����'�"A89oc�n�   ��tA������&�d�s�A   `SfsA   �*��M��JA   �#�rA�����5��Ի���(A   @E7qA   N AvG��lp!�   ���qA����#&����57fA   �	qA�����H��I��0�>A   ��kA������3A
+h�~�3�����XnA����s�)��#m?NA   @X�lA
+   $/�4�2xmeA    ��jA������6�jf�z��'A   @v�gA   .3�� ANon A   �P�eA�����T)�����u�A    �cA   ��:�.9U�\*A    s�`A������E�i���b7A   sVA   \�:�����*�#A    ��OA������;��S���$A�h3KK$��j�  t�R�j�  h,(� 
+      RHe�~�.ARHe�~�.�.]�ĺ'#ARHe�~�.�!Lc�~�.A�S�ĺ'#�/]�ĺ'#Ao��ĺ'#� �r�T"$B    ��    ��>�r_NV�     ��>o�$��5?g��9��#��r_NV�l^r���aRpB������>������>U����������jQz��?�{�O^m�6?<U�����}���>��BO�4�A������    ��>��z��    ��>fSf�jcC�B�-��,;?��z��R�7!�B?�"E#)�A������>�������$�r�Ҿ������<�t�%�	?���as��$�r�Ҿ��o��&?{(*�T��A������     ��>K��C���     ��>��?u�4����\-?L��C����{yӟ�1?�u�J���A������>������#(����>������V��I%?���0gO��#(����>��+XP0?�5E���A������������>Ş��J��������>C���j�0��R���%'?Ş��J�������!?H�=�p�A������>������p���9Q�>������/�[�0�B������8?o���9Q�>���{-W=?�� �Y�A������������>]�W��������>^m���#?�K�7�^�^�W��p�������pGvA������>������Nw^�60�>��������˺���>��kn!׾Nw^�60�>VU��/��=A cA������������>[}'Z�������>��(N�3?��j��)�Z}'Z��sl�N7�ȋ���PA������>������nWE�S��>������|��R�;?���q�B2�oWE�S��>��q�.����~�<A������������>���U���������>���b�$�W�K�?���U���֕ ��1??vu���(A������>����������%��>�������s���!?=u�v������%��>��i���}S��A������������>��|wy��������><͗��1?�?��k'���|wy�뾼���X���r�A������>������R򣛝��>������j��/�<i��$?S򣛝��>��0b5?���%�@������������>E��ɅM�������>3�;畉;��U22?D��ɅM뾘����+�zf�D��@������>������cc�-v
+�>����������;1��x�ߌ&?cc�-v
+�>��ӫSU�E�/�8�@������������>Xk��6�������>�
+"~"$�����?Xk��6�,z��f3��]M�C��@����/1?����/1���^ �.-?    /1�����%?��x�$���^ �.-?:�͖���:{�y#+�@     ��     ��>oÍ�3��������>�!�Z]3?�����%�oÍ�3�� ���+?��9=�x�@������>     ��4+Jt.�����������7�1C?�JKZ8�>+Jt.����T�cu��(���A{@����ۡ-?����ۡ-��Cg�?����ۡ-���z]H�3?�[��`{$��Cg�? �zT��>h2�^�g@����/1?����/1����V�,?����/1�2{���fƾ�Ye��~����V�,?X� kNc"�{��frT@������������>*�X;:�������>˳��o?��è���	*�X;:��!��s(?Hǩ3�A@����/1?����/1��y�k#+?����/1����5S�{�7�Н���y�k#+?���$� �v�;�W�.@�����������>
+dx%?������>��!z9�P&�϶t+?
+dx%?�Wa��0?��U֞�@������>�������"$?������5�s���>�q����"$?�u�6�j	?�͌h@������������>��/�?������>�����>3x ������/�?PI�P���`��g��?������>������mB��	��������^|o�~%��0��%?iB��	���� [V?5��C�A�?������������>�6�ib4��������>�P�
+d��6�y��?�6�ib4��t���` )?몑-���?������>������s0p��>������逘d/?�	~�� $�u0p��>K��g0��حR��?������������>RO��@�?������>�.*�!��(�g(��>RO��@�?�1S0e�����z/n�?������>��������Y~��������~A��*��xA�rQ%?���Y~�����k`?�)��/T�?   ܡ-?   ܡ-�@<"r2'?   ܡ-�x-�7 x$?ﰑù*!�A<"r2'?      0�     ��?�h3KKK$��j�  t�R�j�  h,(� 
+      �(�j���        ی剌���Əj��=        W4剌�@Z�����>        ƨ$��B7�+L��һ0�r���;���l:n������*?�����*�j��Xkr!?�g���
+!��f�ۚ� ?��O�H�B�Æ�J���f��~B�;8������                        S��>�> LX�rξ������AN�M-H~�        ��O�4�                        ��Tn>        �i�!7�AT��b���Ф�\�;�i�ê.꾛�J�5#�;      ���K�%?ov��tf> ��s����P/���A|]�M/��2U瘔�y�LcL۾                        �[��> �_�ޢs>N_F�ӹA���9��g�����#�;�VW��.پ                        �A.:5> �Q�  q�RR};U^�A��jp~v4;OuFp<�;�!��q¾                        �Q��1~� `��zq]�C	.��_�A6��*LS�^w7�Mc��Ły���ʾ                        �w��">  �{�9>W��fǀA%zB�QS;        �p�ዸ��                        �9dd��        j�]jmA0�נD�7�/Q,J���9�e]���                        ��E�3�=  �pM #>���,YA,�ь$��lP���q;;���Q�>                        �1�ǃ�Ž  ���> r�<(�EA��I6<�+�e����;��j�u��                        ���m\ǵ=  ������p�B��2A�\\�+�7��/d;��Ʊ���>                        �>:��  ����=�qՌ�Z A�9���7�C�I�\o�>f0<i���                        ���䝏=  ����=iİ��SA�;��4�0����!"x��P��>                        �-��r9z�  ���½�$Fk���@Yﴕ��4�i��� �|;��+����                        �h�=�_g=  ��%���E�u�?�@ �A;2�L�#`��y�I���L�>                        ��\��S�   �D������
+>g�@�f-+�3�2u::<�{;�.�WD��                        ]�=�kA=   �8��}�����@���I�����Ӧ�VS�;i!�\�>��e+I*?��e+I*���c��3?���Ź*!�.U�Ĺ*!?XXg@ͭ�����;z�����;�9�j��>                        >��\�<=   p#+b=z&�iy�@�}�:�s�f	��51�                        � ��
+=   @�x?=��K����@:�bL޻z;�0Hy;��R�5��u��(I*?t��(I*��=�ù*!?�ù*!�ù*!?�bH��q@0շ
+J?�;�_�4=ջ����j
+���y(I*?��y(I*������3?�I�ù*!�ù*!?H�a��_@I,c���;C��e����n��/0�>                        �8:���<    r�X�u{��J@i�WշQ��c��5�7�;���
+���c(I*?��c(I*������3?#�ù*!�ù*!?�.�6N7@�z�)��r;��:U�L�;�Gp��ƾa��IՍѻ      �i���%?��j�l�м    0��(�%�9/$@ ��))��        �ߞ� ?                        u�Gp��        x`O�P{@XR@���76.��;�����j�>�9T�<�      �;�����%?8���    ��<b"���G�?�^hj�ߔ;        ���C�?                        �F�v	�n<        ]��>�9�?�P��{�        ;�?�z�                        ���}7m<         s�����?%蒉P�';        �''��Ծ                        |t�KeY�        ��j}��?NyBS�b�;�َ���K0�Yվ��t��Oۻ      �;�����%?�����f�     �i<��ܼ�?�n8��C�;�+p�oԻ1C�ym�
+?�b�**��      �;����%�:5~��&5<     pf��)B�Ї�?sx�@���;���{���ӣ	����^(I*?�^(I*�1��ù*!?V��ù*!�;��ù*!?{�ʾ�(�?        j5)3�`վ                                             ��?        �h3KKK$��j�  t�R�j�  h,(�                                                                                                                                                                                                                                                                                                       �h3KK$��h7t�R�j�  h,(�       Z���`,�Y���CA���_t�2�OƑ��1AXd�zFwC��|c4?�'�[�x�3}A:�
+��?��E�3A�\����;�?��F��&Aw��d!��?ܗܒ>�8E���CAO�ف'�c�i���@�İ8�0�3�|�A���]�%A\�I&�'������'�-��և�2�4v&�3�*AB�?h�!����d<.G��4.$��<A2a�7:#��Y �a'��ɭH�1���U	(�(�Fb�	 ��s��4�9�ۂ�A�w^�@��-��7�ω�/�        �h3KK$��h7t�R�j�  h,(�                                                                                                                                                                                                                                                                                                       �h3KKK$��h7t�R�j�  h,(�        �-�I"$B RpB �BO�4�A ""E#)�A $*�T��A p�J���A 5E���A  �=�p�A  �Y�A  �pGvA  A cA  ��PA  �~�<A  ����(A  ���A  �r�A   �%�@   �D��@    �8�@   �C��@   `#+�@   ��x�@    �A{@    b�g@    rT@    8�A@     �.@     �@    �@     ��?     @�?     ��?     �?     ��?     ��?:�^(IzB�h3KKK$��h7t�R�j  �types��SimpleNamespace���)R�}�(�	predicted��pandas.core.frame��	DataFrame���)��}�(hh�BlockManager����pandas._libs.internals��_unpickle_block���h,(�x                                  2�kA𽦚ߋDA           �]	oA�����>A            �sA���6��>A           �ųtA�Zݳl6A           @$/wA����Vj4A           `)vA���a[%A           �z�uAL�ޔ�hA           `	�vA�<��j�A           @�9uA`��cr�@           ��rvAD�cMD
+A           ���tA0���x`��           ���uA��\[N�@           ��uA ������           �sA���B��            �uA ���,��@           �jytA�oc�J���           �;vtA�u�^����           @�esA`2&�iA�           `@�sA ����9��           ��tApE�,���@           `SfsALԲ�B���           �#�rA^yHC�           @E7qAz�Gd�           ���qANE �:�           �	qA��iZ�           ��kA�D]H�"�        ����XnA@ӗg�	�           @X�lAo��1��            ��jA�I�Hն�           @v�gA��S�gt�           �P�eAR�����            �cA�:�?S�            s�`A����� �           sVA:�D��'�            ��OA�U0�e'�           2�AAiɶ�]�'�        �h3KK%��j�  t�R�hIK KK��R�K��R���]�(hh�Index���}�(h
+j&  j(  K ��j*  ��R�(KK��h0�O8�����R�(Kh�NNNJ����J����K?t�b�]�(�state.0��state.1��state.2�et�bh#Nu��R�hh!}�(h#Nh$K h%K%h&Ku��R�e��R�hM�	dataframe�hO]�hR}�hT}�hV�sub�predicted_cov�j�  )��}�(hj�  j�  h,(�h
+          ��.A                        ��yd��{Bù*q�        ù*q��� �fB     ��z�o����        z�o���������zBﰑù*q�        ﰑù*q��� �fB������>�u���        �u���Q�X�X]zBﰑù*q�        ﰑù*q��� �fB������e��~B�        e��~B�����4zBﰑù*q�        ﰑù*q��� �fB������>������        ������$�Ui#zBﰑù*q�        ﰑù*q��� �fB�������Ф�\��        �Ф�\��.��i�zBﰑù*q�        ﰑù*q��� �fB������>�2U��        �2U��*e>��zBﰑù*q�        ﰑù*q��� �fB����������#�        ����#�Xl*YzBﰑù*q�        ﰑù*q��� �fB������>LuFp<̾        LuFp<̾�CI�zBﰑù*q�        ﰑù*q��� �fB������^w7�McԾ        ^w7�McԾΐ�'|zBﰑù*q�        ﰑù*q��� �fB������>��M\��        ��M\���=_zBﰑù*q�        ﰑù*q��� �fB������6�/Q,Jɾ        6�/Q,Jɾ�Q��RzBﰑù*q�        ﰑù*q��� �fB������>0k���>        0k���>PE�LMzBﰑù*q�        ﰑù*q��� �fB������&�e���¾        &�e���¾�v�JzBﰑù*q�        ﰑù*q��� �fB������>4��/�>        4��/�>7�-�IzBﰑù*q�        ﰑù*q��� �fB������@�I�\��        @�I�\���mv~IzBﰑù*q�        ﰑù*q��� �fB������>���!"�>        ���!"�>~ئMIzBﰑù*q�        ﰑù*q��� �fB������l��� ټ�        l��� ټ���8IzBﰑù*q�        ﰑù*q��� �fB������>D�#`���>        D�#`���>tj\/IzBﰑù*q�        ﰑù*q��� �fB������4u::<»�        4u::<»���e+IzBﰑù*q�        ﰑù*q��� �fB    /1?q����?        q����?y=�)IzBﰑù*q�        ﰑù*q��� �fB     ���R����        ��R����U��(IzBﰑù*q�        ﰑù*q��� �fB������>f	��        f	��v��(IzBﰑù*q�        ﰑù*q��� �fB    ܡ-?�@m�O��        �@m�O����y(IzBﰑù*q�        ﰑù*q��� �fB    /1?�zK�O?        �zK�O?�fj(IzBﰑù*q�        ﰑù*q��� �fB������|��5T��        |��5T����c(IzBﰑù*q�        ﰑù*q��� �fB����/1?N��o}?        N��o}?��`(IzBﰑù*q�        ﰑù*q��� �fB������{<n�v?        {<n�v?��_(IzBﰑù*q�        ﰑù*q��� �fB������>pyn�Ա	?        pyn�Ա	?}_(IzBﰑù*q�        ﰑù*q��� �fB�������F¥��#?        �F¥��#?>�^(IzBﰑù*q�        ﰑù*q��� �fB������>�,]��        �,]��'�^(IzBﰑù*q�        ﰑù*q��� �fB������x��Q�        x��Q�ۡ^(IzBﰑù*q�        ﰑù*q��� �fB������>�+[?�߾        �+[?�߾��^(IzBﰑù*q�        ﰑù*q��� �fB�������$�I��?        �$�I��?ؚ^(IzBﰑù*q�        ﰑù*q��� �fB������>Ш�� �        Ш�� ��^(IzBﰑù*q�        ﰑù*q��� �fB   ܡ-?>���#y?        >���#y?��^(IzBﰑù*q�        ﰑù*q��� �fB������> X�
+���         X�
+���[�^(IzBﰑù*q�        ﰑù*q��� �fB�h3KKo��j�  t�R�hIK KK��R�K��R���]�(hj�  }�(h
+j&  j(  K ��j*  ��R�(KK��j�  �]�(�state.0��state.1��state.2�et�bh#Nu��R�h�pandas.core.indexes.multi��
+MultiIndex���}�(�levels�]�(hj�  }�(h
+j&  j(  K ��j*  ��R�(KK��j�  �]�(�state.0��state.1��state.2�et�bh#Nu��R�hh!}�(h#Nh$K h%K%h&Ku��R�e�codes�]�(h,(Co                                     �h0�i1�����R�(Kh�NNNJ����J����K t�bKo��h7t�R�h,(Co   			
+
+
+   !!!"""###$$$�j6  Ko��h7t�R�e�	sortorder�N�names�]�(NNeu��R�e��R�hMj�  hOj   hR}�hT}�hV�sub�filtered�j�  )��}�(hj�  j�  h,(�`      n�ج^~@�
+1�kA�s��F'a�    2�kA    ^�:Ag�W��>"A   �]	oA   ��QAJv�}� :�    �sA   �(A���Q�(A   �ųtA   ��CAu��"'�   @$/wA   ��2�͘�Ȕ�9A   `)vA   ����AGx+�+A   �z�uA   ��*Aє�@l�   `	�vA   �9����B�4A   @�9uA������3A��*�)�   ��rvA   �8�Q3��XE2A   ���tA�����#A��۫-!�   ���uA   ` ���״��A   ��uA�����q?�r{Ї�4A   �sA   Bq@Aw'���9�    �uA    T�$��^9<�A   �jytA@����w���tsi��   �;vtA   �1��^u!�%A   @�esA    �1A���P��	�   `@�sA����'�"A��8]�n�   ��tA������&�Ad��A   `SfsA
+   �*�<��JA   �#�rA�����5�!PӔ��(A   @E7qA   N A�y�lp!�   ���qA����#&�Ї67fA   �	qA�����H�F܉�0�>A   ��kA������3A�~�3�����XnA����s�)��%m?NA   @X�lA   $/�U�3xmeA    ��jA������6�ʢ�z��'A   @v�gA   .3��;ANon A   �P�eA�����T)�����u�A    �cA�����:��?U�\*A    s�`A������E����b7A   sVA   \�:� ���*�#A    ��OA������;��S���$A�h3KK$��j�  t�R�hIK KK��R�K��R���]�(hj�  }�(h
+j&  j(  K ��j*  ��R�(KK��j�  �]�(�state.0��state.1��state.2�et�bh#Nu��R�h(e��R�hMj�  hOj   hR}�hT}�hV�sub�filtered_cov�j�  )��}�(hj�  j�  h,(� 
+      %^�~�.A%^�~�.�2��5�"A$^�~�.�   �~�.A  �5�"�1��5�"A  �5�"� ���V%B    ��     ��>z�?���     ��>                z�?���        �E����B������>������0�#&���������                �0�#&���         LX�r�A������     ��>e�g����������>                e�g����         ��Z@�A������>�������EJ��Ҿ������                �EJ��Ҿ         ��s��A������������>�{��ҍ��������>                �{��ҍ��         �_�ޢ�A������>������<�)*��>������                <�)*��>         �Q�  �A������������>�<hf��������>                �<hf��         `��zq�A������>������ �Q�>������                � �Q�>          �{��A������������>ø����������>                ¸����          �ihvA������>������h�ڟ20�>������                g�ڟ20�>          �pM cA������������>��V��������>                ��V��          X���PA������>������\KS��>������                �\KS��>          ����<A������������>)z�3���������>                *z�3���          ���(A������>������h��%��>������                h��%��>          ���A������������>�*�oy��������>                �*�oy��          ���A������>������CD�����>������                CD�����>          ��%�@������������>hg"ȅM�������>                gg"ȅM�           �D��@������>�����򾉍�,v
+�>������                ���,v
+�>           �8�@������������>[� ��6�������>      0?      0�Z� ��6�           �C��@����/1?    /1�ֺm �.-?����/1�      0?      0�Ժm �.-?      0�   �#+�@     ��������>���3��     ��>                ���3��           @�x�@������>������V�Iu.���������      0?      0�V�Iu.���      0�   ��A{@����ۡ-?����ۡ-��M3g�?����ۡ-�      @?      0��M3g�?      0�    a�g@����/1?����/1�!���V�,?����/1�      0?      0�!���V�,?      0�    rT@������������>Y�X;:�������>      0?      0�Y�X;:�            4�A@����/1?����/1���y�k#+?����/1�      0?      0���y�k#+?            P�.@�����������>}�dx%?������>                |�dx%?            ��@������>�������"$?������                �"$?      0?    �@������������>� 0�?������>              0�� 0�?            ���?������>������lؒ�	��������                lؒ�	��             B�?������������>�8�ib4��������>                �8�ib4��             ��?������>������90p��>������                90p��>      0?     ع?������������>P��@�?������>                P��@�?      0�     p�?������>���������Y~��������      0?      0����Y~��             `�?   ܡ-?   ܡ-�@<"r2'?   ܡ-�      0?      0�@<"r2'?      0�     ��?�h3KKl��j�  t�R�hIK KK��R�K��R���]�(hj�  }�(h
+j&  j(  K ��j*  ��R�(KK��j�  �]�(�state.0��state.1��state.2�et�bh#Nu��R�hj  }�(j   ]�(hj�  }�(h
+j&  j(  K ��j*  ��R�(KK��j�  �]�(�state.0��state.1��state.2�et�bh#Nu��R�hh!}�(h#Nh$K h%K$h&Ku��R�ej1  ]�(h,(Cl                                    �j6  Kl��h7t�R�h,(Cl   			
+
+
+   !!!"""###�j6  Kl��h7t�R�ej?  Nj@  ]�(NNeu��R�e��R�hMj�  hOj   hR}�hT}�hV�sub�smoothed�j�  )��}�(hj�  j�  h,(�`      -��Ǆ@���1�kA]��_(a�    2�kA   ^�:A/j�E��"A   �]	oA   ��QA3ڡT�C:�    �sA   �(Ax�r'�(A   �ųtA   ��CAW�c�9'�   @$/wA
+   ��2�"yA���9A   `)vA   �����Z Z)A   �z�uA   ��*A�ySsn�   `	�vA   �9�[d%-D�4A   @�9uA������3A�-G)�   ��rvA   �8��tM�XE2A   ���tA�����#A0DT�8!�   ���uA   ` ��?���A   ��uA�����q?�A�sJ�4A   �sA   Bq@A�
+�3�9�    �uA    T�$��˦�;�A   �jytA@����w��0D4vi��   �;vtA   �1��u�t!�%A   @�esA    �1A���Y��	�   `@�sA����'�"A89oc�n�   ��tA������&�d�s�A   `SfsA   �*��M��JA   �#�rA�����5��Ի���(A   @E7qA   N AvG��lp!�   ���qA����#&����57fA   �	qA�����H��I��0�>A   ��kA������3A
+h�~�3�����XnA����s�)��#m?NA   @X�lA
+   $/�4�2xmeA    ��jA������6�jf�z��'A   @v�gA   .3�� ANon A   �P�eA�����T)�����u�A    �cA   ��:�.9U�\*A    s�`A������E�i���b7A   sVA   \�:�����*�#A    ��OA������;��S���$A�h3KK$��j�  t�R�hIK KK��R�K��R���]�(hj�  }�(h
+j&  j(  K ��j*  ��R�(KK��j�  �]�(�state.0��state.1��state.2�et�bh#Nu��R�h(e��R�hMj�  hOj   hR}�hT}�hV�sub�smoothed_cov�j�  )��}�(hj�  j�  h,(� 
+      RHe�~�.ARHe�~�.�/]�ĺ'#ARHe�~�.�!Lc�~�.Ao��ĺ'#�.]�ĺ'#A�S�ĺ'#� �r�T"$B    ��     ��>�r_NV�    ��>o�$��5?l^r����r_NV�g��9��#�aRpB������>������<U����������jQz��?��}���>>U����{�O^m�6?��BO�4�A������    ��>��z��    ��>fSf�jcC�R�7!�B?��z��B�-��,;?�"E#)�A������>�������$�r�Ҿ������<�t�%�	?��o��&?�$�r�Ҿ���as�{(*�T��A������     ��>L��C���     ��>��?u�4��{yӟ�1?K��C������\-?�u�J���A������>������#(����>������V��I%?��+XP0?�#(����>���0gO��5E���A������������>Ş��J��������>C���j�0������!?Ş��J��R���%'?H�=�p�A������>������o���9Q�>������/�[�0�B����{-W=?p���9Q�>�����8?�� �Y�A������������>^�W��������>^m���#?p�����]�W���K�7�^���pGvA������>������Nw^�60�>��������˺���>VU��/�Nw^�60�>��kn!׾�=A cA������������>Z}'Z�������>��(N�3?�sl�N7�[}'Z���j��)�ȋ���PA������>������oWE�S��>������|��R�;?��q�.�nWE�S��>���q�B2����~�<A������������>���U���������>���b�$�֕ ��1?���U���W�K�??vu���(A������>����������%��>�������s���!?��i������%��>=u�v���}S��A������������>��|wy��������><͗��1?����X���|wy�뾮?��k'���r�A������>������S򣛝��>������j��/���0b5?R򣛝��><i��$?���%�@������������>D��ɅM�������>3�;畉;������+�E��ɅM뾿U22?zf�D��@������>������cc�-v
+�>����������;1���ӫSU�cc�-v
+�>�x�ߌ&?E�/�8�@������������>Xk��6�������>�
+"~"$�,z��f3�Xk��6�����?�]M�C��@����/1?    /1���^ �.-?����/1�����%?:�͖�����^ �.-?��x�$�:{�y#+�@     ��������>oÍ�3��     ��>�!�Z]3? ���+?oÍ�3�������%���9=�x�@������>������>+Jt.���     ����7�1C?�T�cu��4+Jt.����JKZ8�(���A{@����ۡ-?����ۡ-��Cg�?����ۡ-���z]H�3? �zT��>�Cg�?�[��`{$�h2�^�g@����/1?����/1����V�,?����/1�2{���fƾX� kNc"����V�,?�Ye��~�{��frT@������������>	*�X;:�������>˳��o?�!��s(?*�X;:���è���Hǩ3�A@����/1?����/1��y�k#+?����/1����5S꾠��$� ��y�k#+?{�7�Н��v�;�W�.@�����������>
+dx%?������>��!z9��Wa��0?
+dx%?P&�϶t+?��U֞�@������>�������"$?������5�s���>�u�6�j	?�"$?�q����͌h@������������>��/�?������>�����>PI�P����/�?3x �����`��g��?������>������iB��	��������^|o�~%��� [V?mB��	���0��%?5��C�A�?������������>�6�ib4��������>�P�
+d��t���` )?�6�ib4��6�y��?몑-���?������>������u0p��>������逘d/?K��g0�s0p��>�	~�� $��حR��?������������>RO��@�?������>�.*�!��1S0e��RO��@�?�(�g(��>���z/n�?������>��������Y~��������~A��*�����k`?���Y~��xA�rQ%?�)��/T�?   ܡ-?   ܡ-�A<"r2'?   ܡ-�x-�7 x$?      0�@<"r2'?ﰑù*!�     ��?��j      h3KKl��j�  t�R�hIK KK��R�K��R���]�(hj�  }�(h
+j&  j(  K ��j*  ��R�(KK��j�  �]�(�state.0��state.1��state.2�et�bh#Nu��R�hj  }�(j   ]�(hj�  }�(h
+j&  j(  K ��j*  ��R�(KK��j�  �]�(�state.0��state.1��state.2�et�bh#Nu��R�hh!}�(h#Nh$K h%K$h&Ku��R�ej1  ]�(h,(Cl                                    �j6  Kl��h7t�R�h,(Cl   			
+
+
+   !!!"""###�j6  Kl��h7t�R�ej?  Nj@  ]�(NNeu��R�e��R�hMj�  hOj   hR}�hT}�hV�subub�_data_attr_model�]�(�ssm�hhXe�
+_init_kwds�}�(j�  h�j�  h�j�  h�j�  �j�  �j�  �j�  Ku�specification��statsmodels.tools.tools��Bunch���)��(�seasonal_periods�K �measurement_error���time_varying_regression���simple_differencing��j�  �j�  ��hamilton_representation��j�  �j�  Kj�  h�j�  h�k_diff�K�k_seasonal_diff�K �k_ar�K�k_ma�K�k_seasonal_ar�K �k_seasonal_ma�K �k_ar_params�K�k_ma_params�Kj�  h��k_trend�K �k_exog�K �mle_regression���state_regression��u}�(h�K jC  �jD  �jF  �h��h��jG  �h��h�Kh�h�h�h�j}  Kj�  K j|  Kj~  Kj  K j�  K j#  Kj$  Kh�h�h�K h�K jE  �j�  �ubjq  h,(�        �h3K ��h7t�R�jI  h,(�             �?�����鿔h3K��h7t�R�jS  h,(�             �?�����忔h3K��h7t�R�j]  h,(�             �?�h3K��h7t�R�jg  h,(�             �?�h3K��h7t�R��polynomial_reduced_ar�h,(�             �?�����鿔h3K��h7t�R��polynomial_reduced_ma�h,(�             �?�����忔h3K��h7t�R��model_orders�}�(j�  K h^K �ar�K�ma�K�seasonal_ar�K �seasonal_ma�K �
+reduced_ar�K�
+reduced_ma�K�exog_variance�K �measurement_variance�K �variance�Ku�param_terms�]�(j2	  j3	  j:	  e�
+_params_ar�h,(�       ������?�h3K��h7t�R��
+_params_ma�h,(�       �����忔h3K��h7t�R��_params_variance�h,(�       :�^(IzB�h3K��h7t�R��_params_seasonal_ma�h,(�        �h3K ��h7t�R��_params_seasonal_ar�h,(�        �h3K ��h7t�R��mlefit��statsmodels.base.model��LikelihoodModelResults���)��}�(hrh,(�       #�/'���J�T���2�?!n4A�h3K��h7t�R�hwhzh�K h�]�jU  ]�(jW  jX  jY  ejZ  Nj[  G?�      j\  ��mle_retvals�}�(�fopt�h�j�  C��IK.@���R��gopt�h,(�       �����a���f � ��>V̹��tt��h3K��h7t�R��fcalls�KD�warnflag�K �	converged���
+iterations�Ku�mle_settings�}�(�	optimizer��lbfgs��start_params�h,(�       ��v˟<��%	*+�E��֑?!n4A�h3K��h7t�R��maxiter�K2�full_output�K�disp�K �fargs�}�(�transformed���includes_fixed���score_method�N�approx_complex_step��u���callback�N�retall���extra_fit_funcs�}��approx_grad���epsilon�G>�����h�bounds�]�(NN��j�	  j�	  euubjb	  jc	  jq	  jr	  ub�__doc__�X�  
+Class to hold results from fitting an SARIMAX model
+
+Parameters
+----------
+model : SARIMAX instance
+    The fitted model instance
+
+Attributes
+----------
+specification : dictionary
+    Dictionary including all attributes from the SARIMAX model instance.
+polynomial_ar : ndarray
+    Array containing autoregressive lag polynomial coefficients,
+    ordered from lowest degree to highest. Initialized with ones, unless
+    a coefficient is constrained to be zero (in which case it is zero).
+polynomial_ma : ndarray
+    Array containing moving average lag polynomial coefficients,
+    ordered from lowest degree to highest. Initialized with ones, unless
+    a coefficient is constrained to be zero (in which case it is zero).
+polynomial_seasonal_ar : ndarray
+    Array containing seasonal autoregressive lag polynomial coefficients,
+    ordered from lowest degree to highest. Initialized with ones, unless
+    a coefficient is constrained to be zero (in which case it is zero).
+polynomial_seasonal_ma : ndarray
+    Array containing seasonal moving average lag polynomial coefficients,
+    ordered from lowest degree to highest. Initialized with ones, unless
+    a coefficient is constrained to be zero (in which case it is zero).
+polynomial_trend : ndarray
+    Array containing trend polynomial coefficients, ordered from lowest
+    degree to highest. Initialized with ones, unless a coefficient is
+    constrained to be zero (in which case it is zero).
+model_orders : dict
+    The orders of each of the polynomials in the model.
+param_terms : list of str
+    List of parameters actually included in the model, in sorted order.
+
+See Also
+--------
+statsmodels.tsa.statespace.kalman_filter.FilterResults
+statsmodels.tsa.statespace.mlemodel.MLEResults
+��fit_details�jZ	  ub.
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-814015a0b7864a089a8145fda63e6bbd\artifacts\python_env.yaml
+
+```yaml
+python: 3.13.15
+build_dependencies:
+- pip==26.2.1
+- setuptools
+- wheel
+dependencies:
+- -r requirements.txt
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-814015a0b7864a089a8145fda63e6bbd\artifacts\requirements.txt
+
+```txt
+mlflow==3.16.1
+numpy==2.5.3
+pandas==2.3.3
+scipy==1.18.1
+statsmodels==0.15.0
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-82453dc9cdbe482e8cae4b939516e720\artifacts\conda.yaml
+
+```yaml
+channels:
+- conda-forge
+dependencies:
+- python=3.13.15
+- pip<=26.2.1
+- pip:
+  - mlflow==3.16.1
+  - numpy==2.5.3
+  - pandas==2.3.3
+  - pytest==9.1.1
+  - scikit-learn==1.9.1
+  - scipy==1.18.1
+  - skops==0.15.0
+name: mlflow-env
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-82453dc9cdbe482e8cae4b939516e720\artifacts\MLmodel
+
+```text
+artifact_path: file:///C:/Data/ValueAI_Project/mlruns/models/m-82453dc9cdbe482e8cae4b939516e720/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.skops
+    predict_fn: predict
+    python_version: 3.13.15
+  sklearn:
+    code: null
+    pickled_model: model.skops
+    serialization_format: skops
+    sklearn_version: 1.9.1
+    skops_trusted_types: null
+mlflow_version: 3.16.1
+model_id: m-82453dc9cdbe482e8cae4b939516e720
+model_size_bytes: 26780
+model_uuid: m-82453dc9cdbe482e8cae4b939516e720
+prompts: null
+run_id: 1aee18c67faa4b498646aa1163efc211
+utc_time_created: '2026-09-22 20:06:16.276424'
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-82453dc9cdbe482e8cae4b939516e720\artifacts\model.skops
+
+```skops
+PK     ɸ6]�V��   �      2602503282032.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (3,), }                                                            
+r�ݞ΋�?3tyv�?O��?PK     ɸ6]՚ƣ@  @     2600831773520.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (3, 8), }                                                          
+��������3~d���7��k߿��r ���z�|�ܿ�3~d����<ֹѿ���Ҹ�G6��?�w�'s��?�?D;�?�Z��s�?�\os�?�w�'s��?N5�� �?�Oï�?rt�(m�?��3C� @��x�Y��?�ʶ��� @�
+G�@�?��3C� @�����>�?�$�����?PK     ɸ6]n񡤀  �     2600853416496.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (3, 8, 8), }                                                       
+��0����?M{ڏ+��9���3��9?]K �9M{ڏ+��9M{ڏ+��9�z&��i�?�5s�ד�?$�ݨҌ�9����ư>�����Y :������":������ :������ :8��A�:�&Ly��9��R�8��9�����Y :����ư>�����":�����Y :�����Y :��M�̤:Q��jZV�9WuL���9������":�����":����ư>������":������":��SC�}:�_yp�`�9$�ݨҌ�9������ :�����Y :������":����ư>������ :8��A�:�&Ly��9$�ݨҌ�9������ :�����Y :������":������ :����ư>8��A�:�&Ly��9�z&��i�?t;�"u�:��:��::��چ:t;�"u�:t;�"u�:��T�?�c�Zy�?�5s�ד�?90ne��9ҽj�d�9 ���g�990ne��990ne��9�c�Zy�?&=����?� ��1�?�|����9�Iw��&�?��ci�zl?Cs�V�^��|����9���"1b�?X8�Ӭ��껖�9����ư>d�s"�9ƪ�2��9!�r��9������9�G��`m�9%����X�9�Iw��&�?�g���9�2�[Ch @A׿�_�?�c5"*�?�g���9.u�*R��qxw������ci�zl?�[r��9A׿�_�?�A|��?�n�~j�?�[r��9%�9N`��?u������?3s�V�^�%2��3��9�c5"*�?�n�~j�?��;��@%2��3��9Iii��۟�*
+k
+�C�?�껖�9������9d�s"�9ƪ�2��9!�r��9����ư>�G��`m�9%����X�9���"1b�?uh[�&l�9.u�*R��#�9N`��?Jii��۟�uh[�&l�9(3X�B�?e�����?X8�Ӭ��o{	>L�9qxw����t������?*
+k
+�C�?�o{	>L�9h�����?��	��N�?k���Vl�?��a�?a�9�{�i?�*��_d�?��>����a�?��a�Ȑ��l������a�?�}�����?�3�u�?�qS���?6���%�?x,���?-���K��?b�t�~�?a�9�{�i?�3�u�?�������?tg�{��?�ī�S�?�3�u�?ڋ��y<?[z꜄���*��_d�?�qS���?tg�{��?�@��¡�?�0����?�qS���?x
+�I��?K�5���?��>��6���%�?�ī�S�?�0����?���p���?6���%�?7Y�<ᐿ��霁N�?��a�?x,���?�3�u�?�qS���?6���%�?�}�����?-���K��?b�t�~�?��a�Ȑ�-���K��?ڋ��y<?x
+�I��?7Y�<ᐿ-���K��?6)Ʉ���?N\�U[��?�l����b�t�~�?[z꜄��K�5���?��霁N�?b�t�~�?N\�U[��?u,�4}��?PK     ɸ6]���S�  �     2600853416688.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (3, 8, 8), }                                                       
+̦�P�?�?�ڃ����G�A���n�&@���?�ڃ��?�ڃ�l�rb<���.۠%��             @�@��Xu������I����ڶ�����ڶ���{�x��$W���J�#_�                     @�@����da���Xu����Xu��Q$iW�h"�v�                             @�@����I������I���&�oelZ�kN ݨ�                                     @�@��ڶ���{�x��$W���J�#_�                                             @�@{�x��$W���J�#_�                                                �0����?$;>N�ѿ                                                        �ǸxQ��?�R�ƚ��?�S1ޞ>W�',�:/}�B	:I�������"�x?{_���wK�`����}���|�̬?             @�@
+"�*2���/E�uA�YS-���
+���O���̻��[�"�yf�h��:                �+�9kX�?d] K�5��2��.п1؅ѵ���<�g�ה?J�3ҁR�?                        �Ps��@u�2*�Tl�h�ºO�'�IOѿ�D�D�п                                �O��:�?r�k�d�3<���n�?����k��                                             @�@�2�{j"�\�dķ��:                                                �ah���?�=ѯw�̿                                                        wx�\?��?��:�D��?�	)!���M�d�Ҿ��{�����,�{�?�O����>��қ�?�^7Vf�?        ��5�?�82���*��S|��rʜ���?Z#0y����w��Ɨ�K���J�?                &�6��1�?B5v�?pǿ��'Y�׿!�=Y�/?��I���i?#�K~^C�?                        ��<T0@�����!ԿLr��r��W��ſ�-�T���                                t�<�r�?�r�4~"?���3B�?�AiT���                                        �&���@�b��Ɨ�����J�?                                                7�V��8�?m��[ǿ                                                        �I?8E�?PK     ɸ6]f� �  �     2600853416880.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (3, 8, 8), }                                                       
+,���5��?�!������
+�Qc�iPh�����!������!��������+������듿�!�����    ��.A�?&J�����C�(����`������`���� �N	6-\�1�*���
+�Qc��?&J���    ��.A�jf����?&J����?&J���|px�$\����X���iPh������C�(���jf���    ��.A��C�(����C�(��T��7`��p{x�C��!�������`�����?&J�����C�(��    ��.A��`���� �N	6-\�1�*���!�������`�����?&J�����C�(����`����    ��.A �N	6-\�1�*�����+�� �N	6-\�|px�$\�T��7`� �N	6-\� �N	6-\����J�z�?|���ҿ����듿1�*�����X����p{x�C�1�*��1�*��|���ҿπ���G�?��i�K��?���I_�床=W���j����l5����{����h?9nծ��n�ܢ����<��]��?���I_��    ��.Anŉ� �cN}@��a�r�{���:��3l����R�"�p��S9��:�=W���j�nŉ� �V����	�?��fU'ӿ�2�ǿI%�L�� ��m��? �N��?���l5���cN}@��a���fU'ӿo���{x2@*��ۿ[^� b���rb<˿�^���ο�{����h?r�{���2�ǿ*��ۿh�9��?�(������jl�?����l���9nծ���:��3l�I%�L�� �[^� b��(�����    ��.A%Z�ѭ�"�`���r��:n�ܢ������R�"��m��?��rb<˿�jl�?%Z�ѭ�"���&i?��?�f����˿�<��]��?p��S9��: �N��?�^���ο����l���`���r��:�f����˿mN7Z���?�΀���?ɑ�)u(�?'���!�]?ڰT��`��#�bI�̐?�V�)u(�?�q~�c?�Ȗe�ԯ?ɑ�)u(�?R3W���A��g}��?
+���"
+�r�:	�?���Zy��c�W��N����/�j��?'���!�]?��g}��?���Zoo�?�g &ulؿ��]��ؿ*��g}��?�l�7唿�Y��v��?ڰT��`��
+���"
+��g &ulؿ���@�8��9�ԿUuΆ"
+�y�p'd��9��떵�#�bI�̐?r�:	�?��]��ؿ�8��9�Կ���P���?Qi:	�?\پG�?I�����V�)u(�?���Zy��*��g}��?UuΆ"
+�Qi:	�?X3W���A�R<��N��k�R�j��?�q~�c?c�W��N���l�7唿y�p'd��\پG�?�R<��N����W���?�~��]ſ�Ȗe�ԯ?��/�j��?�Y��v��?9��떵�I����k�R�j��?�~��]ſ����?PK     ɸ6]qG�   �      2602507508752.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�z��0@PK     ɸ6]�f�q�   �      2602507513136.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+0p�_��?PK     ɸ6]6���   �      2602507514384.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�@K�s@PK     ɸ6]��U�   �      2602507514544.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+L�8�,@PK     ɸ6]5Y��   �      2602507516464.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+���L�/@PK     ɸ6]י���   �      2600852569520.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+n�]�0@PK     ɸ6]@�@��   �      2600852568432.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+^���l�0@PK     ɸ6]K����   �      2600852568944.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+C�(��0@PK     ɸ6]^?9�   �      2600853586160.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+��]�*�0@PK     ɸ6]��!�   �      2600853586128.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+-�1�0@PK     ɸ6]���%�   �      2600853586192.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�t �0@PK     ɸ6]`���   �      2600853586224.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+3�N<�0@PK     ɸ6]mp+z�   �      2600853586256.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�!+�"�0@PK     ɸ6]H|Rt�   �      2600853586288.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+��J���0@PK     ɸ6]�0W7�   �      2600853586320.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�U���0@PK     ɸ6]��HW�   �      2600853586352.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�	^$Z�0@PK     ɸ6]D�D��   �      2600853586384.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�,ݾ��0@PK     ɸ6]���   �      2600853586416.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+��=�0@PK     ɸ6]����   �      2600853586448.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�X��0@PK     ɸ6]�6��   �      2600853586480.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+��K���0@PK     ɸ6]=�$��   �      2600853586512.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+��&�0@PK     ɸ6]�����   �      2600853586544.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+�B�0@PK     ɸ6]�r�>�;  �;     schema.json{
+  "__class__": "GaussianMixture",
+  "__module__": "sklearn.mixture._gaussian_mixture",
+  "__loader__": "ObjectNode",
+  "content": {
+    "__class__": "dict",
+    "__module__": "builtins",
+    "__loader__": "DictNode",
+    "content": {
+      "n_components": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "3",
+        "is_json": true,
+        "__id__": 140711810868200
+      },
+      "tol": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "0.001",
+        "is_json": true,
+        "__id__": 2600852567600
+      },
+      "reg_covar": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "1e-06",
+        "is_json": true,
+        "__id__": 2602507513744
+      },
+      "max_iter": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "100",
+        "is_json": true,
+        "__id__": 140711810871304
+      },
+      "n_init": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "10",
+        "is_json": true,
+        "__id__": 140711810868424
+      },
+      "init_params": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "\"kmeans\"",
+        "is_json": true,
+        "__id__": 2600823909728
+      },
+      "random_state": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "42",
+        "is_json": true,
+        "__id__": 140711810869448
+      },
+      "warm_start": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "false",
+        "is_json": true,
+        "__id__": 140711809978832
+      },
+      "verbose": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "0",
+        "is_json": true,
+        "__id__": 140711810868104
+      },
+      "verbose_interval": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "10",
+        "is_json": true,
+        "__id__": 140711810868424
+      },
+      "covariance_type": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "\"full\"",
+        "is_json": true,
+        "__id__": 2600853466752
+      },
+      "weights_init": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "means_init": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "precisions_init": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "n_features_in_": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "8",
+        "is_json": true,
+        "__id__": 140711810868360
+      },
+      "converged_": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "true",
+        "is_json": true,
+        "__id__": 140711809978800
+      },
+      "weights_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "2602503282032.npy",
+        "__id__": 2602503282032
+      },
+      "means_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "2600831773520.npy",
+        "__id__": 2600831773520
+      },
+      "covariances_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "2600853416496.npy",
+        "__id__": 2600853416496
+      },
+      "precisions_cholesky_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "2600853416688.npy",
+        "__id__": 2600853416688
+      },
+      "precisions_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "2600853416880.npy",
+        "__id__": 2600853416880
+      },
+      "n_iter_": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "22",
+        "is_json": true,
+        "__id__": 140711810868808
+      },
+      "lower_bound_": {
+        "__class__": "float64",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "2602507508752.npy",
+        "__id__": 2602507508752
+      },
+      "lower_bounds_": {
+        "__class__": "list",
+        "__module__": "builtins",
+        "__loader__": "ListNode",
+        "content": [
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2602507513136.npy",
+            "__id__": 2602507513136
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2602507514384.npy",
+            "__id__": 2602507514384
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2602507514544.npy",
+            "__id__": 2602507514544
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2602507516464.npy",
+            "__id__": 2602507516464
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600852569520.npy",
+            "__id__": 2600852569520
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600852568432.npy",
+            "__id__": 2600852568432
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600852568944.npy",
+            "__id__": 2600852568944
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600853586160.npy",
+            "__id__": 2600853586160
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600853586128.npy",
+            "__id__": 2600853586128
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600853586192.npy",
+            "__id__": 2600853586192
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600853586224.npy",
+            "__id__": 2600853586224
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600853586256.npy",
+            "__id__": 2600853586256
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600853586288.npy",
+            "__id__": 2600853586288
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600853586320.npy",
+            "__id__": 2600853586320
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600853586352.npy",
+            "__id__": 2600853586352
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600853586384.npy",
+            "__id__": 2600853586384
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600853586416.npy",
+            "__id__": 2600853586416
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600853586448.npy",
+            "__id__": 2600853586448
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600853586480.npy",
+            "__id__": 2600853586480
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600853586512.npy",
+            "__id__": 2600853586512
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2600853586544.npy",
+            "__id__": 2600853586544
+          },
+          {
+            "__class__": "float64",
+            "__module__": "numpy",
+            "__loader__": "NdArrayNode",
+            "type": "numpy",
+            "file": "2602507508752.npy",
+            "__id__": 2602507508752
+          }
+        ],
+        "__id__": 2602507663296
+      },
+      "_sklearn_version": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "\"1.9.1\"",
+        "is_json": true,
+        "__id__": 2602508154032
+      }
+    },
+    "key_types": {
+      "__class__": "list",
+      "__module__": "builtins",
+      "__loader__": "ListNode",
+      "content": [
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        }
+      ],
+      "__id__": 2600823506816
+    },
+    "__id__": 2600865193088
+  },
+  "__id__": 2600852907280,
+  "protocol": 2,
+  "_skops_version": "0.15.0"
+}PK      ɸ6]�V��   �              �    2602503282032.npyPK      ɸ6]՚ƣ@  @             ��   2600831773520.npyPK      ɸ6]n񡤀  �             �6  2600853416496.npyPK      ɸ6]���S�  �             ��  2600853416688.npyPK      ɸ6]f� �  �             ��  2600853416880.npyPK      ɸ6]qG�   �              �C  2602507508752.npyPK      ɸ6]�f�q�   �              ��  2602507513136.npyPK      ɸ6]6���   �              ��  2602507514384.npyPK      ɸ6]��U�   �              �h  2602507514544.npyPK      ɸ6]5Y��   �              �  2602507516464.npyPK      ɸ6]י���   �              ��  2600852569520.npyPK      ɸ6]@�@��   �              ��  2600852568432.npyPK      ɸ6]K����   �              �D  2600852568944.npyPK      ɸ6]^?9�   �              ��  2600853586160.npyPK      ɸ6]��!�   �              ��  2600853586128.npyPK      ɸ6]���%�   �              �i  2600853586192.npyPK      ɸ6]`���   �              �   2600853586224.npyPK      ɸ6]mp+z�   �              ��  2600853586256.npyPK      ɸ6]H|Rt�   �              ��  2600853586288.npyPK      ɸ6]�0W7�   �              �E   2600853586320.npyPK      ɸ6]��HW�   �              ��   2600853586352.npyPK      ɸ6]D�D��   �              ��!  2600853586384.npyPK      ɸ6]���   �              �j"  2600853586416.npyPK      ɸ6]����   �              �!#  2600853586448.npyPK      ɸ6]�6��   �              ��#  2600853586480.npyPK      ɸ6]=�$��   �              ��$  2600853586512.npyPK      ɸ6]�����   �              �F%  2600853586544.npyPK      ɸ6]�r�>�;  �;             ��%  schema.jsonPK      �  �a    
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-82453dc9cdbe482e8cae4b939516e720\artifacts\python_env.yaml
+
+```yaml
+python: 3.13.15
+build_dependencies:
+- pip==26.2.1
+- setuptools
+- wheel
+dependencies:
+- -r requirements.txt
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-82453dc9cdbe482e8cae4b939516e720\artifacts\requirements.txt
+
+```txt
+mlflow==3.16.1
+numpy==2.5.3
+pandas==2.3.3
+pytest==9.1.1
+scikit-learn==1.9.1
+scipy==1.18.1
+skops==0.15.0
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-b0929e9d6d2d4697a0c8c76b6b408783\artifacts\conda.yaml
+
+```yaml
+channels:
+- conda-forge
+dependencies:
+- python=3.13.15
+- pip<=26.2.1
+- pip:
+  - mlflow==3.16.1
+  - numpy==2.5.3
+  - pandas==2.3.3
+  - pytest==9.1.1
+  - scikit-learn==1.9.1
+  - scipy==1.18.1
+  - skops==0.15.0
+name: mlflow-env
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-b0929e9d6d2d4697a0c8c76b6b408783\artifacts\MLmodel
+
+```text
+artifact_path: file:///C:/Data/ValueAI_Project/mlruns/models/m-b0929e9d6d2d4697a0c8c76b6b408783/artifacts
+flavors:
+  sklearn:
+    code: null
+    pickled_model: model.skops
+    serialization_format: skops
+    sklearn_version: 1.9.1
+    skops_trusted_types: null
+mlflow_version: 3.16.1
+model_id: m-b0929e9d6d2d4697a0c8c76b6b408783
+model_size_bytes: 7975
+model_uuid: m-b0929e9d6d2d4697a0c8c76b6b408783
+prompts: null
+run_id: 1aee18c67faa4b498646aa1163efc211
+utc_time_created: '2026-09-22 20:06:28.197021'
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-b0929e9d6d2d4697a0c8c76b6b408783\artifacts\model.skops
+
+```skops
+PK     θ6]� �Ԉ   �      2600853586672.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (), }                                                              
+    P/APK     θ6]��z�   �      2600853416400.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (8,), }                                                            
+B����hR@�I*�{�?���<�@q�����@�S��?�I*�{�?�1���@0���H@PK     θ6]1�g
+�   �      2600853417264.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (8,), }                                                            
+N�&V}�c@D�&�b�?��wS}�A��u�Q@���8pL-@D�&�b�?|W׍)O@��p�Ϝ�@PK     θ6]P*��   �      2600853417456.npy�NUMPY v {'descr': '<f8', 'fortran_order': False, 'shape': (8,), }                                                            
+�{Y��	)@p�˜��?��*��@�V�
+"� @󛚣��@p�˜��?�� fГ@�'�[�J@PK     θ6]�Jh�/  /     schema.json{
+  "__class__": "StandardScaler",
+  "__module__": "sklearn.preprocessing._data",
+  "__loader__": "ObjectNode",
+  "content": {
+    "__class__": "dict",
+    "__module__": "builtins",
+    "__loader__": "DictNode",
+    "content": {
+      "with_mean": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "true",
+        "is_json": true,
+        "__id__": 140711809978800
+      },
+      "with_std": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "true",
+        "is_json": true,
+        "__id__": 140711809978800
+      },
+      "copy": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "true",
+        "is_json": true,
+        "__id__": 140711809978800
+      },
+      "feature_names_in_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "content": [
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"AGE\"",
+            "is_json": true,
+            "__id__": 2600828377904
+          },
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"TOTAL_ADMISSIONS\"",
+            "is_json": true,
+            "__id__": 2600853705136
+          },
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"AVG_ADMISSION_COST\"",
+            "is_json": true,
+            "__id__": 2600853705200
+          },
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"UNIQUE_DIAGNOSES_COUNT\"",
+            "is_json": true,
+            "__id__": 2600853705264
+          },
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"AVG_LENGTH_OF_STAY\"",
+            "is_json": true,
+            "__id__": 2600853705328
+          },
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"INPATIENT_CLAIM_COUNT\"",
+            "is_json": true,
+            "__id__": 2600853705456
+          },
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"OUTPATIENT_CLAIM_COUNT\"",
+            "is_json": true,
+            "__id__": 2600853705520
+          },
+          {
+            "__class__": "str",
+            "__module__": "builtins",
+            "__loader__": "JsonNode",
+            "content": "\"DRUG_CLAIM_COUNT\"",
+            "is_json": true,
+            "__id__": 2600853705584
+          }
+        ],
+        "type": "json",
+        "shape": {
+          "__class__": "tuple",
+          "__module__": "builtins",
+          "__loader__": "TupleNode",
+          "content": [
+            {
+              "__class__": "str",
+              "__module__": "builtins",
+              "__loader__": "JsonNode",
+              "content": "8",
+              "is_json": true,
+              "__id__": 140711810868360
+            }
+          ],
+          "__id__": 2600870804640
+        },
+        "__id__": 2600853417168
+      },
+      "n_features_in_": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "8",
+        "is_json": true,
+        "__id__": 140711810868360
+      },
+      "n_samples_seen_": {
+        "__class__": "float64",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "2600853586672.npy",
+        "__id__": 2600853586672
+      },
+      "mean_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "2600853416400.npy",
+        "__id__": 2600853416400
+      },
+      "var_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "2600853417264.npy",
+        "__id__": 2600853417264
+      },
+      "scale_": {
+        "__class__": "ndarray",
+        "__module__": "numpy",
+        "__loader__": "NdArrayNode",
+        "type": "numpy",
+        "file": "2600853417456.npy",
+        "__id__": 2600853417456
+      },
+      "_sklearn_version": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "\"1.9.1\"",
+        "is_json": true,
+        "__id__": 2602508154032
+      }
+    },
+    "key_types": {
+      "__class__": "list",
+      "__module__": "builtins",
+      "__loader__": "ListNode",
+      "content": [
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        }
+      ],
+      "__id__": 2600870826688
+    },
+    "__id__": 2600865980800
+  },
+  "__id__": 2602373950368,
+  "protocol": 2,
+  "_skops_version": "0.15.0"
+}PK      θ6]� �Ԉ   �              �    2600853586672.npyPK      θ6]��z�   �              ��   2600853416400.npyPK      θ6]1�g
+�   �              ��  2600853417264.npyPK      θ6]P*��   �              ��  2600853417456.npyPK      θ6]�Jh�/  /             ��  schema.jsonPK      5  �    
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-b0929e9d6d2d4697a0c8c76b6b408783\artifacts\python_env.yaml
+
+```yaml
+python: 3.13.15
+build_dependencies:
+- pip==26.2.1
+- setuptools
+- wheel
+dependencies:
+- -r requirements.txt
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-b0929e9d6d2d4697a0c8c76b6b408783\artifacts\requirements.txt
+
+```txt
+mlflow==3.16.1
+numpy==2.5.3
+pandas==2.3.3
+pytest==9.1.1
+scikit-learn==1.9.1
+scipy==1.18.1
+skops==0.15.0
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-bbd9adad2dfc4a43930444e47c67bfb9\artifacts\conda.yaml
+
+```yaml
+channels:
+- conda-forge
+dependencies:
+- python=3.13.15
+- pip<=26.2.1
+- pip:
+  - mlflow==3.16.1
+  - numpy==2.5.3
+  - pandas==2.3.3
+  - pytest==9.1.1
+  - scikit-learn==1.9.1
+  - scipy==1.18.1
+  - skops==0.15.0
+  - xgboost==3.4.1
+name: mlflow-env
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-bbd9adad2dfc4a43930444e47c67bfb9\artifacts\MLmodel
+
+```text
+artifact_path: file:///C:/Data/ValueAI_Project/mlruns/models/m-bbd9adad2dfc4a43930444e47c67bfb9/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.skops
+    predict_fn: predict
+    python_version: 3.13.15
+  sklearn:
+    code: null
+    pickled_model: model.skops
+    serialization_format: skops
+    sklearn_version: 1.9.1
+    skops_trusted_types:
+    - xgboost.core.Booster
+    - xgboost.sklearn.XGBClassifier
+mlflow_version: 3.16.1
+model_id: m-bbd9adad2dfc4a43930444e47c67bfb9
+model_size_bytes: 335731
+model_uuid: m-bbd9adad2dfc4a43930444e47c67bfb9
+prompts: null
+run_id: 400afad306b044288d1c52f43a9cbc9e
+utc_time_created: '2026-09-22 20:09:33.564144'
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-bbd9adad2dfc4a43930444e47c67bfb9\artifacts\model.skops
+
+```skops
+PK     0�6]�T�� � (   6f8e5077-8940-4729-aa6d-a6ad28524993.bin{L       Config{L       learner{L       generic_param{L       deviceSL       cpuL       fail_on_invalid_gpu_idSL       0L       n_jobsSL       0L       nthreadSL       0L       random_stateSL       42L       	rng_stateSL      �73646c9f e511691f 60e274d6 4fc0289e 7ce61e87 cac9c1ab 25d45016 4395f7d b7279221 32c663a0 6cf5eef2 a68c51b2 48e36b44 8104400e fd47b192 5246a80c 5a2a42f9 a54b24b1 f22e4679 b54f18fd 1f8e5477 219c02d0 93be6cee bcdf45fb f657dd1d e9d14bb7 430232e6 756cb506 67f52ba7 71a00f63 400f8490 6007e71c ab97b459 34dbdbd0 461009fa 638843f2 90c4dacb 3e3ee33a e4ffb0d0 846af2e 49e4bc16 68878504 82ca28eb 3405d5e0 fee24254 2925bc48 f39dd15e 87d95fa8 429ab90a c75ee550 ba6ee5b9 12ceb6c2 e2a9ed86 f7c9e376 61935b27 e0f44cfd c0884f36 6e9d9dea 731f11b9 27c5769b ff9dbf2b 5ea0d3cd 415fbc82 723c7bb6 612bf3b 8c590650 c7bf6164 57728dae 81cd8e17 f5b54c56 e8b39b97 9e2a9673 fa66d4a5 aae8bc8f 9e94d9b3 d9109ce8 f5f4accb 137733fd a0c4e8e7 c8957070 b347e977 f581b942 c518e0bf 88394747 74a00c55 7009d241 3524345e 6de0f835 7801c1a4 30d5b43a 7592604 55a024b7 44cde2f2 c539604 625e54ba 7fac81ee 12212b73 9b7bb088 950c819c b29eb281 8bb989db bbe784ca 9de6c16 29326bdd 6ba8d461 21e32b11 4a2317e7 b6ec84f1 e51b8013 5bd21785 fd14ec4a 4db34b04 c4054731 338cd9f3 30da0919 c092f918 d508bbe3 5c1d009d b108baca ffdeba27 6b78b574 51ee356a 677e5779 75efbb9b ec306f06 3fa87b3e ce1ecebc a04c9a2 5f394032 7a56a068 4ee47bb7 90533619 5785ccf3 d5155ec7 c88148a2 3346d1d4 4e073df4 b6b68ffa 58da862a cf30f34a 63810e21 3559b3f5 55651dff c7e3c48d 8ee8b5e a6444b6f 314a185b 27c15042 2d05fd66 edc2909b 14c6556 72b9024d 654c955c 44b0b412 9a9a37e1 d1f588f2 a6bf0179 ef8369ec 8c12b3b1 b370b206 a8d660fc 256e339f 3b737625 15ca6b04 893d5e00 66932a37 29208ebc dd5eed9b c2c21668 757f1ca8 761bc11f 631e4049 6d4de5dc 54c9f6a6 bb3eb059 a299485e f8b6c9c4 6a8a1bfc 7162714b bb7d4dad facb4e87 94d69f91 f517a17d ea312635 8650face 3fbe1ffd 810c0553 a9cd7378 9130daa6 97c40839 e65bd3cd b935cfcd e119c533 3e017d79 bd0b4347 8f5478c4 965f9daa aeb01cd5 a8cb7161 55a6b89e 23ecef4b 27968d28 ec081a5a b9bb07b0 abc64cce de97a11 f1e7434b 6a3714ff 1ce937ce a58243df 19c10ccb 768fb0b2 525833b 95a45ae4 82c6f45c 67d6b8b5 dd7b34a4 355a2684 8c9d7b6 2a0c8271 85d4f139 3eb8c0ec 74966ac2 adcf7b96 6d09f70c 977f6eca 5f07be92 dd0fdcaa 8f78159 134daaca 11907d60 2eb9d88f 241ff91b 90a9bc58 7397b34 eb087137 47557f38 6c5fb432 6a9664d5 bb173d5b 796ed6d5 897e375d 6206b135 9e4bf3f 20512c97 1d046850 68bff94e 3551a4ea f4dd4c12 497b1d76 e29850b5 e6433f91 2a8b385e 7ca98cdb bd3b3dc8 44f67c79 25235520 635eb769 c85d05d2 29872640 c18a590c 28a72bb8 5261b966 52974672 fb87582f a3c9572d 94608e5d 2ee2044e 799b729a b0e62bfc 544c4b0c 9f9e92f8 530dc87a 8416ed60 37c31b84 da4f80ef c3d02af8 b8fe49e4 1f293f9c eb94966b 72f500e8 ca850ece ff058dc3 764caea3 d42399ce 6ff564c6 34304369 8efccb54 89e740d6 5fba098d a655b226 8b208e1f 6eb0985d 27b95a39 60f81b6b 80748cc1 2aa4e5df 6f2c09ec af2ac173 f37acc88 2b617cb cf20080c 685c36e1 85df8857 7794881 422da5de 26dfc9f5 fb11cca4 a11c1edf b0a7742e c70635a bcf85e81 522666af 2cdba2a7 23438ce5 8650255c 8f300e1a b828697d bedf9821 e396c2d6 a891dd11 a0606588 db24eb7c 3c10e226 f2b9910a d5130b9a 1ee7766b 709dfd46 dbd0ee13 cb447e61 a65650bc 2e758b09 d506ada1 b5fc34ff f3c74ee7 2f16260b 1c65e76f e517b7e4 8f172f3d bb275cf6 61f24260 6c11b62 198541c8 8e3efe07 e2ede719 223f1963 bd300131 e0f9c642 456b02c9 1b2d230d 51ebcb47 98b9aac5 3d15e1ab 1f138da0 18e1824a 47b8035d ace99178 a956b14f 89312a8f 160640d0 8ed6e440 70bd623b fbdecd14 ea493b46 5a7f516d a0c1edd1 b98dc175 8fb7052a a90f7300 f4b27403 367bc63a 9f80411d 6c4c4a77 5f2c88cb 574c13f0 5f46d954 4e953dc9 ef696a29 7d8d5ed4 a459694c 79c34c0a 460be59c 83dd9e37 4f8cca30 ee17009d eab9ce9f 812401d6 b4fb2eef 17b15acd 3a2b8a2e 6f622474 d26e0178 d28e6ad7 a5279bf5 d2d8b9c5 c7564371 bf3ea04e 6991ec51 f4390de6 e0350ab0 a68c05f7 2a217902 b004d224 cd674159 d2bf4de 12746bf3 d58a43d ed887370 68c319bf 99f1d857 ef82d8eb 530bbdeb f5aa29b6 7c6753ce ff46da11 3025ad81 533e7f4d d4dbe765 561e3a8 9c0bbbb3 a5e9c841 4f3cdfdc 31dc999f 197b52a 2b26e943 494363a5 f8936fe9 79beb9e4 c73f6d5f bd6659ea 4822dab7 9dd6a2f2 54321dd9 e576baa6 92f54201 69fadd68 cb81f443 dcc086be 235dd83 ac7a21eb 5dc977b5 4c9b31a5 29ab64aa f6365be1 17a5b172 f92f8f59 f6dee6ce 477439e5 2d717802 1180b79a c023c24b 9ce2935f 2002195f 2c2c7d34 ee8a17ea a3ad0484 a99fe1cf 20b37a73 239a62cc d84ae9a 8201eff2 35ed8711 b8fef3cd 5e7a098e bc15c1aa c2414cc0 459766a8 30740b02 2d44136b 7702c031 a2bbb54b 4276b3bd 7f04fb92 e029abc4 644fa71a d85fb1d8 4173e209 ee589483 69c3c027 eba24857 39c16479 866b47cf 8cd6357 406f2189 b6d0470 7fa57ba3 82d13e5a 948f2078 8afc6583 3daea41c 7d41e984 73143e12 a5652ad2 df0c2d04 cb443d4a 2c037fbc 5df694a4 363a9d0f 9a1c5dff 599aa493 4c404211 ce2840bf 12baeb0 17e0cc98 e225e235 456426a5 1edcdf5 6f6b9927 4b06cbc4 7de603fa 688a053f b7a023d3 6595d396 294261d4 363da235 eb845f5f 64048f63 7db0ead5 93736421 7f9800fb 8d8ee548 6dff56bc 6c1f0781 ac37932 237ef3ed a9a4eaeb 56e1f77c 6363760d fbd04609 b5fa3645 d369275d 3c7c21a9 66a90c6f 92d60994 1239cee9 c36001e8 bc96f0b0 4fab0aae 570704bc 2a9e4066 1230019d c7b9820e 24a24b3c e56f8128 c796e673 ff59b8b 5173186f bbf44d6d 49a733d8 a16d1f39 5ad565e0 9bdf4a0 73656f2c 456a0322 8e1f8030 babae599 e6895206 d488fb a8c1a7ed 58abe643 e86acb5c cf115873 398dc757 60c04998 bbaac5e3 9be39337 3b5a6610 c3103cc8 e693316b 54f867d4 45a6c062 b6e7005 f64c2868 6d334ae8 a2bc4b83 3be7afc5 2c5e55b6 90d25df9 c328e225 776ccbb8 f1d40617 4f8d23f6 c23dd8f9 951de2e 77129968 5fd1fa10 2ff5be94 61e357a2 9ac4b01a ed79319d 2d62e262 a8febf1a 1ebb1d92 b1673894 4f32c040 56bb4ad3 4afc3ab 28f06770 55fc342c c7c0c358 c098741c d972af1c 7b04397f c417b415 d84ab415 e83960b2 b3817c47 7b137cb9 ac132dd5 89fc47bc e5174ddb fa1c9b7f 499f0cc8 9071f9d1 45238e8d 6f9e6c41 649b359a 23245bbe 43df34b4 216f3d26 7d6677c7 4afb4a8c f30cf635 5f8426deL       seedSL       42L       seed_per_iterationSL       0L       validate_parametersSL       1}L       gradient_booster{L       dart_train_param{L       normalize_typeSL       treeL       one_dropSL       0L       	rate_dropSL       0L       sample_typeSL       uniformL       	skip_dropSL       0}L       gbtree_model_param{L       num_parallel_treeSL       1L       	num_treesSL       100}L       gbtree_train_param{L       process_typeSL       defaultL       tree_methodSL       autoL       updaterSL       grow_quantile_histmakerL       updater_seqSL       grow_quantile_histmaker}L       nameSL       gbtreeL       specified_updaterFL       tree_train_param{L       alphaSL       0L       colsample_bylevelSL       1L       colsample_bynodeSL       1L       colsample_bytreeSL       0.800000012L       etaSL       0.100000001L       gammaSL       0L       grow_policySL       	depthwiseL       interaction_constraintsSL        L       lambdaSL       1L       learning_rateSL       0.100000001L       max_binSL       256L       max_cat_thresholdSL       64L       max_cat_to_onehotSL       4L       max_delta_stepSL       0L       	max_depthSL       5L       
+max_leavesSL       0L       min_child_weightSL       1L       min_split_lossSL       0L       monotone_constraintsSL       ()L       refresh_leafSL       1L       	reg_alphaSL       0L       
+reg_lambdaSL       1L       sampling_methodSL       uniformL       sparse_thresholdSL       0.20000000000000001L       	subsampleSL       0.800000012}L       updater[#L       {L       hist_train_param{L       debug_synchronizeSL       0L       max_cached_hist_nodeSL       18446744073709551615}L       nameSL       grow_quantile_histmaker}}L       learner_model_param{L       
+base_scoreSL       [3.4380576E-1]L       boost_from_averageSL       1L       	num_classSL       0L       num_featureSL       44L       
+num_targetSL       1}L       learner_train_param{L       boosterSL       gbtreeL       disable_default_eval_metricSL       0L       multi_strategySL       one_output_per_treeL       	objectiveSL       binary:logistic}L       metrics[#L       {L       nameSL       auc}L       	objective{L       nameSL       binary:logisticL       reg_loss_param{L       scale_pos_weightSL       1}}}L       version[#L       iii}L       Model{L       learner{L       
+attributes{}L       feature_names[#L       ,SL       BENE_SEX_IDENT_CDSL       SP_STATE_CODESL       BENE_COUNTY_CDSL       BENE_HI_CVRAGE_TOT_MONSSL       BENE_SMI_CVRAGE_TOT_MONSSL       BENE_HMO_CVRAGE_TOT_MONSSL       PLAN_CVRG_MOS_NUMSL       SP_ALZHDMTASL       SP_CHFSL       SP_CHRNKIDNSL       SP_CNCRSL       SP_COPDSL       SP_DEPRESSNSL       SP_DIABETESSL       SP_ISCHMCHTSL       SP_OSTEOPRSSL       SP_RA_OASL       SP_STRKETIASL       MEDREIMB_IPSL       	BENRES_IPSL       	PPPYMT_IPSL       MEDREIMB_OPSL       	BENRES_OPSL       	PPPYMT_OPSL       MEDREIMB_CARSL       
+BENRES_CARSL       
+PPPYMT_CARSL       source_yearSL       AGESL       RACESL       IS_DECEASEDSL       TOTAL_ADMISSIONSSL       AVG_ADMISSION_COSTSL       AVG_LENGTH_OF_STAYSL       UNIQUE_DIAGNOSES_COUNTSL       INPATIENT_CLAIM_COUNTSL       AVG_INPATIENT_COSTSL       !AVG_DAYS_BETWEEN_INPATIENT_CLAIMSSL       OUTPATIENT_CLAIM_COUNTSL       AVG_OUTPATIENT_COSTSL       "AVG_DAYS_BETWEEN_OUTPATIENT_CLAIMSSL       DRUG_CLAIM_COUNTSL       AVG_DRUG_COSTSL       AVG_DAYS_BETWEEN_DRUG_CLAIMSL       feature_types[#L       ,SL       intSL       intSL       intSL       intSL       intSL       intSL       intSL       intSL       intSL       intSL       intSL       intSL       intSL       intSL       intSL       intSL       intSL       intSL       floatSL       floatSL       floatSL       floatSL       floatSL       floatSL       floatSL       floatSL       floatSL       intSL       intSL       intSL       intSL       intSL       floatSL       floatSL       intSL       intSL       floatSL       floatSL       intSL       floatSL       floatSL       intSL       floatSL       floatL       gradient_booster{L       model{L       cats{L       enc[#L        L       feature_segments[$l#L        L       
+sorted_idx[$l#L        }L       gbtree_model_param{L       num_parallel_treeSL       1L       	num_treesSL       100}L       iteration_indptr[#L       ei iiiiiiiii	i
+iiiiiiiiiiiiiiiiiiiiii i!i"i#i$i%i&i'i(i)i*i+i,i-i.i/i0i1i2i3i4i5i6i7i8i9i:i;i<i=i>i?i@iAiBiCiDiEiFiGiHiIiJiKiLiMiNiOiPiQiRiSiTiUiViWiXiYiZi[i\i]i^i_i`iaibicidL       	tree_info[#L       di i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i i L       trees[#L       d{L       base_weights[$d#L       ?81?��q�n��D�@<���?o`�?�qj�C�@��?4����0���	?�" ��_�04�?����\���@.h?O�3�@�i�����(�J?���Dx?���?���i>�ǽ���=6z1>N�ӻ.�'�0�=v��>
+^�QD�>_=>��ú�f�>R�½؄]>J�>o�=�z,��ǾV'>;��k=�C�<��@�A)׽ށ�=��"��p�>ea�> ��r0���D<ϕ�=˘kL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ?                                                               L       idi L       left_children[$l#L       ?               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9   ;   =��������������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ?E}��DXE��B��C(��DH�C�͒B�pA�M0B� C��At2 C�^B��BC��@f�B@�K�@�k�A�^NBs��BZ!�B�n@���@�� BM��BC�,B@Z0A���BIӐA�"�Ac��                                                                                                                                L       parents[$l#L       ?���                                                           	   	   
+   
+                                                                                                                        L       right_children[$l#L       ?               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :   <   >��������������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ?B$  @�  @�  @X  B  @@  C
+  @   @@  A=UU@@  A���B�  B  @�  D�� FM D�  @�  @ʪ�A�  A�A,��B5UUB�UUBx  CX  A9$�B�  Cw� @�  ����=6z1>N�ӻ.�'�0�=v��>
+^�QD�>_=>��ú�f�>R�½؄]>J�>o�=�z,��ǾV'>;��k=�C�<��@�A)׽ށ�=��"��p�>ea�> ��r0���D<ϕ�=˘kL       split_indices[$l#L       ?   %   %      !   %      %   %   %   !      !   %   "                !   %   "   !   !   %   %   %   %   !   %   %                                                                                                                                   L       
+split_type[$U#L       ?                                                               L       sum_hessian[$d#L       ?Eo�ADe6E6�sC��DD)�E|�D@�NB%$CB�{�D2+�B��XD��D3��C��C���A_�lA�bPB]�bB
+��D%2�BO�BBٖD��A�O�CL�D ��C*�C�I�C>�EB��.AB��?��Aώ?�ClBY{L?�b�A	*�A�\"B_�lD5�A�{A��,B�@��lA���@�#B6I�D�jF@�ClA���B��1B�)�C��iCtǖC�(A0�~C gkC,RCBB>h�B��,B�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       63L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =�5�����,?7� ��=��?DI?֏m�ǡZ��8��4(?IΖ?��?rC?�}@	f˾���?
+�K������L=E���U򾮾?r8�?cu%?̝�>zq�?���@��?���=Kj@���/�b�b�}<�~�=�爾�$<�r�����=X|/<��5�:,ҽ)�<Me=�o��~��=��=B�<ߺ >\E���>'p�;�A8=�mg=��> >`2�=A�W=�7�>9$T>d��=��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idiL       left_children[$l#L       =               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9����   ;������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =D�ߒCm�
+Cy�C�$�B�btB�3�Af CAB�o@Ab�_A��|A*`B��lA�?�� A�ܬA0� @6A @wl@A2�A:��@��@��`@�`�@�@AȥaA���?�!@AR��    ?sJ                                                                                                                         L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :����   <������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =@�  E   @�  D�  E@  D�  A   @@  @@  @@  @@  D�  E  D�� @^��D�  D�  G ( C�  E@ F�� A�  E�` @   A�  @�  Eg� @�  G� =KjBH  �/�b�b�}<�~�=�爾�$<�r�����=X|/<��5�:,ҽ)�<Me=�o��~��=��=B�<ߺ >\E���>'p�;�A8=�mg=��> >`2�=A�W=�7�>9$T>d��=��L       split_indices[$l#L       =   #      #            #   #   #   #   #            +            (         *         "   #                                                                                                                                        L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =EpmcE7��Da�IEN,DVD(�NCc#�D�DUD,OC*�B�?D	ilC8�B,-Do�C�F�D��C}>�C�}oCIb]A�I�C��A�U�B�)�C�PCU�A�K;Cx?�F�B'Y�C��C�
+
+B�1JC7� Dx�?���C{	>@noC�RBCbV[C|B[�y@�4[A�|�B�q(A�Z>ABL�A�/�@(FB�SC_��B�f�B�p�BÚmA�?��vB���B~��B�B@OL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =:�a�?�d�0۾�3�?�"���N?1�D?V�x9�?�N?j �������?�q�;m�&��?�ws���=ĝ�@S�?����4�?ݰ���P��� >8.ӿNUA?U�*?���>]� �Y=7��>E�f=�����ӽ�1>d�?=��<Yvj>0Z��DC=��>
+��>U�ؾ�����>>��
+�W=m)���,w�W����O=���׾�>.LC=�R����M=@������<�n�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idiL       left_children[$l#L       =               	                                    !   #����   %   '   )   +   -   /   1   3   5   7   9   ;������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =EG�:C��D�>�B[�C�\�CӼ�C�Y6B/C�A,>B�  C��AQ� C�{B(�B,�@�X\A�@=��    BP�@B�xB��A� >�  B:Z�B�HA��`A�� A�6�A�.�A�H                                                                                                                        L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                                     "   $����   &   (   *   ,   .   0   2   4   6   8   :   <������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =B8  @j��@�  @l��B  @@  C � @   D�@ @ڪ�@@  A���B�  B  CX  A�  BLUUE]� =ĝ�B  AH  A�@�  AX  B�UUB�  CX  A�UUB�  @�  C  =7��>E�f=�����ӽ�1>d�?=��<Yvj>0Z��DC=��>
+��>U�ؾ�����>>��
+�W=m)���,w�W����O=���׾�>.LC=�R����M=@������<�n�L       split_indices[$l#L       =   %   %      !   %      %   %      !      !   %   "   %      (           %   %   !      !   %   %   %   !   %      )                                                                                                                        L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =En�DD��E,LUB�ץDq@�D���DC�B.�[B_'�DF��C*c�D��LD*a=C�e'C���A��fA�;PBW!@��D�+C[��B��)B��D��A�P/C���C���CC��C��B��w@i-�Ai[^AF��AO{@=F�BK7�D �Bp��BnH�C \B� /Al��B..B%�oD��B8@��A��KB���C�C:-�Ci�eC�;@���C'�gBԆ�B�VTC<IB��A%�_L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       3<Sq?�]i�1W�&��?�iͿ���>)?=�&p���?�щ?$Va�X|�*�?+ne��ӭ�I`?k{:���=�*?�w%?������G?�%�>1O)�<�=�+?�^�!��>rv`<�˲��m_<��>�5������Y(=�Rz>N~�<[u>������=FN>>2L�=�n=o%=��'�=�{>�n��#���{=�����SL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       3                                                   L       idiL       left_children[$l#L       3               	                  ����                  !����   #   %   '   )��������   +   -   /   1����������������������������������������������������������������������������������������L       loss_changes[$d#L       3E"�C�I�D��(A��vCB0A,� C�a/A�@b�0B�E�C��j    B	CH�B��r@�G-@��L?�     BO�B�ӺBlx�@6��        B.mSBe B 6�A�Z�                                                                                        L       parents[$l#L       3���                                                           	   	   
+   
+                                                                                    L       right_children[$l#L       3               
+                  ����                   "����   $   &   (   *��������   ,   .   0   2����������������������������������������������������������������������������������������L       split_conditions[$d#L       3B8  @@  @@  @X  B  A���C  @   D�@ @ڪ�@@  �X|B�UU@�  @�  B�1gA���@�  =�*@�  AH  @��9B2  >1O)�<�B�  B(  CX  C%  <�˲��m_<��>�5������Y(=�Rz>N~�<[u>������=FN>>2L�=�n=o%=��'�=�{>�n��#���{=�����SL       split_indices[$l#L       3   %   %      !   %   !   %   %      !          %         '   +   !       %   %   !   %           %   "   %   %                                                                                        L       
+split_type[$U#L       3                                                   L       sum_hessian[$d#L       3Ek��D�X�E'�ZB���D~r�D���D��A��B=�DDY�Chc�D�o,A��DOHD Aa�A8��B7�?���D��CR��B�_B��@���A|ܭC���Dx�Dj�B�X@v��A#r�@�c�@�ժATR�B��B�1rC���B���C��B��xB$!�B�Ag�B��.CA�BC�ƔC$UVCh+\C���Bb�B�h�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       51L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       7�!7?�I׾����?��
+��l�>&�?9j�SfQ?�B�?��h��X?n�ߓ�|��?��=�hYP?9�?ض�?s�3����?�U�?�R��t�=�j�?e�s���?=O���=��='�>o<�1ʇ��X�>�t�"-�=�W�>8�=W{>?�X�ж�=v�b>��>9�C<�>*�'=bfc���==�j�=�3�����<��4��*̽<��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       7                                                       L       idiL       left_children[$l#L       7               	                  ����                  !   #   %   '   )   +   -����   /   1   3   5��������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       7E�VCn�D�"�A�ȆC�xA��C�l�@�wA��B�WCBO"    A�>B��Bc�l@Ũ�>�3�@{1P@X��B0Q�B�&PBvۋ?�؀?�v�    A�Y$B
+] A��A��                                                                                                        L       parents[$l#L       7���                                                           	   	   
+   
+                                                                                                L       right_children[$l#L       7               
+                  ����                   "   $   &   (   *   ,   .����   0   2   4   6��������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       7B2  @@  @@  @��B  A���CUU@   D�  @ڪ�@@  �hB�UU@�  CX  Bt  B�  E|��@��9@�  D�@ @��9@�  @   ��t�B�  B�  @�  @�  ���=��='�>o<�1ʇ��X�>�t�"-�=�W�>8�=W{>?�X�ж�=v�b>��>9�C<�>*�'=bfc���==�j�=�3�����<��4��*̽<��L       split_indices[$l#L       7   %   %      !   %   !   %   %      !          %      %   )      $   !   %      !              %   %                                                                                                              L       
+split_type[$U#L       7                                                       L       sum_hessian[$d#L       7Ee�AD�m
+E#��B��bDw='D�}�D���A&BBp>>DD��CJ�D��hA�ԉDQ3XD %@�}5@�BeȆ@'[xDv�CT��B�h�B��@�9�At C�U@D��C���C�Bl@^��?���?�g�@�-Au�1B(f�?�]\?�Y�B��C�y�C��B�ޫBx�B�B���A� �?�@^�JB���Cb�Cm�C�OjCmpB�waCW~nB��L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       55L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ?�*H�9?' ���g�=��=>���?ld���%�e�Ƽ���?o?Pw4>f��?G#�?��i�_��>�����+e��>�ʋ�S{?31ܽ:�a>_��?~�q��E�?/��?��=?(�]?���?�._�9�����=V���Q��e� ��7�<��O��=7�E���:�*>���E=�C-��P1��p�=�����Z$=I�Z=�&C�X7���=��6=Bb�=�w�>�'<�+c=h�=��K�p�G=�x>-�<�2L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ?                                                               L       idiL       left_children[$l#L       ?               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9   ;   =��������������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ?D).CB�B���C�&lB/�YAԍ�A�,�Bm�Bl#�@��AprxA%=�B e�AƠH@)G AUxA*h?�� @��h@���@���@�  @�ɍ@�A@���A��@��@m� A);p@M-`@4��                                                                                                                                L       parents[$l#L       ?���                                                           	   	   
+   
+                                                                                                                        L       right_children[$l#L       ?               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :   <   >��������������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ?@�  E   @�  D�  E@  D�  Em� @@  @@  A��=ER� D�  E  D�  E�  @�  B�  @�  A�q�B�  @@  BH  F  @   D��A�  E~@ E� @�  @$�IEN@ �9�����=V���Q��e� ��7�<��O��=7�E���:�*>���E=�C-��P1��p�=�����Z$=I�Z=�&C�X7���=��6=Bb�=�w�>�'<�+c=h�=��K�p�G=�x>-�<�2L       split_indices[$l#L       ?                              '                  !         '   )            
+   '   &            !                                                                                                                                   L       
+split_type[$U#L       ?                                                               L       sum_hessian[$d#L       ?E^��E#�jDk��D�DI��C��zC��D�1�D0�qD4�C)2XB���C��C�!1C�DRqC��?C�B�Ca\kBk��D{C�B5A�ӈB���Ce�aB�PJBdC���B���B�A�C׿qC�"�C�6�@���A�;C�jA7�CU�^B7QARx�C�e�C3!C?�@��~A�ց@�Nh@���A���B�6�?��CX�AP��B���BJ��BW4O@L�'Cw�BV�k?� �B�EBB�O�?�u�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       63L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ;�E�"?�����P��a�?�����x=ŚV>�~��w��?��?Oп��L� ��>��M�ְ����?_�?��W/�Ĺ?��>�q��R�?������|w�>f����{�2��?G�M�-�w���S<T��~�>R�=K�o�'�v������z=��q=�JU>&�=��ֽ����@�=�1=֭Z>�>���������G���=&���V{=��W=D��.J&�����6�=1�BL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ;                                                           L       idiL       left_children[$l#L       ;               	                                    !   #   %   '   )   +   -����   /����   1   3   5   7   9����������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ;Dօ\C8V`D���BSkBߡPAW C���A�H@H B�"�B��?�� A���B�:�BB�@ʾ@Τ�?�@­�B'��A�ALBK=�@o��    Aϲ�    >�@A�OA�ՐA_ȰAv޳                                                                                                                L       parents[$l#L       ;���                                                           	   	   
+   
+                                                                                                            L       right_children[$l#L       ;               
+                                     "   $   &   (   *   ,   .����   0����   2   4   6   8   :����������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ;B2  @j��@@  @�  B  A���CUU@   E0@ A(  @@  AEUUB�  @�  @�  C�  @	$�@   B�  @�  A�  @��9B�  ��Bx  >f�E� B�  B�  CX  C  <T��~�>R�=K�o�'�v������z=��q=�JU>&�=��ֽ����@�=�1=֭Z>�>���������G���=&���V{=��W=D��.J&�����6�=1�BL       split_indices[$l#L       ;   %   %      !   %   !   %   %      !      !   %            !   
+   )   %   !   !          %           %   %   %   )                                                                                                                L       
+split_type[$U#L       ;                                                           L       sum_hessian[$d#L       ;E[�D���E�6B�`	Dk�gD�DJD�0"BU�B"�D4�C[�5D~{lA���DL�Dq�A�'pB �JA؊AZ%D!=fB�=�B�q�B���Dt�B&Z�@ob�AGq>C�/�D V�C��9C�.@�F�A`��A:�A���?���A�{�A=�.?���B� D��B_ɼA�b�B��gB$��BI_nBz!�@o��Ba�?�3�A6
+�B�/�C3ǑC�BC5,hCrCF�CuˤB)J�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       59L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ?���?����%���?�y꿖��>
+�e?ZL�.��?��>��ۿ.���V'>���%"A����?�#�K�Q?��h?�Wa?U�,��S�?��Q��bU?�^��(-��[>�U?@Ŀ.�x�[�*�<�1=Sy�>'I�=���BI����>#�e�?i=��>ܪ���E=�ǃ���G>�����>%���=��,=�������%���{>�N��X�=���9yE�=�/�=9z{��&��@�j>&����L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ?                                                               L       idiL       left_children[$l#L       ?               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9   ;   =��������������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ?D��2CR�D��~B��gB�� A�$�C��"B��A�,�A�� B	�B#I�A&G�B���@�9�@�f8?�j�@�}�@��A�9�A�`TA��TA=�@���@��?�� AӋ�Bb�B;�@�� Ahi                                                                                                                                L       parents[$l#L       ?���                                                           	   	   
+   
+                                                                                                                        L       right_children[$l#L       ?               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :   <   >��������������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ?B  @�  @@  @l��A=UUB5UUCG  @*��D�@ B  A�  @⪫A���B  C3  @   B$  F�UE� @�  @$�ID�@ A  F�  A�  AX  B�UUBx  B�  A�  C4  �<�1=Sy�>'I�=���BI����>#�e�?i=��>ܪ���E=�ǃ���G>�����>%���=��,=�������%���{>�N��X�=���9yE�=�/�=9z{��&��@�j>&����L       split_indices[$l#L       ?   %   %      !   !   %   %   %      %   "   !   !   "   )   %      $      %   !      %          !   %   %   %   "   )                                                                                                                                L       
+split_type[$U#L       ?                                                               L       sum_hessian[$d#L       ?EV��D]��E+zC/�D8��D���D��?B~ĖB���D)��Bq��B�dDn�D��DC���A�5B�|B��x@���D��B�BBhhA�v�B_�"A�NDj�A�j�D9�
+C���C��:A�At�MATA�-!@�WXB>wB#~z@Xwo?��gB2"D�A.�|B�9SB�]@ƈV?���A��BZ��?��AZw�@�Dc�fAڬO@�*�AG@RC#DDIC>��CoXCM#OB��I?�B�A���L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       63L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       5�7��?w{�ɝ9��,�?����D�=�Y>>�}��V�o?���?���c2�7��>��w�����j ?k�g9X=�9�?��G?"�=��?���?�����>���?_����,�&b	�լ����h=ܩ���d��ϻ���=���>���2xR=��k����=�M�=�8�=!�&>�k��:=�8!<u�=0*K=ʝ>�k�<8�����@�QL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       5                                                     L       idiL       left_children[$l#L       5               	                  ����                  !����   #   %   '   )   +����   -   /   1   3������������������������������������������������������������������������������������������������L       loss_changes[$d#L       5D��C��DdIA�˗B)�`A5݀CWA ��@���B{� B�D    BO�@Bq� Bj�I>��@@���@��8    B�pBf�xB�-@�@A@�t    A��AM�@A�./@���                                                                                                L       parents[$l#L       5���                                                           	   	   
+   
+                                                                                          L       right_children[$l#L       5               
+                  ����                   "����   $   &   (   *   ,����   .   0   2   4������������������������������������������������������������������������������������������������L       split_conditions[$d#L       5B$  @@  @@  @X  B  AEUUB���?�  C]  @��@@  ��c2B�UU@�  CX  @$�IBecDE��n=�9�@�  A`  @d�IAffB�  ���Bd  B�  @�  Bp�n�լ����h=ܩ���d��ϻ���=���>���2xR=��k����=�M�=�8�=!�&>�k��:=�8!<u�=0*K=ʝ>�k�<8�����@�QL       split_indices[$l#L       5   %   %      !   %   !   %   %   (   !          %      %   !   *           %   %   !   !   *       %         (                                                                                                L       
+split_type[$U#L       5                                                     L       sum_hessian[$d#L       5EODh�E��B{�FDY
+�De��D��>A��B\JD4�aC��DW�pBb&VD4�VD8�'@�m�A�zBN�?���D	�C+�+B���B���A44}B56C鐈C�V$C�OC�t�@s �?�u�A5�l@�%@�,�B�?B���C�Q6B���B��}A�@=B6�Bk�FA&�A�?�shB�'C���BYb�CJS�C4��C���C!5qB�iL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       53L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ;�)4�?a�9������,�?�z���?=�Q>���<Ns?�bY���п��Կ'�>�iw�����h%?b���Y�?4��?�?�k�|N�?�!s�l����?�~N��{(>��c?Sd��`���:_�@����=��i>%A��k�����R�=�n0>�s=�E{6�j�=�v_�[>=�+?>�<�Bн��w=���>���ٗ=�&�<�=�`3=L��i�;��r���׽8�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ;                                                           L       idi	L       left_children[$l#L       ;               	                                    !   #   %   '   )   +   -   /����   1����   3   5   7   9����������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ;D|ނB���DN�
+B�BI{�A=[ CCf�AǪAC�BMA��,>�P BJ�-BSI B%�(@f��@��(@��h@ӶB ]�B!�A,��?m*�@��    A�    A���AK9�A�b@�|                                                                                                                 L       parents[$l#L       ;���                                                           	   	   
+   
+                                                                                                            L       right_children[$l#L       ;               
+                                     "   $   &   (   *   ,   .   0����   2����   4   6   8   :����������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ;B$  @�  @@  @�  A�  AEUUB�  @   D�@ B  A�  B2  B�UUB  CX  C�  D�@ A��@*��@�  @@  BUUD!&�F�� ���B�UU��{(Bd  B�  @�  B���:_�@����=��i>%A��k�����R�=�n0>�s=�E{6�j�=�v_�[>=�+?>�<�Bн��w=���>���ٗ=�&�<�=�`3=L��i�;��r���׽8�L       split_indices[$l#L       ;   %   %      !   !   !   %   %      %   "   %   %   "   %         +   %   !      %   '   $       *       %   %      (                                                                                                                L       
+split_type[$U#L       ;                                                           L       sum_hessian[$d#L       ;EG�.Dc E)BܯDGj0DT�D�kBk�jBMb�D@�A�C�DG�-BIZD/�cD89rA��jB,5B@@UkwDSfCR�A�� @�
+�A��D@�\A&|B��C�[?C�?�C�^VC��AϦA*m/A��:A�aAC�BG�?�ݿ@��CƬ�Cg��B��FB��A��@|�@���?�ޙAȠ#?���A��?��_B���C�r C2�:B���C0��C��C.�4B���L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       59L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ?���'?Yپ�i�=��?�wؿ�`�=�\s?:ʶ�4e?��I����T3���>�A�����G��?�4߿U�~>0A�?��?��$�?�b�����?�H�����=YJH?��
+@˽�g=���My+=��>_`�D��򃽽$\]>�O>c=��伖�d=�}C����=��d>�<�8��q�<���!�=�(?��S���;=��q�۞�=���m`=�
+M=<-���{���ܘ���Ͻ�2L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ?                                                               L       idi
+L       left_children[$l#L       ?               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9   ;   =��������������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ?DZ��B���D9�B��B.�A]2 C"7�B3	�A��A��A��A�j@�h�BM�@A�ςA�s@�t�@�c�@�� Ax$@A�jA]@6�<@�ƘA1
+<� A_��A�N'A�� A*XAAx�                                                                                                                                L       parents[$l#L       ?���                                                           	   	   
+   
+                                                                                                                        L       right_children[$l#L       ?               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :   <   >��������������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ?B  @ʪ�@@  @�  Ad  B5UUC  @*��@@  B  @@  @⪫A���@�  @�  @��@j��E���B�  @�  @H  BUUA�  A�  C �Ad  B�UUB�  Bh  C�  C�  =���My+=��>_`�D��򃽽$\]>�O>c=��伖�d=�}C����=��d>�<�8��q�<���!�=�(?��S���;=��q�۞�=���m`=�
+M=<-���{���ܘ���Ͻ�2L       split_indices[$l#L       ?   %   %      !   !   %   %   %      %      !   !         !   %   $   )   !   !   %   )   &   '   !   %   %   %      %                                                                                                                                L       
+split_type[$U#L       ?                                                               L       sum_hessian[$d#L       ?EA�)DTE�%C-8<D(�DH�ZD�n�B�+B�WMD ��B�hBR}D;��D]�'DB��Bw~�B��A"�DDwB�{A�n�A-��BG6Ax�]D7��Ah�OC�/�D�bC��xC�3�A�HA���A�o�B2F�B
+�PB|`@��-@<^KCО�B��A��B�3�A��+@.@���@�{.B(�@�@�m�A��D4oAxTS@��QA%�&C/H�C1B�\�C��B�(Ca:�Cs_#A�A�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       63L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =���2?R3���S>P��?��n���C=�T�?L������?���>�@ۿ
+�����>Ѡe�WN����?�ZR�,��?��?�,�?����X?�k��u{�>��M��k�$��>q�?>�־��߻�}z=��ؽ��7=���>*Ž���<_�/>Ǽ���>N�=���<mW�=�0�E=ʋ���J�>^ܽ��*<���=]݂��C>����cp=���<�<�C�=�9����ͽ[�J;������gL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idiL       left_children[$l#L       =               	                                    !   #   %   '   )   +   -   /   1����   3   5   7   9   ;������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =D6�dB�ֈD*Z�B�.VB��A�I�C
+��B$A�*3A���A�h�A�/o@��B(�VB�0@�K6@�)�A�`@a�(@�c A�WEA�%v@-�x@�s�@��    A�b�Ao�fA=��An��A[��                                                                                                                        L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                                     "   $   &   (   *   ,   .   0   2����   4   6   8   :   <������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =B  @�  @@  @�  A(  B<  B�  @   D�@ B  D�@ @�I%A\��@�  @�  DT� @`  A�  E� @��@@  A�  @�� F�EUB��ͽ�kB�UUB<  Bp  C�  C�  =��ؽ��7=���>*Ž���<_�/>Ǽ���>N�=���<mW�=�0�E=ʋ���J�>^ܽ��*<���=]݂��C>����cp=���<�<�C�=�9����ͽ[�J;������gL       split_indices[$l#L       =   %   %      !   !   %   %   %      %      !   !            %   "      !      "   +   $   +       %   %         %                                                                                                                        L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =E:�,DE�E	k4CG��D�D=$D�K�B��IB�|/Do�B�g�B�uuD+fuD5ɇD2�&A�{,B��~B�Gn@�LC�sB�4BK��A�:�BB:�A�_�D#slA�aC�x�Cv4nC���C��i@F�A}n�BL:Ba��B�s�A>�}@нB?�;3C�zWB��mB}A��B*�AVE?�1A�w�B2O�@~�A�#@	�7@�~�A�dBx8�C�q�BZECN��B���C�p�C��A���L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ?�?�?8Z��N��?X��}0�=ĶS>�7��&�?j�>	�5�<H`��>��T��sE���A?PɿW;����?��H>�TH�H�>?e��c�"?�AC���n�Q�->D6?A]��麨����=岽��;��=�Ұ�N-������)=��=;��=�|C�nW=�T�=v�X��=�E�9ý�ɓ;���>1�������н�5r[���=�pb=n5<Ac.��u�=��뻡Te�s{��R�-=¶+L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ?                                                               L       idiL       left_children[$l#L       ?               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9   ;   =��������������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ?D�;B���D6�A��B�0@�Y Bӌ�A�.�@��8Br0A���B q�?�j B)��Ap�\@�_�@��x@~= A ��A���A܇mAL��@�р@�m�@;Ȑ>�( @�}hA�q�AH� @ٖ�A$O�                                                                                                                                L       parents[$l#L       ?���                                                           	   	   
+   
+                                                                                                                        L       right_children[$l#L       ?               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :   <   >��������������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ?B$  @�  A�  @l��A:��B�UUC@ @   E/  B  A�  AX  A�  B(  CX  D�� @�  A�R@*��@ʪ�A�  C]  B�  F�P B���D  B�  Bh  E�` B��Cv@ =岽��;��=�Ұ�N-������)=��=;��=�|C�nW=�T�=v�X��=�E�9ý�ɓ;���>1�������н�5r[���=�pb=n5<Ac.��u�=��뻡Te�s{��R�-=¶+L       split_indices[$l#L       ?   %   %   "   !   !   %   %   %      %   "   !   "   "   %      )   +   %   %   "      )   $   *   (      %   $   *   (                                                                                                                                L       
+split_type[$U#L       ?                                                               L       sum_hessian[$d#L       ?E4 �DM2'E �SB��D2�fD=�D��B8Bk	pD"��B���B��{D!�]DWt8CܦAp��A�6�B�A�6�D�!B��BB8E�A�(B�x@�`1D�hBl�FD.[�C$b;CZsC_3�@��kA"��A ��A��A���Av�KA .�AX>�Bc�C��B�
+�B[d�AU��B��A~b�@W��B��s@��S@���?��D"@@C(�Bg�?��B�"tD�[A��C��CA�A���C[2@�4�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       63L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       7�4*{?9� ���B��?Rr�l�G=� j�"=��?#�?���7�~��>�J�Q9Ŀ"1�=},?PTǿ5�]?�d]? �Wz?'�����$�O%>k@?m�����4�9�@s���C=G�=�y ���=<��>�8<�><S b=�NϽ��'�$�r��E|=����=�������Ö8<s=��=�-�=����¦����j�<�oL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       7                                                       L       idiL       left_children[$l#L       7               	         ����                     ����      !   #   %   '   )   +   -   /   1   3   5��������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       7DJB�C���AuB��A���B�N@nH    B�0AcX�AMe�?�( Bp�A���@U��    A�pA�&1@���A/��@�� A?p @��Aj��AA�@Ғ"@���                                                                                                        L       parents[$l#L       7���                                                     	   	   
+   
+                                                                                                      L       right_children[$l#L       7               
+         ����                     ����       "   $   &   (   *   ,   .   0   2   4   6��������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       7B  @@  A�  D�  D�@ Bd  C  Cv@ =��F� B   F�� A�  B  Cw� @�  =},@�  A�  E�� E� A�  F<^9E�p @�  BH  B�  CH  C3  9�@s���C=G�=�y ���=<��>�8<�><S b=�NϽ��'�$�r��E|=����=�������Ö8<s=��=�-�=����¦����j�<�oL       split_indices[$l#L       7   %   %   "         %   %   (          %       "   "   %          %   "         "   $       )      %   *   )                                                                                                        L       
+split_type[$U#L       7                                                       L       sum_hessian[$d#L       7E/�D5.jE�2BQ��D(,D7�D��VBF�l@/��C�Q�Cq�NBص~D�kDTX�C�o�B?�?�)�C��sBDq�CGBKB)�BȮ�A 6]D��Bi�Dh�C��GC�4)Cw�@��XB#��B�G�C���B�/A'�CB�@���A�OOA�H�BDB��?�b�@�S�C_�C��{AL�B6�-C�˱B +WC
+YC=�4C�4]@�#C��A;;�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       55L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ?���{�,�2>��龉�=��>~C�?�佉f� ~=�ל���=��7>��?��G>ܯ!�-��>2�@�k�i�f@k>J	��i�w�>�b?@��_�?����?��T=γ�>��	?r !�����=`캳j��t���/;���Q;�w=H��9/9�� ���g=�s��f��=�)^;� �C�;��=iI�:􍰽��<D8�=�b�" (=�5����=�_�<��]=�M��_�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ?                                                               L       idiL       left_children[$l#L       ?               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9   ;   =��������������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ?C/�B��A���B�M�@�VA|s�Am)A��BT��@��<@��:Aq~AqX�@Z��A��@�O�A��?�> @�!^@�;&?}�@��R@8K�@�_LAK@���Ar@�� @��A)M@5�                                                                                                                                L       parents[$l#L       ?���                                                           	   	   
+   
+                                                                                                                        L       right_children[$l#L       ?               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :   <   >��������������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ?@�  D� @�  D�  B�  A�  A`  @@  @@  C�  DY� D�  FM D�@ E�` @�  Bl  A`  C�  E%� F1UEz@ Du� C�  @�ˮB���FH�Ax  @   D�� F��U�����=`캳j��t���/;���Q;�w=H��9/9�� ���g=�s��f��=�)^;� �C�;��=iI�:􍰽��<D8�=�b�" (=�5����=�_�<��]=�M��_�L       split_indices[$l#L       ?               )   &   &                            !   )   &         $            +   *   $   !         $                                                                                                                                L       
+split_type[$U#L       ?                                                               L       sum_hessian[$d#L       ?E*�
+D�K�DZ�D��D�D$��CU�9DIW}C�-KC�'CjVHC��C��Bv�C�7Dp�Co��C�G�C?��C���ANC\�sAX�TBz<C��SC�D�B��Bfy3@���B��rA��C�~BC�c=B�O�B��C�}B��@BN &CB�C�n�B��@��#@M�CT&~A
+_VA@�H?��_B0��A��OBB�GC\ZCi��A�]�AQ�B^��B[��@*DD@��@ ��A���B�˴A�t�?���L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       63L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =��=��4�>�����O<�d>8O3?���ƧK���=4���"�'>�U=�)�>�B?t�Ǿ-A�=�~ͿaS�G��8/�>�'>V�пk��?q��DIu<�*�>��? ,=e�!��?~����Ś�Ŕ;��=׷����Q���D�+w�����;8z�ӻ�<Vg=̹�?;�=�������W=�L=�%;�w�k=2�3�V�<V��=5����=� x=A6�>hO=��<%d+=�e(L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idiL       left_children[$l#L       =               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9����   ;������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =B��B�6A���B�a$@���Ab||@��A2�B56x@�AN@Eu
+@�m`A}~
+@�`?���@�+�@��;@a��@��I@�jg@��@&|�@�L@���@�cE@�h�A *D@�tA/7(    ?�p�                                                                                                                        L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :����   <������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =A�  E   B(  D�  D��(D�  A   @@  @@  A�  @   A$�IEE� D%@ @@  @d�IF�� @   A0  B�  DH  A�  @�  A�  F+� C�� Di  A  DM� ��@�  ��Ś�Ŕ;��=׷����Q���D�+w�����;8z�ӻ�<Vg=̹�?;�=�������W=�L=�%;�w�k=2�3�V�<V��=5����=� x=A6�>hO=��<%d+=�e(L       split_indices[$l#L       =   "      "      '                     !         )   !   $   $   &   )   '   "   !      $         &                                                                                                                                  L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =E)�D�sDs�D�:hD�DB)
+CG4%D= �CʨZD
+��A0IC%$�D��C"�HBqD�3CEپCvh�C��C�!�Cy�B@6	�AƨC5�A�v�C���C��C��A�m�?���B��CiխC�i�C@��@��l@��kCn��BxfdB���Ci��B�iMCtB:@���?��E?� @H1g@�t�B��%B���An�A,~�CF��C���C�/@�o=A���B�îA�>HA<^�?�?PB��L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ;�?�?"�U��n5=��*?@�������O�h?J�v��p�?iћ>��1���s��F7>dC�c֣=��?���)H�b̓?�Ψ>�?��$[?R:���ʽ�#?��ӽք�����>�D�� ŽS]�<��㽖6�=jS�>@����=ȃv�Ԑk�D"=��=�1����=�q����=�J=l�r=Ԝ�=�[Ž���>-X�9F���ݳ�ܼr<ڥ =��6��+�wB�;t@-�&d�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ;                                                           L       idiL       left_children[$l#L       ;               	                                    !   #   %   '   )   +   -   /����   1����   3   5   7   9����������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ;C��%BB��CѮ�B^��B1��A ��B�N�A��A�B&)�B|�?�\ A�Q{A��A�F@�d�@HAbv@��(@�H�B �BAЦ1@z��@{#�    @#2    AO��A5�hA4A7B�                                                                                                                L       parents[$l#L       ;���                                                           	   	   
+   
+                                                                                                            L       right_children[$l#L       ;               
+                                     "   $   &   (   *   ,   .   0����   2����   4   6   8   :����������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ;B2  @ʪ�@@  @l��B  Ad  B�  @*��F�U@��A�  B5UUB�UUA�  @�  B�� A���B�vdA�  A�  A`  @l��BI�(A@  ��#F�� �ք�@�  B�*�E�IFPUU<��㽖6�=jS�>@����=ȃv�Ԑk�D"=��=�1����=�q����=�J=l�r=Ԝ�=�[Ž���>-X�9F���ݳ�ܼr<ڥ =��6��+�wB�;t@-�&d�L       split_indices[$l#L       ;   %   %      !   %   !   %   %   $   !   "   %   %   "      *   *   *   "   %   %   !   (                     *                                                                                                                        L       
+split_type[$U#L       ;                                                           L       sum_hessian[$d#L       ;E'�DKγD�T�CO�D%��D/�D���B���B��1C��C8��C��7A�`�D&��D(}�A¶B.��B6��Bi�C��oC�B�4 B�S{@���C�J]@��hA�(�C8�C�� C�C���A��%@���@��BeB��@� \BiQ@��C��B��B/t�B�&�B͆Bt��B'4�B+rW?�/@Z^�@���?���A 	C/$�C�A`B�ʃC!L�C��C��B���L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       59L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ;��\?"R����=�Ԇ?Gw�����<Va>��2���?S�$���4�������[>nB�<K}���?7EE>0	 �)�?n�>�ο�C��?�hٿ;�B���?`m�����=���?	�"��Z�=�u����<q�k=��%=7{�9 =ĕK����=�&�=�e=���=�=�=
+��V�=��n=�;H<��3����=L#�;Я+>��< <�!��b�=q\�����>^;�θ=�*�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ;                                                           L       idiL       left_children[$l#L       ;               	                                    !   #   %   '   )   +   -   /����   1����   3   5   7   9����������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ;CғSBa� C��B1A��@A- Bl�A�p�@��`A�%`Ax�?�^ A�3�A�[A�L@��@�Dp@���@�XA��A��XAP@>�t�@��,    @��V    Ag}�A8|A4��A"��                                                                                                                L       parents[$l#L       ;���                                                           	   	   
+   
+                                                                                                            L       right_children[$l#L       ;               
+                                     "   $   &   (   *   ,   .   0����   2����   4   6   8   :����������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ;B$  @ʪ�@@  @��nA�  AEUUB�  @   Bp  B
+ffA�  B2  B�  @�  @�  B  @X  @��Dc� @ڪ�@@  BUUE]� C!33���B�8����A�  B   CX  C0  ����<q�k=��%=7{�9 =ĕK����=�&�=�e=���=�=�=
+��V�=��n=�;H<��3����=L#�;Я+>��< <�!��b�=q\�����>^;�θ=�*�L       split_indices[$l#L       ;   %   %   #   !   !   !   %   %      %   "   %   %   #   #      !   !      !   #   %      (       '          "   %   )                                                                                                                L       
+split_type[$U#L       ;                                                           L       sum_hessian[$d#L       ;E!4�D3�D�ܰC��D5�C�ȧD���B�eBieYDl>A�61C���B��D!_�D3�#A�U�B�ϗA�}BD6�C���B��A��u@���A�-�C��AٮA���C��CI��DVfC6z�A/۫@ɠcB-(�BvI@���@w�vB=��?��1C���C
+�YB=j�B!�{Av_�@]@�!2?�&�A���?���@��d@��C?�C|�AA�"CAE�C��uCQ��C)D�ASfnL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       59L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ?��	l� ��>r���N>�<ۏ�>3��?���[�
+Q���>:�>�P=�o>��B?F=,��,�>@)�V|6�>e5=�w�����=��Z?�R+�?NX>5.R�1&|>��\��΃>m�?`wI����E�8�e<ɿ1�u����� <��c� �=V��<�-�\n���>�='���yz�=��K����{|�=y�x=�?=�X�;j�M= ذ<��g�<��N=�����H=�Dg=����v���s�+=��6L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ?                                                               L       idiL       left_children[$l#L       ?               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9   ;   =��������������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ?B��LA�8�AjD�B}X�@�C%A[��@�+ A�kBm�Ap0�@�S�Ax4A1�@��t@v�0@�u�@�Z�@ @�ԓ?ڭZA	�@��h@���@��@�v�AS��A��@n�t@��@��?��                                                                                                                                L       parents[$l#L       ?���                                                           	   	   
+   
+                                                                                                                        L       right_children[$l#L       ?               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :   <   >��������������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ?@�  D� Em� CH  E@  E� B(  A�  @@  A�  A�  D�@ FPUUE�� Bx  F+�A@  E�P C�  ?�  A�  A  A�  FH�A   F` A�  G, F�l @   E�@ ����E�8�e<ɿ1�u����� <��c� �=V��<�-�\n���>�='���yz�=��K����{|�=y�x=�?=�X�;j�M= ذ<��g�<��N=�����H=�Dg=����v���s�+=��6L       split_indices[$l#L       ?   #                  "   "   #   "   "                $             &         &   $                                                                                                                                                       L       
+split_type[$U#L       ?                                                               L       sum_hessian[$d#L       ?EsD�pDP�D�k�D5�D+C}D<�hC���C�&�C�C	�)D	�B�
+>BrI{D�fCB�CGٻC))�C�bCC	��B�L\A��A�:B�5�C��B㸘B��@�tA��BO�C�S�C�uBD��C�dB&��CHB1��B��
+A��C�B�dB��=B�XB��A��@��A:�m@�adB��)B:�KC��lC*��B�<B���B3L�B
+�f@���?�M�@�2=@d9�@�DBF�!L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       63L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       5�p?�־�V"���?����������>�bc�?6��>�M3�܅��x=��g��2?��V���t=&a�?k?�����lM?%��?�����}<�C5>�[{��[=��ͽ�JG>7Ͻ�C=rϼ\ý�$=��X�hP�=��R:�_k�q��=@@=A��=�n�>�ӽOq�;w�׽���<s�=p��=��8�Y=qȽ��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       5                                                     L       idiL       left_children[$l#L       5               	                  ����                  !����   #   %   '   )   +����   -   /   1   3������������������������������������������������������������������������������������������������L       loss_changes[$d#L       5C��'A�d�C�rG@`l�A�@�^�BP@�5C@1�B$�@A��    A���A��^A�@���@q�D?�@    B���@�@A�d@�g @��    AKGg@�A@A0AzO                                                                                                L       parents[$l#L       5���                                                           	   	   
+   
+                                                                                          L       right_children[$l#L       5               
+                  ����                   "����   $   &   (   *   ,����   .   0   2   4������������������������������������������������������������������������������������������������L       split_conditions[$d#L       5B<  @   @@  D	� B  A\��CG  @X  E�P D� @@  �܅B�UUB(  E�P E� @   DY� =&a�F@ E�� @��9A�  F�� ��}A�  E� A1�F佨JG>7Ͻ�C=rϼ\ý�$=��X�hP�=��R:�_k�q��=@@=A��=�n�>�ӽOq�;w�׽���<s�=p��=��8�Y=qȽ��L       split_indices[$l#L       5   %   %         %   !   %   !                %   "                          !   "           !      '                                                                                                    L       
+split_type[$U#L       5                                                     L       sum_hessian[$d#L       5E�PDB�~D�0`A��D<��C�D�-A-�KAM��D	�eCJ�AC��sA��+Da}C��q@�(�@�g�A=��?�p!C���C0�B�cvB�?@��Aqz�DW��CG(Cn�B��?��@.Ib@�N�?�c,?�VbA-�C�.�B<a(C,��@e�?B]Z�B1k�B�߇B�
+@�/?�mDT�<A$ݰB���B��AN0Ca �A��A�+L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       53L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       9�K1?���U��>o?Dn�u�=	���8$?�`?TTf>�����f���?> چ��4�<��Ŀ:�y>�6���?2}+?��=�ak?\�x>��|2�EUN�ڠ>�M�<�s�Da����<Ly[�L	P�$=_��l=�U���V=�d�=�-&�F�=�1��{�=�$��U��=�H���&
+=�T���G��	H�<��=�w�;����#���x�=��*�-9���!�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       9                                                         L       idiL       left_children[$l#L       9               	                                    !��������   #   %   '   )   +   -   /����   1   3   5   7��������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       9C��B?��C���B��A !@A���B&T Aa&@uD�A+x A!$uA�@n[ A���@�u�@��@��        B)q(@gp@A(�	@��L@��kA� @P    A���A-�A��A5��                                                                                                        L       parents[$l#L       9���                                                           	   	   
+   
+                                                                                                      L       right_children[$l#L       9               
+                                     "��������   $   &   (   *   ,   .   0����   2   4   6   8��������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       9B  @�  @@  D�  B  B"  CA  F�EUER� D�@ Bw$�B$�B|  B�  C�� F>P B@a�>�6���FKp @@  @@  E�� A�  F�� @   �ڠ@�  Fz  C�  E��9<Ly[�L	P�$=_��l=�U���V=�d�=�-&�F�=�1��{�=�$��U��=�H���&
+=�T���G��	H�<��=�w�;����#���x�=��*�-9���!�L       split_indices[$l#L       9   %   %         %   %   %   $         *   (   %   %   %      *                                                $                                                                                                        L       
+split_type[$U#L       9                                                         L       sum_hessian[$d#L       9Et�D�FD�#tC)k�C�b�C�27D���Cd�A�8�C��OB�HA�� C�u�D�4QC��UB��A}K�Ǎ?���Ct/�C�B&�A�<�A>SA��}B}�xC��(C�>�D.IDCH6�B���B�A�S�@ٛ�A}�Ca��A���B��1BE4�A�KjA�|�@�OBA�i@ExA'A��?��BO�A:�rC{H�B�i=D{�B�k�C?�AA�B�dBY��L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       57L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       9�Ěc? ���]%�=���?�c���;���B�?�G?7��>*Z��9W��a���H>y�">��q?����D
+�??�F���Ǿ���?x9��|�O a�����?8�?�=֠�=F���׽�8c��x�>,�=������=6�Y=�˯=����/�=ř��?Z�=��[=��3<�ܐ�0�=d}U���_�Ch�:%��U��R��=�g=���<�j�7fcL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       9                                                         L       idiL       left_children[$l#L       9               	                     ����               !   #   %   '   )   +   -   /   1   3   5   7����������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       9C`QB
+��C��,A�t�Aʗ8@~� A�UA;�@��$AEt�A�F�@@�    A�&�AyO@�nG@�t�<�X ?��/@���@��A1Zv@��?�{|?���A��9@��@�PAL��                                                                                                                L       parents[$l#L       9���                                                           	   	   
+   
+                                                                                                      L       right_children[$l#L       9               
+                     ����                "   $   &   (   *   ,   .   0   2   4   6   8����������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       9B2  @ʪ�@@  D�  B  B�UU@�  F�UE@ G� @@  D	� ��a�C� B�  C{  B��B�  C{  D�@ D�@ Fk>9A   Bt  E�� CX  B��AW��B4  =F���׽�8c��x�>,�=������=6�Y=�˯=����/�=ř��?Z�=��[=��3<�ܐ�0�=d}U���_�Ch�:%��U��R��=�g=���<�j�7fcL       split_indices[$l#L       9   %   %         %   %      $      $             +   %      '   +            $   &   %      %   '   +                                                                                                                   L       
+split_type[$U#L       9                                                         L       sum_hessian[$d#L       9E�`D0/QD�C��DN�C�&D�ёB�]*A��gC�)�B���BHPyC�Dh�TC�G�B�u[BSϞA�N�@FOC�ȶA�BRG�BIW�@��UB1�D_��B�iB�2fC~�A�"�B0�QA^�0BRA�?�		?���?�æC�O\C�AW��@Q�B.��A1.A�ϩA��,@`ظ@��B%�v@>�zD0R�C>{�A+��A�ҀB��B.=�C[�*BWmL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       57L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =���E?��:G?.�U>$j@�f�O<����)�?K�����=?	Ob��5a���>�����uY>�慾��Z?k7�>��8�&Ƅ?���?5 W�J��*Y?A%��������^>Q�$?CXE�e.o<և���=ɔ�R�"=w��=�?C=� g<���=�[����<�2�=�1¼��=�=P�[=�Y��=�gǽ�>X=(>M?<���=�c+���/���.<��j=��^�?�����<#�%�츲L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idiL       left_children[$l#L       =               	                                    !   #   %   '   )   +   -   /   1����   3   5   7   9   ;������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =CUN�BZ�Cy�eA���BS�A�`A�
+bAA|��A�k�A_��Aֽ?@�d@A�,Ad�@��@���A"GP@�O.Ae�,@'�@u��A �$A �X@�	�    A��Ab�@���AOvAE�                                                                                                                        L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                                     "   $   &   (   *   ,   .   0   2����   4   6   8   :   <������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =B  @ڪ�@@  @`  A`  BD  B�  @-��A�  D�@ Ad  A�A�  @�  @�  B   D�  @s33C� @@  E~� E�� D�@ Fz�UB$qǽ���B�  @�  BӪ�E�IFPUU���=ɔ�R�"=w��=�?C=� g<���=�[����<�2�=�1¼��=�=P�[=�Y��=�gǽ�>X=(>M?<���=�c+���/���.<��j=��^�?�����<#�%�츲L       split_indices[$l#L       =   %   !      %   %   %   %   !   %      !   !   !               !                  $   *       %      *                                                                                                                                L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =E~�D$/D�kC���C7�C�$�D�a�B`�kC��CB��4B�D�B��C���C���DhX&A�YB?C�5bB��B|��A*�B�	\A��B=Z9A��C�"�A3�C�pTB5#Cǅ�D�?A-�FA$�kA�*@��MC�C c�BUq�A���B=%�A~�~A�1?�|cB��=?���A��@��KB"(@�x�@��AA`@X�K@��BRGC�/�A��t@v�CQQ�C=��C�,�B���L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =�K�G>�jv�,��?'|�=�Ѻ�d[�<��H=�@M?JvJ����?t������ۗ>u�|�����R�>�?n��>�@��_�?�}I���?���"�m?&wf��^����F=��?٦�F$m�Cb����<�0!<�L�=���=F�=��;"4�=�U���<d͢�Q�=�_�=#��?%�=��z��,S��#�=h�<Kj>]w=��c���=:ꊭ=�@���N=`�m: ���>�;����L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idiL       left_children[$l#L       =               	                                    !   #   %   '   )   +   -   /   1����   3   5   7   9   ;������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =C%��Bd4Cd9vAڴhB
+�rA�� A��A��A���B�A`A��0@A��Aek�A3N�@���@��@�H�AHQWAS��@CH�@���A�^LA�@�F�    @���A'��@�8Aj&@Lk�                                                                                                                        L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                                     "   $   &   (   *   ,   .   0   2����   4   6   8   :   <������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =B  @Ͷ�@@  @�  A�  B\  B�  @   A�  D�@ A0  A	$�A���F�UC�  B  D�@ @ʪ�A�  @@  @`  E�  Ad  F�� CI���^�B�UUD/@ B  F>� B�  ����<�0!<�L�=���=F�=��;"4�=�U���<d͢�Q�=�_�=#��?%�=��z��,S��#�=h�<Kj>]w=��c���=:ꊭ=�@���N=`�m: ���>�;����L       split_indices[$l#L       =   %   !      %   %   %   %   %   %      "   !   !   $   %         %   "      %       !   $   '       %      %                                                                                                                               L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =E�fD*�D�7kC�5CF��C�ʸD��B�O�C��EB���B�ȍB���C��C���Dr��A���BM#�CT�TB��lB�ZAcJ�@h��BȂ}B`XvAt�%C��P@��Co^2B��Dm>;A���AJ�w@�$�B0S�@�~�B�LC01�B*��B X�Bv�A�1�?�{�AR;}?�TD@��B�ʾA���BN��@�-�A%�@�|�@��@�ƫCSedA��s@.�B�>�D9�CP��@��A�nnL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =;��m>�B���\=�	.?n̿e�Z=��>��x����?D�>�����Ͽ�- >�o�(T�=��?f�A<�QI�3i?z��>ط��:�?i�9��>�ǽ�����>�?e<�}��He�=�g>�pt�=�<�м��=�u��E���o�=�\�=f�%�^��=T�꽁��=�T�=���sv ��=*�1=J&��� =��n���ܻ��<��U�Xf(=y)�;���mռ���>:�lL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idiL       left_children[$l#L       =               	                                    !   #   %   '   )   +   -   /   1����   3   5   7   9   ;������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =CA#A�rHCai�A�JA�PA���A�@<AT7�A̶A���Axr-A`�@�3�A�Ap�@�[@�ExAΨ@�Np@��@A��Ab_PA�@�D@ˋ�    @�؛A��AF�A[9A/��                                                                                                                        L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                                     "   $   &   (   *   ,   .   0   2����   4   6   8   :   <������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =B  A   @@  @�  @�33B<  B�  @j��E۞9A�  A�  @��A���@�  CA  A`  @l��B�vd@�  A�  A0  A�  A�  F�EUB��ͽ���B�UUA/	AB@  CJ� C�  =�g>�pt�=�<�м��=�u��E���o�=�\�=f�%�^��=T�꽁��=�T�=���sv ��=*�1=J&��� =��n���ܻ��<��U�Xf(=y)�;���mռ���>:�lL       split_indices[$l#L       =   %   %      !   !   %   %   %   $   %   %   !   !      %   "   !   *   !   "   "   "   !   $   +       %   +      (   (                                                                                                                        L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =ERwD�
+D�.jC=bC��bC�k"D�S�B�B�y�C��sB�þBXC�hAC���Du�hB+�6BqB�B�C#��B�BD�B��cA�g�A��|C��@��Cz$�B��D/��C��A.��A��A�JAw�A��2@�k�A-)�A熓C��A�'�A�B�y�A��3A%�wB���@�\�A��I@��)A�l;@*�
+@:��@k��Bւ^C�@�(�B��uD*9VA�1WC��X?׵�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ?����>�;���Z>⮑��?V�;�[<��=��?�\>�[�ږX��<��KJ�=�����R?	]=�ĭ�?K:�>F�=?9�нa)�)i�?<T���J?��j��5����sK>+����h�?nM�<�j�=��P�[�g=q�U� 3K=�=�pZm=��$��G=��=�[���=3[��L�Iï=Ԏo���
+�ɑU�d��>�-������D��f	���[�����S�<�����ؽI��N��>�����L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ?                                                               L       idiL       left_children[$l#L       ?               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9   ;   =��������������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ?B��A���C��A��A(@�� A���A�LB(�@�T�AV��A�M�@@AN^XA� A4fA&4�A#�@A��@�.�A	��@׹L@i<
+@ܹ�@�	�?>/�@p AY�AQ<bAKNAՂ                                                                                                                                L       parents[$l#L       ?���                                                           	   	   
+   
+                                                                                                                        L       right_children[$l#L       ?               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :   <   >��������������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ?B2  A(  A�  @�  FX B�  CA  @�  B   B�  A�  AEUUD�  @�  CJ  @j��A�  A0  A�  A@  A�  BT  A  A�  @�  Ekj�CS  A8K�A  A�  A�  <�j�=��P�[�g=q�U� 3K=�=�pZm=��$��G=��=�[���=3[��L�Iï=Ԏo���
+�ɑU�d��>�-������D��f	���[�����S�<�����ؽI��N��>�����L       split_indices[$l#L       ?   %   !   "   %   $   %   %   !   %      "   !      !   )   %   "   "   "   %   "      %   )   )   $   %   (   !      "                                                                                                                                L       
+split_type[$U#L       ?                                                               L       sum_hessian[$d#L       ?Ek�D�mD���D��B�\	C���D�:�CdqC�+�B�B9��BFC�8XDj]C�1OB�̰B��1Cp�C�#Ab4A�(�B�=@�tB+�7@�>�B���C(�C���Dq�C{v�@��AB$B�BBiWA
+�BA@�Cd��B��jBy]�@g'A(>jA`Y@�k"@�B
+�z?�#\@��A��|A�}�?�'@�5A�`�B�o�B�	�B�mA��C��C���C+ʺB֓�C,�?�w;@pJ�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       63L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       9<2O�>�6��
+�>���?G�ܿfZ=	D�>�:���?w��>6�s���}��Β=���9��<���?}�>g�G}w?�G�&X�I��?Bx{�zH�>��H=���?6fP��O}=t@�=3eM�4З=��H<s\
+=p)�ɰ���g=�Z=�q�=�|���qH=�3���=Ls=�Y�<$�׽Ӄ��o���G=�̇<�2�ꇫ�d�=��;�I>F�5=�⛼>�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       9                                                         L       idiL       left_children[$l#L       9               	                     ����               !   #   %   '   )   +   -   /   1   3   5   7����������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       9B�SIA��C<t�B"�hA��HAZͰAp��A��NA~�@���A��A��,    A/pA+T�A��A���@e�A-M�@&À@,�z@�?�@ �\?�c A@fA/ޮ@~ƠA=�fA3.                                                                                                                L       parents[$l#L       9���                                                           	   	   
+   
+                                                                                                      L       right_children[$l#L       9               
+                     ����                "   $   &   (   *   ,   .   0   2   4   6   8����������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       9B  D�@ @@  F� BUUB�UUCD  @�  @�  E�� E� @�I%��ΒA   Dw� @�  @�  C  A�  @@  D  @��B�  F�P B�  A�  B�  C�  D�@ =3eM�4З=��H<s\
+=p)�ɰ���g=�Z=�q�=�|���qH=�3���=Ls=�Y�<$�׽Ӄ��o���G=�̇<�2�ꇫ�d�=��;�I>F�5=�⛼>�L       split_indices[$l#L       9   %            %   %   %   %   !         !             !   !   (   "         !   )   $   (   !      (                                                                                                                   L       
+split_type[$U#L       9                                                         L       sum_hessian[$d#L       9Er�D >D��rC��C�C�	4D�c%C��BPQB��LB`�B��CA�D�C�X?BѳC[�AG�BB�6�@Y
+�A�A_X�B(^EA�/�Dy�_A�yzC5}B�� B[�\BG��C`�B�Y�A0�?�o�B�@��B��BT�@a?�SA6�A3r�A"�S@q�vB�@6�A��:@�tDw��@�G�@��xA�O�C�z?��A�k�B��L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       57L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       7��v�>��t���>\4A?Iȿ|h�����>�3?�,!�?p >Z���U�V����4ٿ`��F�->�K;��|'�ZW�?zJ��J���zf�?I|;��c}��["?|����첽s�>b����2=0L<<��/�5�=x	�<�@Z��<�6����<%$s=��q�3r��۰�=�ݽv��<=bg=��D��>���Q��:ቼ�����tP<�`¼>�3��7@L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       7                                                       L       idiL       left_children[$l#L       7               	                                    !   #   %   '   )   +   -��������   /����   1   3   5����������������������������������������������������������������������������������������������������L       loss_changes[$d#L       7B�e!A���C%k�BU�A�D@�9`Ab�pA���@�.�@�Z@A�ϴ>�� A*�Aъ@�#�Az��A�4@�d@��@E�@@'��@�y�@$��        @z�    A$s@�Y�?2��                                                                                                    L       parents[$l#L       7���                                                           	   	   
+   
+                                                                                                L       right_children[$l#L       7               
+                                     "   $   &   (   *   ,   .��������   0����   2   4   6����������������������������������������������������������������������������������������������������L       split_conditions[$d#L       7B<  D�@ @@  FKp B   Ad  C�  @�  Bt  E�� E@ G^� B�UU@�  C2  @�  @��@�  D�� ?�  @   @��nA,�ͽ�c}��["E۞9���B�  B��@�  =0L<<��/�5�=x	�<�@Z��<�6����<%$s=��q�3r��۰�=�ݽv��<=bg=��D��>���Q��:ቼ�����tP<�`¼>�3��7@L       split_indices[$l#L       7   %            %   !   %   %   (         $   %      )   !   !                !   !           $          '   (                                                                                                    L       
+split_type[$U#L       7                                                       L       sum_hessian[$d#L       7E �vD�D�pCҫ�C>��CL�3D��3C��1B.bB��B��/CA�A*x6D���A�"B�NC���A��A�B��2@]�B>{B!�C@f?��Q@qy�@�3oDY�iC��*A�X�?�FBh��BOE�C.��B�U�A�͟@��@���AnߤB���?�kp?�D@�vA���A�?+B	`a@<,@)�?�_�D'�CH�RA�OC��9?��As��L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       55L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       7;~��>į�����>r�*?N���J�k<�t�>��D��Lg?�ѷ>�T�ǋ8���> +}���	A�>�_@�#JҿD��?��K���X?J�}��D��1m>���=��?.�X�K�;�Y���uJ:a�=��(<Ν=
+��?��>o:��=��<B� =�\�;�*�v��=�U�����u5<�s�>�S��ݍ<���=���<���:GP�
+<׻��<�.�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       7                                                       L       idiL       left_children[$l#L       7               	                     ����               !   #   %����   '   )   +   -   /   1   3   5��������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       7B��|A�A�C��B �,A�xA�HA���AcϨ@��@O @�*RA��6    A2��@��@E->Az>�@ꈰ@��?x�     @g�hB��@���@�`�A��@F�AS
+A�                                                                                                        L       parents[$l#L       7���                                                           	   	   
+   
+                                                                                                L       right_children[$l#L       7               
+                     ����                "   $   &����   (   *   ,   .   0   2   4   6��������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       7B
+ffD� @@  E�� A�  B�UUB�  @   @�  B  @@  A����E�@ @�  B  @s33B  @@  E�  ���XD��E� B+��C�5UBs��C�C�C	  ��uJ:a�=��(<Ν=
+��?��>o:��=��<B� =�\�;�*�v��=�U�����u5<�s�>�S��ݍ<���=���<���:GP�
+<׻��<�.�L       split_indices[$l#L       7   %            %   %   %   %   !   &      !                !   )             '      +   '   '   '   '   )                                                                                                        L       
+split_type[$U#L       7                                                       L       sum_hessian[$d#L       7D��GC�J_D�U�C��B�q\CzmD��C��TBV��B�+3B>�TB��C��D��D26?Au��C�*%A�kA�h�B���?�uA�d9A��nB��UA�1mD��BD8C�d�C�AZ;@ʗB��{C+�Acv'AT��A�4�@���B|��?�xA��(?�@�NAp��BE>�A�_�A���@[4�Bb�iC��A�˩Ay�B���C4TC��sB�/L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       55L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =��>�������>AI�?U���1`�9�d>����Wv?��?���A�$�~� =��1�� 5?1�>=�#^�^d� Y?�[2==ν���?['`�V��>')�Ѹo���S?�S�=�7[>\�B�7B���y�=�����=2�ӽ�o<a�=������=܃�8������=���=�R��S�=ɉ�4�<�,��ѹe���=�lW=�x���bJ>�X�FF��-�<�z�>';�3�����=��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idiL       left_children[$l#L       =               	                                    !   #   %   '   )   +   -   /   1����   3   5   7   9   ;������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =B��wA�B�~ZA�|@��`B�0AdQA�t�@���@"��@ۑ6A�&N@�@A�gAH��A�ψAv��@�{&@�{�@��@5��A��d@|�P@�*�@�>    @�<:@�P A4�XA��M@�h                                                                                                                        L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                                     "   $   &   (   *   ,   .   0   2����   4   6   8   :   <������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =B  D� @@  F@ @@  BT  C  @uUUB1��B   E� @d�IAd  E� @�\@`  A`  @@  BBUUE�` Bp  A�  E�� C   A	$��ѸoB�  B���@�  AΒIF ��y�=�����=2�ӽ�o<a�=������=܃�8������=���=�R��S�=ɉ�4�<�,��ѹe���=�lW=�x���bJ>�X�FF��-�<�z�>';�3�����=��L       split_indices[$l#L       =   %               %   %   !   (   %      !   !   $   +   %   %      (         %         !       %   +      (                                                                                                                           L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =D��)C��iD��C�y}B�۲C��JD�P|C���B=,.Bwx�B>�BüC!��D1M5DS�B��_C,7>A�U�A�bBl�@-�ANA�txB�+B��C��A
+�A|']D-\�B��C���A�+Bp7(B��B�h�Ax�H@��V@��Aɤ
+Bd��?��~?�]�?�{U@��6@�GA��V?��@���A�eB1h�A��f@��@��Ai��?�n�C��CTZ�AB( B���C��5A�)�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       7�1��>�����z>`B�?H]}�1���� >�0v����6��?Q�8�  �%��=�k½�}f>G�?Iٷ���?S�?[�{�u?��<��!��/����V�'�>��<ѻ�i#o<�C'�G�H=��߼ >;)c����=���݋=�J�<���<�c�>.ˆ<����AK��Ģ�=K> ��A�����߳�<�X�Y'}<]����!Ͻw�g�~�RL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       7                                                       L       idiL       left_children[$l#L       7               	            ����                        !   #   %����   '   )   +   -   /   1   3   5��������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       7Bj�]A`��B��A"�@"��@�# A��A�oPAYH�    @)/P@�ht@�dPA1d A��A�d&A'?�At[ A&�F?���    ?�`�@:9�@`p�A
+��A�?fA48�AcA�l                                                                                                        L       parents[$l#L       7���                                                           
+   
+                                                                                                      L       right_children[$l#L       7               
+            ����                         "   $   &����   (   *   ,   .   0   2   4   6��������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       7B2  E� A�  B  @�  A0  B���D� F�L �6��Dk@ @   D  A�  Dk  FD� A�  Fj` B�  Eۀ �uA�  B�  B��D!&�B��Ct>B� C��<�C'�G�H=��߼ >;)c����=���݋=�J�<���<�c�>.ˆ<����AK��Ģ�=K> ��A�����߳�<�X�Y'}<]����!Ͻw�g�~�RL       split_indices[$l#L       7   %      "   %   %      %      $             '   "         "      )          "   %   *   '   '   '   +   %                                                                                                        L       
+split_type[$U#L       7                                                       L       sum_hessian[$d#L       7D��wD��D��zC� �B?x Cm��D�C�C�ΌB�ɪ?���B;K)AI�CaD&Da	C��XB�(�B�6�At�"B6U]?���@:D�A��CR��Aha�C��C���C��{C�ǗC���B
+�BV��A.3�B��rA���AR�Y@�%B'50@r�?��?�
+@r�@�{tC7�AA��b@/ŧA<p�A�-�B���Cw�[C>CS�AB�hB;�C|�8L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       55L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       1��5J>c��'�v)>|qE�|1��4�a�#�=���>�>=�����4��4�<������=e��=WS=�C�>�"�Q�5>�K�>�ʥ�[F'=�e�z��gz>�K̽������<N�b���ߺ�m	=Y����&˼}=썽<����z8=l�u��S2��`�<B&�n�Z���+>o2����6��
+�>nL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       1                                                 L       idiL       left_children[$l#L       1               	         ����         ����      ����            !   #   %   '   )   +   -   /����������������������������������������������������������������������������������������L       loss_changes[$d#L       1B?^A;ŜB�V	@eۜA&\�?���A?��@3y�    A@��AU�@O�q    A��@�'
+    ?�HX@�eQ@���@��@���>��=� @�$#A�@��LA4��                                                                                        L       parents[$l#L       1���                                                     	   	   
+   
+                                                                                    L       right_children[$l#L       1               
+         ����         ����      ����             "   $   &   (   *   ,   .   0����������������������������������������������������������������������������������������L       split_conditions[$d#L       1B`  @   @@  D^� B  B�UUC�  BH  =���@ʪ�@@  CH  ��4�B�  B�UU=e��B�  B�  A1�Ez� @TIC�  B�  D�� BT  Dw� C  �������<N�b���ߺ�m	=Y����&˼}=썽<����z8=l�u��S2��`�<B&�n�Z���+>o2����6��
+�>nL       split_indices[$l#L       1   %   %         %   %   %          %                *       )      '       +      )   '         )                                                                                        L       
+split_type[$U#L       1                                                 L       sum_hessian[$d#L       1DDs�D�F�A���D��C�D�D�A���?��C��_Ct�[A.�B�K�D��B�7�?�AQA���B�IC�TB�DC�9@,m�A��DJ�C{qB�Yl@�� A[�W@fkNB�=@��NA�'Cd��A_5�B�!�@�_kC7=?�.�?��F@�X�?��8DF�1A�ZCx+>@<L�B6Z2A�O@�;?��.L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       49L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       5��p>b ۽��>(��?FI�rW���T7>��c�6�?e��=)��������h�S,g>rX�>�c��L<Z�d�>�1���3?v$p=���������8ĩ?>ϝ��ǾRl=[�?i9�=�����]�=�%Z��7U<�%�
+�׽�y�<��O��=�t<�5�E=�'=�M�� �{���=��<��h��^����=ҫ���j<��?L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       5                                                     L       idi L       left_children[$l#L       5               	                                    !   #   %����   '����   )��������   +����   -   /   1   3����������������������������������������������������������������������������������������L       loss_changes[$d#L       5B&>A�m�B�S�A�-�@�mD@� A-�'Az��A�'�@\�p@�Ő?:L @�|�A�A2N�BN)@�5�@�"P@���    ?6�@    @�F�        @(s^    A��A*��@S��A b{                                                                                        L       parents[$l#L       5���                                                           	   	   
+   
+                                                                                          L       right_children[$l#L       5               
+                                     "   $   &����   (����   *��������   ,����   .   0   2   4����������������������������������������������������������������������������������������L       split_conditions[$d#L       5B<  A�  @@  @��B�UUA\��B(  A�  A�  E�j�A`  G^� B�UUAp  @��S@ʪ�A�  Bp  Ez  ���3F�  =���A�  ���8ĩF�X ���BP  E�� D*  BL  ��]�=�%Z��7U<�%�
+�׽�y�<��O��=�t<�5�E=�'=�M�� �{���=��<��h��^����=ҫ���j<��?L       split_indices[$l#L       5   %   "      !   *   !   "   %   %       &   $   %   &   +   %   "   +          $       &                      $      %                                                                                        L       
+split_type[$U#L       5                                                     L       sum_hessian[$d#L       5D�@D�>D�2!C�"B>Z�CG�D��,C�-�CΙB!�@�q�B�rQA�D��C��Cf�NB�ƺBG�UB��?��B�+@6O�@�I�B��?�06@��@���D	�uD?rA�|B��Bʫ\C��Br]�B{/�B�AS�,B��?���B�2@��?�x�@)�G@U�?��?D_Ac�C�C�`?���A�\R@p�\B�|�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       53L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       7��{>�j3���(>��?�`�N��Rf>�����?t��>�Y��|����8<z$.�ԭ�����? �z���)>�
+�?}l;hї=�?FRk�h¡>1�庒|�?���>�	=6�T��2=��&<�<��~K<���= �ٽ��u<��=�UZ=����r���|=��{��]��wو�|�=�Ч<}@��R�>&��=
+�ｌ��<�qO=��+��wL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       7                                                       L       idi!L       left_children[$l#L       7               	                     ����               !   #   %����   '   )   +   -   /   1   3   5��������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       7B-�A���B�)A�c�A1�AHB0A�A`�,Aq�?�t`@�6�A��    A#��@�H@�W�@�xA*�@�Y�?`}�    AY�f?���@�h@��:A��@��@�@��u                                                                                                        L       parents[$l#L       7���                                                           	   	   
+   
+                                                                                                L       right_children[$l#L       7               
+                     ����                "   $   &����   (   *   ,   .   0   2   4   6��������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       7B  D�@ @@  @Ͷ�A�  B�UUC� @�  A�  E�  E� @�躽��8B�  @�  @	$�A�  @@  F5@ B�  ;hї@@  @�0�F�EUB���B�  Bܪ�@   FR� =6�T��2=��&<�<��~K<���= �ٽ��u<��=�UZ=����r���|=��{��]��wو�|�=�Ч<}@��R�>&��=
+�ｌ��<�qO=��+��wL       split_indices[$l#L       7   %         !   %   %   +   %   %         !       +      !   %                   +   $   (   %   +      $                                                                                                        L       
+split_type[$U#L       7                                                       L       sum_hessian[$d#L       7D���C�
+D��C�u�B�mmCgDD�w�CE��C.�BM��Bo-SBX�zB̃KD���BWC Bc��C��B���BOD�BF�1?��B"�&A�ZA�'A��D��B;B?��@��fA7�]B5�MB���B>�Bk��A��*B:}�@�:�@	�B>PB��@��4@��A��A��@x�A|GPA�MC��kD]cG@��DB@B f�@�X�@�Z�?ĺ�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       55L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       5<6�J>����Vz>��@��얿,�=hE=O��?��?
+�k��=�����S�<�]q?I�>ۘW�T{
+�ZR�?p���q?]w��2s=�7S�f!�=e�k=c^H�5]?�P�=�L�;^��=�'1�Wf=��=�fu�	:�=���<��g�zx=��C�ۯ{�p���Q<�C]�T��<��纟�g<�����e+�|��=�^/<���=���?��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       5                                                     L       idi"L       left_children[$l#L       5               	                     ����               !   #����   %   '����   )   +   -   /   1   3������������������������������������������������������������������������������������������������L       loss_changes[$d#L       5A�\�A��B�qjA���A9=~A���A�nA^�@��@�XJ@���A�-p    A�:@��ANH|A-��A��2@��0    @���@��    @5�@ˇ�A8O�A	R�?
+��@�!�                                                                                                L       parents[$l#L       5���                                                           	   	   
+   
+                                                                                          L       right_children[$l#L       5               
+                     ����                "   $����   &   (����   *   ,   .   0   2   4������������������������������������������������������������������������������������������������L       split_conditions[$d#L       5B
+ffA*��@@  A  E�IB�UUA   @l��A0  @�J@�  @�  ��S�A��B�  @`  A�  @d�IB   ���q@�  Bu� =�7SF�� E|��Fz�B�  D��D� ;^��=�'1�Wf=��=�fu�	:�=���<��g�zx=��C�ۯ{�p���Q<�C]�T��<��纟�g<�����e+�|��=�^/<���=���?��L       split_indices[$l#L       5   %   !      %       %      !   "   +      !       !   %   %   "   !   %          (       $   $   $      '                                                                                                   L       
+split_type[$U#L       5                                                     L       sum_hessian[$d#L       5D�lC�aD�&{C�aYBE�DC1�D��C@�C<�A)�_BE�B��HB���D���AԞ�Bb��B�;cA9�C0��?�2�AB�@nA�߱BX(�D���C7UUAb׽AFe�B!�A���B��gA=/�@�V5@��iC��B ��?���@���A���Ax��A� {?��kAUG�B"��D;��C���C�}B
+�bAN�W?��/@���@��oL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       53L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =���>��d��F>~�?(��(�;�>�-���-?l	�>��+�AF��yS<o�&�(#6=@?/�����>���?y�6��Sq<;P?(�]���>�8ؽ�Mb��g<��Q�j!�>O9��Z��=X+H�5��=��a���*�%c
+=B��+=/b9� �=Ь����=�_�#S,=Sj�;�W=��ʽ�;P��̃<�=���=?�V���;�5��,��l�;|���>[=�����k�=?/�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idi#L       left_children[$l#L       =               	                                    !   #   %   '   )   +   -   /   1����   3   5   7   9   ;������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =A�F�A��B|{nAh�i@�PA�4�A(��@�}�Av
+�@%� @��DAhg�?�8 @�k@�kx@�SA5�Al�A�Y�?� @	Mq@�o�@1�H@���@��{    @��@�5�?���@Nd�@�٠                                                                                                                        L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                                     "   $   &   (   *   ,   .   0   2����   4   6   8   :   <������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =B
+ffD�  @@  @uUUA�  BT  D�� @`  A`  E�` BaUUA�Ad  A�  A0  A�  B  @@  A0  Bp  F�P F/=A�  @d�ICI���MbB�  C@ B��A��9B�  =X+H�5��=��a���*�%c
+=B��+=/b9� �=Ь����=�_�#S,=Sj�;�W=��ʽ�;P��̃<�=���=?�V���;�5��,��l�;|���>[=�����k�=?/�L       split_indices[$l#L       =   %         !   %   %   '   %   %      *   !   !   !      "   %      "         $   (   !   '       %   %   *   *                                                                                                                           L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =D�-�C��SD��C��B�B�C"�D��3B���CA �B4��B�AB��B��D�ԜA���A�)B`N�B��nB�L2B+s@��A��A���B4�kA���B�n�@�϶D��@��@��XA�o�Ag$�Ac�BCg�@�:QB��}A���@��)B��?�t�B$�?�>�?��A3]Ah?��rA���A���Aі�AQ�AU?��@�^.DW;Cł,@���?�?��@N�=A�KW@"�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       9��\�<-�t�>Jcf�8z����/��=���?M��!K�<;#�?/�þ��o�a���u{>�����T?xU�>����T4Y<U,o���=�1齑 ?�Bc�1R?7~�l�#=��>	�A�	.g���=r㲼� <�h}=ոռCO,�D�o=mo"�<�0�� �=vq��B$=z3��Kj�<F��_�>R6ؽ$�o���@=�"$��;�>�]�1{�ԑ��	���W�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       9                                                         L       idi$L       left_children[$l#L       9               	                                    !   #   %   '   )   +   -����   /   1   3   5��������   7��������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       9A�[A�g8@�݌A���B+�"@��@gd�A3a{A ʬAjy�A"�>A.�@��@i�@��"A"�AFz8@O��@�=�@�ApAY�AAx�A6S    A @\�Z@C�?�4         @�F4                                                                                                        L       parents[$l#L       9���                                                           	   	   
+   
+                                                                                                      L       right_children[$l#L       9               
+                                     "   $   &   (   *   ,   .����   0   2   4   6��������   8��������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       9C�� B  @�D� @@  D�  Ap  @�  A�  A	$�@���@@  CJ  Dr� ?�  @�  A�  E�` B@a�B5UUB�  A�  C� �� A�  @�@vD1� A0  =��>	�AC�@ ���=r㲼� <�h}=ոռCO,�D�o=mo"�<�0�� �=vq��B$=z3��Kj�<F��_�>R6ؽ$�o���@=�"$��;�>�]�1{�ԑ��	���W�L       split_indices[$l#L       9   %   %   +            &   !   %   !   !      )      !   %   %      *   %   %   "   +       &   +                 %                                                                                                        L       
+split_type[$U#L       9                                                         L       sum_hessian[$d#L       9D��lDҫ�B��rC���D�zrA޴�B�KJC��DB��B��D�J@���A�D�B!:�A�B�}MC:�B�1BIOB���A�@�D4D$��@��@�ORA�-�@��B��?��o?�@�A��BB�Bz6�B�4 B�ףB\�@=A���A�jA�SBf�A��@�?A�ylC���D'A�Z@i��?��0A�/\?��?��?��A*�A�@,ASrArk�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       57L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       1<F�/>�ڽŚ8=�f">�B���X�	�>>܈�ڋ>��?Q!��n�;u��>��G�����l=Qf?B�|>,.b?w<�z�F�	�":<��G��^�����=P˽�	o;�5-��U�=RfP��By<�U==��e��\;�
+�=B��<�yJ=�;� ^=���m0;��G���Q��>׺��=8u ��l���&L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       1                                                 L       idi%L       left_children[$l#L       1               	����                                    !   #   %   '   )   +   -   /������������������������������������������������������������������������������������������������L       loss_changes[$d#L       1A�D�A�dB`��@�]�@��l    @�O�A` �A)Y8@�|�@|Y<@옖A;X@���A�pAE�A/!�@��AH7�?㜐@��fA ��@��hA G?��p                                                                                                L       parents[$l#L       1���                                                     	   	   
+   
+                                                                                    L       right_children[$l#L       1               
+����                                     "   $   &   (   *   ,   .   0������������������������������������������������������������������������������������������������L       split_conditions[$d#L       1B�  B  @@  B(  B�vd��X�A⪫@��@@  B8  Bd  D	� A���?�  A�  AEUUA�  A333Bt  @d�IA�  B�  D�  BH  E� ����=P˽�	o;�5-��U�=RfP��By<�U==��e��\;�
+�=B��<�yJ=�;� ^=���m0;��G���Q��>׺��=8u ��l���&L       split_indices[$l#L       1   %   "      %   *       *   !      %   "      !   %   (   !      !   %   !   &                                                                                                            L       
+split_type[$U#L       1                                                 L       sum_hessian[$d#L       1D�J�DC�Dw��D#�B��PB~��Dg��C�7�C{&�B�A���C�DCb�C��*CBђCSr�A���B���A�3�@+�#B���B��D@�BA�@��-C�{A���B���A�7�A�5B�83B��A�3'@�9�A���BCTz@���Av�??��]?բ�A��#B��YA���A�VD6��B��@4��@��TL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       49L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       #����;�%&�cE�>-X��Q��q���[>�[?`j��WO`��mj���3��p�=%d��i��>M�i��{l�,}�=���|�>[���r�G?��<�zj;9޺�m=m�����S]=�T����C�{�����<���=�@�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       #                                   L       idi&L       left_children[$l#L       #               	                  ����������������      ��������            !������������������������������������������������L       loss_changes[$d#L       #A��A�j	?��pA�B>�0?D��?tC`@�|?퍸A5�,@�y                @���A�F        ?5 @�('@�Y�@U�                                                L       parents[$l#L       #���                                                           	   	   
+   
+                                    L       right_children[$l#L       #               
+                  ����������������      ��������             "������������������������������������������������L       split_conditions[$d#L       #C�  B2  C2  @�  @@  D�  B�  AffD�@ AEUUA   ���3��p�=%d��i��A�  B�  �,}�=���@   B|  C�@ B,5�<�zj;9޺�m=m�����S]=�T����C�{�����<���=�@�L       split_indices[$l#L       #   %   %   )         $      !      !                      %   (              %   +   (                                                L       
+split_type[$U#L       #                                   L       sum_hessian[$d#L       #D۳�D�E�AۃhC��@D��nA� �@xC� �A��B�,D���?�րA�?��H?���C��~B���?�͸A�H,By�pA	��D���A��"CU�yC��Bc��A�׾?���Bt#�@�@�2D�&I@�Y�A]=�A��L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       35L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       1<��i==;�u3��2�>�+�ő�P)�>�t�L�>�e'=�>�=�-m�e=@z>�K��*׽(�?���S�#?	�Z=H.?>�X�>zؽ 
+Կ?�<R���I!;=��<� �,ѽ��|;a~�0�Z�"�=��w=+̉�5G=�\0;z9m��j�<�׵=;M���"<��@����=v�;�Z� ���p=	��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       1                                                 L       idi'L       left_children[$l#L       1               	����                                    !   #   %   '   )   +   -   /������������������������������������������������������������������������������������������������L       loss_changes[$d#L       1A�mA�yA&D'Aq�A,�    A6�AA"\A���A��A'�A7�@���A`Q~A")�@���A6b�Ah,`@��@�E8@�"A�C@K,@��@�P�                                                                                                L       parents[$l#L       1���                                                     	   	   
+   
+                                                                                    L       right_children[$l#L       1               
+����                                     "   $   &   (   *   ,   .   0������������������������������������������������������������������������������������������������L       split_conditions[$d#L       1C�@ @�  @@  B  A�  �ő�D�� D�@ @@  C�nB8  FB�UD�  F@ A�  B�UUC  D  D  D� A�  D/@ B�8�C�� F�T <R���I!;=��<� �,ѽ��|;a~�0�Z�"�=��w=+̉�5G=�\0;z9m��j�<�׵=;M���"<��@����=v�;�Z� ���p=	��L       split_indices[$l#L       1   %         %   "                (   %   $         %   %   )            &      '   %                                                                                                   L       
+split_type[$U#L       1                                                 L       sum_hessian[$d#L       1Dچ�D˵�B�:Dc��D3�A��4BmC�V�D�DB�~D'�BN��B6H�C��QB�e�B��C�k�B�s�A��B�D�.B)�A4�A��A��Cx/�B'*�B�B;��B�B�Cȸ/B}�{A��B��;@:��@�xA��aAX"�C��B�~LBԼ@� )?��@�m@�-�A�A���@t*L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       49L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       3:?޼%��>��$��<�q�>`�.?��V�q5�>���?h$�<3/����>���<�G�?��T����ҳd��f�>����?����4=O�?5�D��k�?s�k��=���=���Ľ	T=����K=ޝ��8J<��=�ֈ<��G��U>.i����
+��=_�;����Wi%���=����x�<&ă�1�,=�]�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       3                                                   L       idi(L       left_children[$l#L       3               	                        ����            !   #   %   '   )   +   -   /   1����������������������������������������������������������������������������������������������������L       loss_changes[$d#L       3@�ȸ@�M�@�9wAD�AC�@%�?T�AT��@���@�G�A&�w@���@#�    =b^ @��@�U@��M@�H�?�Rq@u"�@��@��?��@�
+1@XL                                                                                                    L       parents[$l#L       3���                                                           	   	   
+   
+                                                                                    L       right_children[$l#L       3               
+                        ����             "   $   &   (   *   ,   .   0   2����������������������������������������������������������������������������������������������������L       split_conditions[$d#L       3E�  A�9C  E�P A1�@�  E� A�  B�i@   B���D   F��U<�G�E�� B�  E���E�0 @   A   B�  DJ� D���CR  A@  E� �k��=���=���Ľ	T=����K=ޝ��8J<��=�ֈ<��G��U>.i����
+��=_�;����Wi%���=����x�<&ă�1�,=�]�L       split_indices[$l#L       3      (   )      '            *      '      $             $         '   +      '                                                                                                             L       
+split_type[$U#L       3                                                   L       sum_hessian[$d#L       3D��LD�qB;�ZC���D�!PB�LA�9Cr��BS��A�SD��)A��A�]�?�3�@�[�B�GWC��A�B-�"@0M@�! B�U�D���@��@A��UA�Y?�JD@�x�?���A��B��B`�B�t@��@��bB
+��A�:?��}?�A@�j�?��]B���A7?D�r�A��}?��L@b��@�#A:�?��Am�*L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       51L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ��0�;ZS�&�<�����w<���\$�<�s&������3��2�?o�����!�2a#��>,A׼b[��My>l���U�k>Jg,�y�=Sǃ��Da��;;,uI����<�s
+=�˽\Z�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L                                      L       idi)L       left_children[$l#L                      	               ����   ������������            ������������������������������������������������L       loss_changes[$d#L       A2�UA
+�$@q�A 6�?���@�7�>�K @���@���>��@    @�+f            A�0�A�qV@c��@L/D                                                L       parents[$l#L       ���                                                           	   	                              L       right_children[$l#L                      
+               ����   ������������            ������������������������������������������������L       split_conditions[$d#L       C�  C�@ B�  A�  @@  A�@�  A�  B   B � ��2�E��9���!�2a#��E�� @@  @�  A�  ���U�k>Jg,�y�=Sǃ��Da��;;,uI����<�s
+=�˽\Z�L       split_indices[$l#L          %   +      !   )   +   (   %      (       $               $         &                                                L       
+split_type[$U#L                                      L       sum_hessian[$d#L       D�qD��xA��aD���@��@�7A�0�D�HA��^@��?מ�@;�`@R��?���A�%�C��aD�x�A�>@�U?�l�@��?�P?�X�B�f7C:Q�C�JD�@�Aq�@-�=@@�y@�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       31L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ?�O߼Ȗ:>q�K>�+B�~?"��=��?P�4=�2����@�ê�?\F��Q@��?!�?���� q��X�?TY�:J'ܿ=��=�:��[�	��?��[��a�>���?4����B?t��=q5ܽ_�g>�Ͻw��=��<Z�/����6l<>��_��=�2B���E��P<�}=�Aֻ�/G������~=���=���=7Gռ�n�!��=��ݽl%���G=�+���ҼZA�;˂�=܄�����=L��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ?                                                               L       idi*L       left_children[$l#L       ?               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9   ;   =��������������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ?A�~Ac�A{�@�+@��@�wXAE<%@�1\@�*bA��A�I@�ϸ@˗AA"�@�y�@ȼ`@��@�00@���@�[~@�h�A\&A�8@���@9h?�GP@��ArA7x?���@��.                                                                                                                                L       parents[$l#L       ?���                                                           	   	   
+   
+                                                                                                                        L       right_children[$l#L       ?               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :   <   >��������������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ?B(  E� A`  B@ E_6�F^� D�@ B�  D�  C�  E�� B���F�U@�!SF7� E�U?�  D  CR  A�  D@� CF  D��1E� B  C%  B�  D*  B|  A�r�C*  �_�g>�Ͻw��=��<Z�/����6l<>��_��=�2B���E��P<�}=�Aֻ�/G������~=���=���=7Gռ�n�!��=��ݽl%���G=�+���ҼZA�;˂�=܄�����=L��L       split_indices[$l#L       ?   "   $   &   (       $               $   '   $   +   $                "      )   '          '            (                                                                                                                                   L       
+split_type[$U#L       ?                                                               L       sum_hessian[$d#L       ?D���Dƅ_C�Bf��D�O�B+�3B�A� �B1OB{k;D�twB4A��B��A�2A> �@��B ��@�DA��PA�4&C��D�-�@���Aݿ�@Z#D@�G�AR�B��A���A$�3?�*�A*{f@��@�sAӎ@�6�?��H@��rA��5@��Am*�A���C���A(��D�I�Aq�)@ �@F@�A��@��y?�b�?��@��C?���?��A=��A)B_��@�8An#@E�@�ZL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       63L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       +;��<��t�*Na=��T�������`�=}Q�? ߠ�f�$;�ǿ?�3?�y/��x4�l��>���@>?3�.=��ɽ�aS=�{ҽ�sM=�K��鰽���>;ʻݿ�=8rE��r6�?X�<Æ�;���(��=�pQ���@�'�=�o=�����1=+�_r;,=
+�FL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       +                                           L       idi+L       left_children[$l#L       +               	                        ����            !   #����   %   '   )��������������������������������������������������������������������������������L       loss_changes[$d#L       +A7p�A[�@,�<ACw~B �@�?j�A��@�s�@�8@�)�>�z�@)^    ?���A
+q@���@w�xA4    @9�A�fA��                                                                                L       parents[$l#L       +���                                                           	   	   
+   
+                                                            L       right_children[$l#L       +               
+                        ����             "   $����   &   (   *��������������������������������������������������������������������������������L       split_conditions[$d#L       +C�  Bd  @�E� @@  B�.�E� F$ B�  Ad  @�  B|  B�ff��x4E�� @�  A�  FP� B�  ��aSB�UUA�  @   ��鰽���>;ʻݿ�=8rE��r6�?X�<Æ�;���(��=�pQ���@�'�=�o=�����1=+�_r;,=
+�FL       split_indices[$l#L       +   %   %   +         (         )   !   !      (          %   %      )       %   "                                                                                   L       
+split_type[$U#L       +                                           L       sum_hessian[$d#L       +Dס:DԢ|A���D�D���@��A��C�-�B��FB9<PD��@�"�@�A^�D@*�C���B��vB>*�A�+`B*;@r�RC�8jD*)�?��@�;?���?�?��0?ӑB���C��Bd��BwndB9��?�=�@L��A��j?�a�?�AA���C��<DDQB�-:L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       43L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       1�fW=������4=*��>�ኽ����*=j�r�N"�>(^|?L*i;n/��cǯ<�4>�6��N6�̦�}*�>���C~�?y���J�=N�i�O>���L̽.�;h_�<f�o=���=L}ͽ�0�P_��L[��b�=
+�G=���;(�0o�=�ν�U�=��`�p��>+���n;�./�����E>Q�p�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       1                                                 L       idi,L       left_children[$l#L       1               	����                                    !   #   %   '   )   +   -   /������������������������������������������������������������������������������������������������L       loss_changes[$d#L       1A'e@���B�9Ac@    @���@��@�	kA	��@��(A�DA5&w@�(�@�i�@���?�`A%��AMtA/}@���@ϧ�A@���A2                                                                                                L       parents[$l#L       1���                                                     	   	   
+   
+                                                                                    L       right_children[$l#L       1               
+����                                     "   $   &   (   *   ,   .   0������������������������������������������������������������������������������������������������L       split_conditions[$d#L       1B�  @�  @@  B  B�  ���FR� B(  @   BR��E��rA⪫B�  @*��B�  C�rB(  A@  A`  B$�@�  C  B  @   A   �.�;h_�<f�o=���=L}ͽ�0�P_��L[��b�=
+�G=���;(�0o�=�ν�U�=��`�p��>+���n;�./�����E>Q�p�L       split_indices[$l#L       1   %         "                    '   $   *   %   %      '   )      &   (      %                                                                                                         L       
+split_type[$U#L       1                                                 L       sum_hessian[$d#L       1D�|,D;,�Ds��D%P�B��yB'��DiS�D"��A1��Bt�AѴ�D@�#C!�DOB��@ֈ�@���@� jBaD�@�#�A���B���D$ݤA��.C��A� C�R^BåA��<@��@�?�t7@'��@Dw@,�^A�ȢB �N?�
+�@K�?� AA�)�B<pdB���AM�BD!�kAP��AUh@C?Cz&L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       49L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       1�v7+>�N�\y����>.C��Rּ��\`��'->p�?\>�y�>��V��R����K����օ�=�cS����>�g.;�<�=���;��K��d(�.9=�QE��Ժ��<"	:��%6�3>�=4| �������M=f�=6W��Fۓ=%o�9�3<�߽�.����<������s=:��=��tO;Jl�֭�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       1                                                 L       idi-L       left_children[$l#L       1               	                                 ��������   !   #   %��������������������   '   )   +   -   /������������������������������������������������������������������������L       loss_changes[$d#L       1AA�BA*��B�@1'�@��@A-� @���?Ѕ@o�j@�n?�h@?6#@@�n�@ο�@�?���        @-�Am�A�                    ?�L�A1@��@v8@�w�                                                                        L       parents[$l#L       1���                                                           	   	   
+   
+                                                                              L       right_children[$l#L       1               
+                                  ��������   "   $   &��������������������   (   *   ,   .   0������������������������������������������������������������������������L       split_conditions[$d#L       1B5UU@   @@  B  B  A\��C� @�  A ��@�  B�UUGX B|  B  C� D�  �օ�=�cSB�  B  E�� =���;��K��d(�.9=�QED�  E��BP  Ekj�D4� =4| �������M=f�=6W��Fۓ=%o�9�3<�߽�.����<������s=:��=��tO;Jl�֭�L       split_indices[$l#L       1   %   %         "   !   +      +   !   *   $   %      +                 %   $                          $      $                                                                           L       
+split_type[$U#L       1                                                 L       sum_hessian[$d#L       1D���C�8D��A���C֍Bi�rD���A;"�@��C�"�AMJ�BNX�@��D�Y�BH��@-_@A��?���@�J-CY�CFnSA-�c?��{BI�c?��@]�(@Z��A��D�Z0@�ڌB*!s?���?���@�`u?���C�B���B5��Cc?���@!�AU }A*ίD�h8A�~?�$@��B��@��L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       49L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       )��ۭ;e�|�)1ɽ �y>��BO�<͍:=�	����?L�=�|�=���b��>�׾_]3�UAl�g;=�"�>LCe=����J:=�UO��iz��Y��\}�>�<��1��w�:�����E�<�!�� c=D��]{=�C=�v:��+<ܒϾ
+��=:ӽph/L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       )                                         L       idi.L       left_children[$l#L       )               	   ����                              ����   !   #   %������������   '����������������������������������������������������������������L       loss_changes[$d#L       )A�D@�O�@	��Af@��Q@
+�    @��yA��p?�h@�([@/m�?�c�@��5A%Z�@־�A�    @Ep@��)@���            ?���                                                                L       parents[$l#L       )���                                                     	   	   
+   
+                                                            L       right_children[$l#L       )               
+   ����                               ����   "   $   &������������   (����������������������������������������������������������������L       split_conditions[$d#L       )C�  @�  C3  BL  B5UU@   <͍:A$�I@@  A@  @�  E��&D�� @   D�� A\��@@  =�"�E�0 C:�@�33=�UO��iz��Y�A�  �>�<��1��w�:�����E�<�!�� c=D��]{=�C=�v:��+<ܒϾ
+��=:ӽph/L       split_indices[$l#L       )   %      )   %   %          !            $      %      !          $   '   !               "                                                                L       
+split_type[$U#L       )                                         L       sum_hessian[$d#L       )D�o�D��A�7�D�rwC��aA�/?��C�W�DV9A[�C��D@$^A��BC���B��+B"S?DL�A!?@km�C�4�@ے7?��?�*Ad��@J�A��C�	�A��BP�UB,�@�3�DDO�A�|?�� @
+KB���CS@$�B@�%�?�'�?�mSL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       41L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       5<>��Y��=Ȱ=v�Ӿ$rV=��?��w�#=O>$-�f,t��X�=��?!F?�W�����=�5��$=��?<�q�vU>	70����<��r>��t<���?��~>���=6�>%Ǽ�*=C��=T����L<~	ؽ%��=�E��Y��?l���=]�ݽ�3��K���2�=��	�1=��;�] �89�<c�*<L��=�m=�Sｺ��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       5                                                     L       idi/L       left_children[$l#L       5               	                           ����         !   #   %   '   )   +   -   /   1   3��������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       5A��A:߉A	"HAv�A��P@��@I��A-�<@�s�@-B�A�t@��.@#_�>��    AvkA��@��,@I,>�' ?QUq@�{$A"O�A,u�AzP?'�0@�6.                                                                                                        L       parents[$l#L       5���                                                           	   	   
+   
+                                                                                          L       right_children[$l#L       5               
+                           ����          "   $   &   (   *   ,   .   0   2   4��������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       5@�  Bt  B�  A  @@  A   By  @�  Da  A���A�  A�  D� B�  ����@�  BH  A�  Fk>9C*  Dp  B�  @M}�@l��F` A   B� =6�>%Ǽ�*=C��=T����L<~	ؽ%��=�E��Y��?l���=]�ݽ�3��K���2�=��	�1=��;�] �89�<c�*<L��=�m=�Sｺ��L       split_indices[$l#L       5   #   %      %   #   #   +   !      !      "      %       %      &   $            +   !       )   %                                                                                                        L       
+split_type[$U#L       5                                                     L       sum_hessian[$d#L       5D�I�DoVlD3=�C��C��%D1��@�~�C��C�M�B&�C�SGD,�A�v�@�n?�CcB�� BJ� C�4.AC4+B��@	��CA�[C�]�B��D�^A܅AL=?��m@�o�BU�|A�@ݡuB.��C��TA��A/SI?�?�*�B��?�'�?��C,�fA��A}��Cr�dB'�B���C�eSC�-h?�e�A /�A$Y�@��L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       53L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       %;h�3<I35���={ף��5�=�n��85�=0�7>�墽��g�-g��Q<��b<�3�>���?+z��Ƽ�"r�`G-��)��b^:��c=������=����cB=�qʽ��&=��#�Ě�;c��;]=�����=�<��A�k���|L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       %                                     L       idi0L       left_children[$l#L       %               	����         ����      ����                     !   #����������������������������������������������������������������L       loss_changes[$d#L       %A
+3�@��9@�KP@�R�A�;>    @ ��@�'�@�`    @�8?�%�    @���@�"A[\�A�@�N=@�
+�?ߑR?�                                                                L       parents[$l#L       %���                                                     
+   
+                                                      L       right_children[$l#L       %               
+����         ����      ����                      "   $����������������������������������������������������������������L       split_conditions[$d#L       %A�  C  BH  @@  @@  =�n�Cp  E�  F: ���gC�cB�j�<��bBH  F�  E���AL<<@   Eπ C�  E�  :��c=������=����cB=�qʽ��&=��#�Ě�;c��;]=�����=�<��A�k���|L       split_indices[$l#L       %   !   %                      $       *   '                 +   
+                                                                          L       
+split_type[$U#L       %                                     L       sum_hessian[$d#L       %D���D��^A�X�D��?D.=?�;A�� D|^BA�A�-�D��A�8m?�i1Dw�A�h�B�Ae�aD
+c�A?I@�)�AW[�Dj�[BK��A+�A���A}�XA�>,@���@�>�B�=�C׸CA�2?�p�@w�@-B�@��A0��L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       37L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       )��C:�3��C�=���j�[>��]�i�=�?�>�T������Z>�¼*���;�����=��=OO�?�Bt��p�?��;���K����?�=4����x��N��=  :<&w=�yb��I��r=� B���T=�
+=��ʽ���k�=7ƒ��'�<��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       )                                         L       idi1L       left_children[$l#L       )               	                     ������������               !   #   %   '������������������������������������������������������������������������L       loss_changes[$d#L       )@�;M@�λ@��ZAK�AM�@z�?� A �A>ߖ@��vA�?�֧            Ab<A(�@�b�@���@�r#@��(@���A.�                                                                        L       parents[$l#L       )���                                                           	   	   
+   
+                                                      L       right_children[$l#L       )               
+                     ������������                "   $   &   (������������������������������������������������������������������������L       split_conditions[$d#L       )C�  C922Ekj�C-UU@�V�E= B   @@  A'�
+E��rB�  D�  >�¼*���;�A�  E�N9A�DDB   DH@ Cw� Cf  A�  ��?�=4����x��N��=  :<&w=�yb��I��r=� B���T=�
+=��ʽ���k�=7ƒ��'�<��L       split_indices[$l#L       )   %   '   $   '   +   $      )   +   $   )                  "   $   (         %   %   &                                                                        L       
+split_type[$U#L       )                                         L       sum_hessian[$d#L       )D�`eD�@�A��oDA�Da@��ZANѱD4�;BE�mB��2DL�w@Ca?�r�?�4�A>�B��D"j�A�hAȄ�B
+��BA �C޽�C���@�X?�ZAvQ�Be��C	�C���@��A��@@�A�hB0�@��B/�x@��gC���B 	C�tB�&!L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       41L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       #<�V�<�b�� �<�E�*#�K�:>��H���z=�bJ=����X�߿g�l;�����	�=�׽�Z=��-?�c�=��Y���|>k^�����F��	2��#<%���7>'�X<�N��s��<l�W�H����s=zVH�ͷzL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       #                                   L       idi2L       left_children[$l#L       #               	            ����      ������������                  !��������������������������������������������������������L       loss_changes[$d#L       #@���@ߍV@AL�@�E�@�Y�?�(@z�PAl�A-c    @X�?�            A�A$�@u dA1"@��?7��                                                        L       parents[$l#L       #���                                                           
+   
+                                          L       right_children[$l#L       #               
+            ����      ������������                   "��������������������������������������������������������L       split_conditions[$d#L       #C�  Cm  B�iiBkD;� D�@ B�  Bp  A�  =���@�  E>� ;�����	�=��B�  BgUU@   E�( Cn��@�.�����F��	2��#<%���7>'�X<�N��s��<l�W�H����s=zVH�ͷzL       split_indices[$l#L       #   %   +   *   (         )   *   '                          )   (           '   !                                                        L       
+split_type[$U#L       #                                   L       sum_hessian[$d#L       #D�./D�
+mA��D�T�AZ�VAg�@'�+Du5�D't?��AI.AK��?ߟ??�+W?�p�C�{�C��A	}D%O�A'��@��?�Q�A:�|C�}�C%��C�@��@���@\nYB���D|�@��s@a��?��_?�� L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       35L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       -�}��:��տ$�Q<�՛�(�X�k0Y��'=%"���׾�d��>��e�?�	��;C�%=BO�k=ʀ�	k���ԟ�n�
+��`�>��ſf��=�'�=��I;a�;��=�W{��u>=0���PN>�;��F�;P� =��7߽ΡS���t�Vƺ<e�;�p`=�*����7���?L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       -                                             L       idi3L       left_children[$l#L       -               	                        ��������            !   #   %   '   )   +������������������������������������������������������������������������������������L       loss_changes[$d#L       -@�M�@�:�@�<�@� A��@�?�}@��`@�\�@��\A=@[U^>��t        @ط @F `A)6@�v|@���?T`@�NAan>y~�                                                                                    L       parents[$l#L       -���                                                           	   	   
+   
+                                                                  L       right_children[$l#L       -               
+                        ��������             "   $   &   (   *   ,������������������������������������������������������������������������������������L       split_conditions[$d#L       -Cm  CX  B�iC�  BE�A�  D  A�  Eg� A@  EB` @   B�  ��;C�%F�  B⪫B   DE� @��yCH  A�  A0  A@  =�'�=��I;a�;��=�W{��u>=0���PN>�;��F�;P� =��7߽ΡS���t�Vƺ<e�;�p`=�*����7���?L       split_indices[$l#L       -   +   %   *      (   *      !                              (   "      +      +                                                                                          L       
+split_type[$U#L       -                                             L       sum_hessian[$d#L       -D���D�a|AN��D�2C9{f@�I�@�-�D�b9By��BzB���@�~�@�+@��Z?��D���A�Y�A�H�B#�fB0"A��B�$!Bi�U@Xc�?�4?���?��fD���Aw|A�@��A�.�@p�=A��AI��A��B�A�jr@�B�A�zKB/��Af�X?��/@ksL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       45L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ):h�/;���!������<}7b:�r��b`���տMi�<���Ϳ�==����P��k�z>ρ�f�w���t<��?1��K}S>�yK�-�������{<�TȻ�A=�c$=�ș�~k��X���1k�=�^;�_=�y�<9�ս�Q���S���=�}gL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       )                                         L       idi4L       left_children[$l#L       )               	                     ������������               !   #   %   '������������������������������������������������������������������������L       loss_changes[$d#L       )@Њ�@�� @%�@���@�r�@�ێ>�,�@�'K@W֘@�l2@p�>�݌            @�?� l@�};?��@�p3@!?�T?���                                                                        L       parents[$l#L       )���                                                           	   	   
+   
+                                                      L       right_children[$l#L       )               
+                     ������������                "   $   &   (������������������������������������������������������������������������L       split_conditions[$d#L       )C�  ?�  E� Bh  A�  D�@ A�  AEډ@   F�  D�� A�  =����P��kA�  @   E�` @   C̀ A��
+B��UC�UU�-�������{<�TȻ�A=�c$=�ș�~k��X���1k�=�^;�_=�y�<9�ս�Q���S���=�}gL       split_indices[$l#L       )   %   &       %   !         +              "               "      $         +   *   '                                                                        L       
+split_type[$U#L       )                                         L       sum_hessian[$d#L       )D�5D�P,Ary�A���D�]@���A(�A��&Ax'�DȲ/AUl<@U*a?���?�<A[�@ث�Ab@��]A-�Dǘ�A��A-�@!U�?�F@)�@�ի@�V@��m@��W?��@��\@�X?���Dc$D,@��P@��@�j<@E��?��:?���L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       41L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       1;�)<T�˾󘨻��/>j���|����Z=��޽���9=7>��I�.�>>+��#��60<B�H>��ܽ�c�&ݏ?�>��V�?�x>�>�8�wJ�?	�b� _ӻ�D�<<n���� =S|<����;���>�`=X`P��'>�y<��R=?��ќռ��=�kw<%P���=�sl�y��=f�"�Y�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       1                                                 L       idi5L       left_children[$l#L       1               	                        ��������      ����      !   #   %   '   )   +   -   /����������������������������������������������������������������������������������������L       loss_changes[$d#L       1@ɮ�@�d#@�G�@Ը@�:�@�O�?��@�C"A�9@�r�@��@]��@ur�        @���@�Ī    A�@��@�7f@J��@��`?x�@
+��@�B�@�C                                                                                        L       parents[$l#L       1���                                                           	   	   
+   
+                                                                              L       right_children[$l#L       1               
+                        ��������      ����       "   $   &   (   *   ,   .   0����������������������������������������������������������������������������������������L       split_conditions[$d#L       1D�� E�� F��UB�  D�  E�� A�  E� @@  A�  E�� B
+ffB�  ��#��60E-� @�  ��c�C�  @   D	� E@ C%  @�  A�  C7  B�I%��D�<<n���� =S|<����;���>�`=X`P��'>�y<��R=?��ќռ��=�kw<%P���=�sl�y��=f�"�Y�L       split_indices[$l#L       1   '      $   %         )               %   )                        
+         %   %   )   %   *                                                                                        L       
+split_type[$U#L       1                                                 L       sum_hessian[$d#L       1DЩ�D�o�A�~�D��C�DA�Q�@��!D3JDF�vBi3$B�t�A)1OA3q�?�~3@+�(D�sCfA��WDA-�@��VBX�9A�By��@(�A�A �R@J:hC� �Cz�UA���B���B�
+�D)LH?�"=@)��@�o�B8�D@��w@+�BD�AU#?�K�?�?�~�@�.n@���?�b�?�(O?�L�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       49L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ;:�B\=��E�V���W>Ji@�4�H�$�<p��wX�=2�>���o)v>�R�;�CԾ䊢����?+wϽώ����L��(�?;��?+�>?d�ɻؾU:?&y��M_��}�=�@<�q�?6�<�|�kO���v=�i=��޽�β��ݼSW�<x�@�RU�=��ڽHs=��_<���ߠ=��=?>��r�2�$�=�a<Q��m�/���K<��ϽFc�֍j���=�"�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ;                                                           L       idi6L       left_children[$l#L       ;               	                                    !   #   %   '   )   +   -����   /   1����   3   5   7   9����������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ;@�jF@�lA���A8�@��:A*. @�b�@�Z	@RzDA�@���?�4 @]��@ɄU@���ApD@�$;@в?���A:Σ@�(�@��,A��    ?���@#��    A$�@�f�@J@�+                                                                                                                L       parents[$l#L       ;���                                                           	   	   
+   
+                                                                                                            L       right_children[$l#L       ;               
+                                     "   $   &   (   *   ,   .����   0   2����   4   6   8   :����������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ;B2  A  @@  F�L BKUUAEUUC�  @@  ?�  C�J�A�  A�  B�UUAEډF�� @�  B   B2��A�  A  F�?@��E|���ɻ�BX  B  ��M_@�\A   E� D6� <�|�kO���v=�i=��޽�β��ݼSW�<x�@�RU�=��ڽHs=��_<���ߠ=��=?>��r�2�$�=�a<Q��m�/���K<��ϽFc�֍j���=�"�L       split_indices[$l#L       ;   %   %      $   (   !            '   %   &   %   +   $   !      (   &   !   $   !   $       )   (       +   )                                                                                                                      L       
+split_type[$U#L       ;                                                           L       sum_hessian[$d#L       ;D�V�CҦ�D��4C�C��fB/��D�-�B�&AE�C��C�)B�eA>ED��EB6�Bշ�Aks�@_E�AF`B�0�A�B}��B��{BY@�@Ō?���D{YD�1B ��@kS�B]H�BN&�@��hA�B?���@�Z@�B=?�*B�E�BֈAOx�@>'�BY�A�|-A���B�H?�_(?��Z?���@���C5�aC��Crv�C��A�P�Ae,?�� @rL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       59L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       !�{�!�4$�}ڻ�I�ϱ��δ���3��C'>��K�]�"���W=�J_�$r��z�>��޼�����\i?h����J��A �=	���A�t�=�&��Ͽ(=!HP�*%�����;��>�ν��<��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       !                                 L       idi7L       left_children[$l#L       !               	��������                  ����               ��������������������������������������������������������L       loss_changes[$d#L       !@�|�@���?7� @��@��%        @�DA*@aF @�n�AU"A��    A�~?l�R?��@��@��                                                        L       parents[$l#L       !���                                               	   	   
+   
+                                          L       right_children[$l#L       !               
+��������                  ����                ��������������������������������������������������������L       split_conditions[$d#L       !C�@ D�� D  DU E�� �δ���3@�\@	$�A�  Eπ A�  A�8��z�B�  BE�B�  D�DDC�  �A �=	���A�t�=�&��Ͽ(=!HP�*%�����;��>�ν��<��L       split_indices[$l#L       !   +   '      '              +   !   )         (          (   )   '                                                           L       
+split_type[$U#L       !                                 L       sum_hessian[$d#L       !D�h�D͝@��D�8�A��?��@�kD�.�B��(A<�(Au�+C�B�D�M@Ni^B�+�@j_AP@o��A9��C�B�͜CF%�D�Y�B&tA�b�?�ko?��O@�F}?��?�X�?�kV@Ǿo@�\�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       33L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       +<!�:�1?"P$�&|y=�����?O����k�=�C�=,�(>�j�=��*���=֓Ͻ���G-N<>n?�=3�>�}�<]+?8��P����n?
+4ۼ���<�̹;ѧ�$�_=��м��n�[a <|��;�͗=���<$ռd�w�k�#=����@<ݰ�=�~<l��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       +                                           L       idi8L       left_children[$l#L       +               	                  ������������                  !   #   %   '����   )������������������������������������������������������������������������L       loss_changes[$d#L       +Ab�@�X @if$A U@ь�@��J@u��@��@�}.@���@��            @+X@�2@�>[A ��@�3�@�v@���@�V@��L    =w�p                                                                        L       parents[$l#L       +���                                                           	   	   
+   
+                                                            L       right_children[$l#L       +               
+                  ������������                   "   $   &   (����   *������������������������������������������������������������������������L       split_conditions[$d#L       +A   A���E�ʫA   @�  E�� E� A�  Bs��A�
+=Bk�=��*���=֓�Ez  C  C��A*��Da  BS�;Ey` B��IByUU���nF8����<�̹;ѧ�$�_=��м��n�[a <|��;�͗=���<$ռd�w�k�#=����@<ݰ�=�~<l��L       split_indices[$l#L       +      +                      '   +   *                  (   '   +      *      '   *                                                                                L       
+split_type[$U#L       +                                           L       sum_hessian[$d#L       +D���D�M�A�yDx�;D��@D)�A���D'A�C�=tD��BY?�Q�?�MAQu�@iȭC�2:C�P�A���C�T'B�D
+�`A��A\$K?�`�@�TC�ڎB�aC�	�B9�A���@�{B���C:��A�2Ak�@C�pC4ee@7�A�}�@�EA8>�?�2�?���L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       43L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ;�(7<�����>f�-���ﾋ�J=�`׼��|>�+���v@<���X�j�E�7��q�?v>Z�5��+��&#)?�V�@&0��GC����=-�4�9�	�C<��5�e��;�e��;�?A�ƿ��=%�w�O=��V�x.g=�Z�T8=�U�<&�����C<
+�i��wd;�Һ= }:BK����=��-��m�Ž�g�<�������<ԏ:<ທ���P=i�B>A
+=~�_�J�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ;                                                           L       idi9L       left_children[$l#L       ;               	                                    !   #   %   '����   )   +   -   /����   1   3   5   7   9����������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ;@��A$��A;�A,��A���@�%XA>�A
+��Ac�AE��@��L@�V@9 @څ@�b�@���A?\A�^W@���A'|�    A��@��[@�x�@�cJ    @M3�@�&�@뒖@��Z@��                                                                                                                L       parents[$l#L       ;���                                                           	   	   
+   
+                                                                                                            L       right_children[$l#L       ;               
+                                     "   $   &   (����   *   ,   .   0����   2   4   6   8   :����������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ;A  B   Bt  @ʪ�@@  CA  B  F�UA0  B5UU@�  A  @@  A�  BH  B�  @��A�  @@  E|����GCA�  @�  F�uUF�L <��5C   @   B  F�� B�  =%�w�O=��V�x.g=�Z�T8=�U�<&�����C<
+�i��wd;�Һ= }:BK����=��-��m�Ž�g�<�������<ԏ:<ທ���P=i�B>A
+=~�_�J�L       split_indices[$l#L       ;   !   %   (   %      %   "   $   "   %      !   &   "   "      !   %      $       "          $       )   	   )   $                                                                                                                   L       
+split_type[$U#L       ;                                                           L       sum_hessian[$d#L       ;D�
+D��C�| CN�,D���C8~�B��B��B���B���D�^C%lUA��B�(�A�)�Bf-!B��@��B�N>B��VAߺGB� Dx�}A�+�CF�?��A���B�R�A^�A�q�@5��BN��@���@�AsA��d@cR+@R�B��A�ͳA�Y�B6��A��A�%�B�BFDa�4A�<?���B���A�׎Av�o?�rB*��B˻@��A��A�-@&�?�?ȶL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       59L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       %�e�1��?2R����*s�?�Y��W?�6o�=�;;|�� �о��!?��G��js=P;=*�佦�˿T�<%�C���1<�)�>I��?6J��h��ۡ�Dyg=��+��|?<#i߼��7V��ī����ڽqjK=ӧk=��ҽ�6L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       %                                     L       idi:L       left_children[$l#L       %               	   ����   ����                              !������������   #��������������������������������������������������������L       loss_changes[$d#L       %@ʍ@�޷A:8@`��@��@���    @m�,    @��$@\?G�@?�0>���@A�\@�y�@�AX?V��@�pR            @!��                                                        L       parents[$l#L       %���                                               	   	   
+   
+                                                      L       right_children[$l#L       %               
+   ����   ����                               "������������   $��������������������������������������������������������L       split_conditions[$d#L       %CR  @   Cn  C���C�  B�  ��W?C�� =�;F�� B�  D�� E�� C   F+� E�P F� E� B�.����1<�)�>I��C&����h��ۡ�Dyg=��+��|?<#i߼��7V��ī����ڽqjK=ӧk=��ҽ�6L       split_indices[$l#L       %   )   %   )   '   %                    )      $   (                 (               %                                                        L       
+split_type[$U#L       %                                     L       sum_hessian[$d#L       %D�=�D�ÎA=�A��Dɡ:A#��?�RA}�|?��iD�/�A�W�@k�AɺA2��@�IlD��C��2A9JC@��}?��V?� �@k�1@��\A!��?��+@N�2?��NCϵ>D,�C%KFC�M�AɎ@�@�8k@+"$@H�w?�J�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       37L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       7�Q�>a�Ҽ��K>c?}��=�ϛ�R�';u�?,�>��?��绔s�?�0�7Q;�	��8�=��]?f���!���}K=���?���<ə�>OV�k�a?k��=���65������&%�<��߼!�
+V��V�/=�o�=�7e��8Q>L��=fh�<2�t=��?�ӏ<Ы�=��u;Jq�=0>ǽ��z=K�4��@�gC���l�=��g:^k"=��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       7                                                       L       idi;L       left_children[$l#L       7               	                                    !   #������������   %����   '   )   +   -   /   1   3   5������������������������������������������������������������������������������������������������L       loss_changes[$d#L       7@�=�@�-�@�D@�W@��A]P�@���@ݣ<@�dv@unA@i�A!(@�;�A��@��W?�+�@��I@�J�            >��@    @�+�@��?�#@�" A<4A`N�@�7�@�ŧ                                                                                                L       parents[$l#L       7���                                                           	   	   
+   
+                                                                                                L       right_children[$l#L       7               
+                                     "   $������������   &����   (   *   ,   .   0   2   4   6������������������������������������������������������������������������������������������������L       split_conditions[$d#L       7A�  E�� B   B�  @   D� @�  BD  B�  @��@�  F � @@  @@  @   A��@   C1��!���}K=���Bfy�<ə�D1� @@  E8@ A�$�F�EU@�ffE�� CH  �!�
+V��V�/=�o�=�7e��8Q>L��=fh�<2�t=��?�ӏ<Ы�=��u;Jq�=0>ǽ��z=K�4��@�gC���l�=��g:^k"=��L       split_indices[$l#L       7         %   *         !         !      $            +      *               *                (   $   !      )                                                                                                L       
+split_type[$U#L       7                                                       L       sum_hessian[$d#L       7D�0xB�D���B��A"w�C6D��`B���A�L�@�5�@��}CU�<B%��C��D?-�@�&�B��~A{Dp@S?�b=@6��@u�?�
+�B��JB�\.A�N\Avr�B2UC�ҔAd�UD;�8?ڏ2@]�B~�/A*O5Aa��?�d#@&�	?�)B��Ao1B�.�A��A���?�k@3�RAIzB�<@���CȜ�BQ�tAO�?�UD8j�AL&tL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       55L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       %9��o�t�\;R�T��w=7�<q,��n?�Q��z���"P�=W<�KC��W�y��R{>MSB<�@?4V0>�G��<=��"ͽEbN=�5����=;c�:��x="g>�:��C<�Z>뿽��A< �=EѤ���{�
+�r��"�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       %                                     L       idi<L       left_children[$l#L       %            ����   	   ��������                                 !   #����������������������������������������������������������������L       loss_changes[$d#L       %@�?@�m@�&�>���    @��A�        AW@��@��@63�A	�A\@�t�@�4�@��6@�j�@%^@P��                                                                L       parents[$l#L       %���                                         	   	   
+   
+                                                            L       right_children[$l#L       %            ����   
+   ��������                                  "   $����������������������������������������������������������������L       split_conditions[$d#L       %?�  F� C� B.�=7�B`  B�  �Q��z��A*��CR  A�UU@   BD  @   BP  CY  @�  @�  B�  BaUU�EbN=�5����=;c�:��x="g>�:��C<�Z>뿽��A< �=EѤ���{�
+�r��"�L       split_indices[$l#L       %   !       +   *                     +   )   *      "         )   )   )      *                                                                L       
+split_type[$U#L       %                                     L       sum_hessian[$d#L       %D�?�@�2eDͿ�@!��?�s�D�J~B�T�?�X[?��{C��D�ՀBl�A�3�B��8Br�SD�g�A6�fA�:�Br@kFzAO�B���@b.�A���B!��D���B��@�zt@�WA�܀@B�AW$�A�Q�@#�O?��UAJ�@},XL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       37L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       9�6�a�=H���?㶿aw>�������>c�����=B��Ŕ���?��b�(>���ƙ�>�! ��m��0￷�����i��=�^?�a�>�x�$w#���?��:>^�<YԠ���:���=���s߽�G��7<l�
+�#��#}���.<������<���<�u������2]>�9��rU=r�w��JM=0�Y�=T=��><f<(ΰ=��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       9                                                         L       idi=L       left_children[$l#L       9               	            ����                        !   #   %   '   )   +   -   /   1   3   5   7����������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       9@�M@Ą&A�x@���@Vd�AR_CA��Ae�@͖�    ?οPA�fA+��@��@���@���@��@�2�@�L>���?f�@��lAA4"�AlA ��@�?FD�@ߦw                                                                                                                L       parents[$l#L       9���                                                           
+   
+                                                                                                            L       right_children[$l#L       9               
+            ����                         "   $   &   (   *   ,   .   0   2   4   6   8����������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       9@�  B�  A�  @TIC�  C,UB�iiA�  E�  =BF=�nD�� @l��B�ʹ@�  Ap  @   D��(@   B�  @��9BecDB��A�  C�  B�HYD�n@   B�  <YԠ���:���=���s߽�G��7<l�
+�#��#}���.<������<���<�u������2]>�9��rU=r�w��JM=0�Y�=T=��><f<(ΰ=��L       split_indices[$l#L       9         "   +      '   *   "                 !   *      "       '   	      !   *   *   "      *   '      (                                                                                                                L       
+split_type[$U#L       9                                                         L       sum_hessian[$d#L       9D�z�DgfD1�)De@���BݥND1�B���DT?��3@�u�B0vB��C�q�B��A��=BE�D3�C c�@���@s�A'�BƈA�B�B+�C�C�Byr|@���B�X�A�|A
+�A�c�A�]nD2@���BӚNA���?�.�@]�?��i?�/�@מ4@b�A��@D[@��ZA��ApEA��Cǅ�B5��BN �A-G�?��>@}��B��A:��L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       57L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       1<��=�W�1��<���>��t��&�������f=�8>�hO=�j=�JC��
+]>��M�F��>��<�����5?*�t����>@�!�_�Z>	����i�?�;!���(=�-b��
+K<�ߗ<E�V=΂e;�N��lo���=7:}���=���@Xd���<�'G���7��=*ʄ=��e<9,#�g�=Z�R<%�l>�wL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       1                                                 L       idi>L       left_children[$l#L       1               	����                                    !   #   %   '   )   +   -   /������������������������������������������������������������������������������������������������L       loss_changes[$d#L       1@���@�H�Ao��@��/@�۴    @���@zY�@�A�@�^�A'��@�mX@��<@7��?�N�@�C�@�a�A�r@�̌@\ndA:g@�@@���@�R�?�T<                                                                                                L       parents[$l#L       1���                                                     	   	   
+   
+                                                                                    L       right_children[$l#L       1               
+����                                     "   $   &   (   *   ,   .   0������������������������������������������������������������������������������������������������L       split_conditions[$d#L       1B�  B  @@  @   B�  ��&D�� A�  D�  A0  B�  AÎ9CQ  E�  E�  B�  A�  F�EPUUAEډF�;�B  @k�Ez  A�  ���(=�-b��
+K<�ߗ<E�V=΂e;�N��lo���=7:}���=���@Xd���<�'G���7��=*ʄ=��e<9,#�g�=Z�R<%�l>�wL       split_indices[$l#L       1   %   "      %   )             $      )   *   )         )   "       $   +   $   "   +      &                                                                                                L       
+split_type[$U#L       1                                                 L       sum_hessian[$d#L       1D�VDH.VDM�VD&��C��A�1�DI��A�*�D"q�B��YB�ƤC�K�C�5�@��@A?�A�PD(�A���B>��@}?�B�ܥBcb�C��aC�{k@]6^@P+�?�=�A+�1?���AR�u@�4VD��B7 @�BGAr�?�3B9$,@��?�B�B}P{@F��B9ēA&x�Au�C���C�еA5V�?�~�@v�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       49L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       #<~�><=y�?��;���?�U?�ha�Z��>R９ʽ�Cd?a��>1�[=v.;>�<��.��������?8&�>��D,�?���=���<�2��{<�g'�[N�=>�;�����J�=ݖ��"����#;�7+>�<�� L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       #                                   L       idi?L       left_children[$l#L       #               	   ����            ��������                  ����   !��������������������������������������������������������L       loss_changes[$d#L       #@�@��@��[@�e@�.�=8�     A-� @�q�@�~@ne�        @Æ�@�@3A@��@��	?��@    @.��                                                        L       parents[$l#L       #���                                                     	   	   
+   
+                                          L       right_children[$l#L       #               
+   ����            ��������                   ����   "��������������������������������������������������������L       split_conditions[$d#L       #G� F8� A�  A�  CR  C׀ �Z��E�� A�  B�  A�UU>1�[=v.;C  A`  B�e�C6*�B��B  �D,�D� =���<�2��{<�g'�[N�=>�;�����J�=ݖ��"����#;�7+>�<�� L       split_indices[$l#L       #          !   %             $   "      *              %   *   '   *   &                                                               L       
+split_type[$U#L       #                                   L       sum_hessian[$d#L       #D���D�W�@���D��tA��D@���?��%CmֻD�9�@��MA=8a@�c?�-B���C! �B��PD�G@K�@�xX?�ǦA)�mA��Bk�B�dBU�RBHD�An��DjxD3�@�@?�mS@ޮ?�$@��@FΡL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       35L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =<�����=��=�G��m�>�����<d�?����p�>�F��jJ>~OT>���(G���>C�?��6=�����>t�8���>e=H�=���{>�����?D��=���/�%j=��u���K=��̙=8��>)��=jq�������S�(�==��F���=��E�CY���j�=d��sQ�=�;�����=&�M=L���]�>�k=n��>=C9O�9 �;��ν�z=�;L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idi@L       left_children[$l#L       =               	                                    !   #   %   '   )   +����   -   /   1   3   5   7   9   ;������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =@�NA@�,&@�S@�j0AJl~@ߗ�@��@.N@�@�L�Ax�AwV@�v�@�jAN#@�vC>\�@?vK�@�X$@a��@�U    @��z@��pA� A /^@^N@��d@���@���                                                                                                                        L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                                     "   $   &   (   *   ,����   .   0   2   4   6   8   :   <������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =B���A�  C922CRUUE�  BD0�Dk  @   @�  C  A0  B�  C  E�` F� E�N9B�  @@  C�� F7� B�  E�� >eBy  @�  A�  E�p @   @   @�  D(��=��u���K=��̙=8��>)��=jq�������S�(�==��F���=��E�CY���j�=d��sQ�=�;�����=&�M=L���]�>�k=n��>=C9O�9 �;��ν�z=�;L       split_indices[$l#L       =   '   '   '   (      *            )         )   $      $         (   $             +      "   $             '                                                                                                                        L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =D�q�CLCD��tB�xPB��Dp�D]bNB�H�@��-B�GAO�CG��C��BO�DPp�A��gB�$S@p�a@��B��A %�A]@B�CShB.�PC�e�B��A���B�$DLvbA~�@��A�<BQ�%A��?�&-@&eK?���?�Bo�A��8@���@��B@93�@� ;B��B+H�B!��@J��B_�Cb3%A��qBl� @��EA,6A� !A�x'C�\�Cΐ%Ae��?�[�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       5�E�T���+>s4Ҽv�žՔ$?ϻ=t�$�6%��nә�">o>�n�?z�r>�z�=���#�=/*l��=l�ȓ<��`�����<g�u�?��>�$.?¾J?R�2�<aѾ�|�>���:8ʢ<�h+� ��|�+=L+���=������u��n5�$��>7ѽJ��=���=;��>V�м���> Z���o=�׽���=4><we8=��JL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       5                                                     L       idiAL       left_children[$l#L       5               	                           ����      ��������   !   #   %   '   )   +   -   /   1   3������������������������������������������������������������������������������������������������L       loss_changes[$d#L       5@�3@͈�@�3�@�۫@�%�@@�@��@�xs@>af@��Ak�@�CV@v{�@�B�    @���@���        @���@<�_=�� @�~@w<�@UP�@G��@F�X@��U@���                                                                                                L       parents[$l#L       5���                                                           	   	   
+   
+                                                                                          L       right_children[$l#L       5               
+                           ����       ��������   "   $   &   (   *   ,   .   0   2   4������������������������������������������������������������������������������������������������L       split_conditions[$d#L       5BH  BD  @   C���B��E�  BH  B�  BOKKB@  A�UUE��I@   E�p �#�EV` B�  �ȓ<��`Ez� C�  @   A`  BP  Bl  E�ʫF,eUB���B�  :8ʢ<�h+� ��|�+=L+���=������u��n5�$��>7ѽJ��=���=;��>V�м���> Z���o=�׽���=4><we8=��JL       split_indices[$l#L       5            *   *       "   )   (   )   (                      )                     &      )   $   $   (                                                                                                   L       
+split_type[$U#L       5                                                     L       sum_hessian[$d#L       5D�e�D��?B��WD�/BBA�tBgnpD�U�@�OuA�m@�\A;ϺA[CBb�P?�C�DK[0D)P�@�?��lA��EAvۘ@#�`@�md@���@��@���@�}�A���B�|D,�?B�W�B�G�DǛ?��
+Ar��@��AR�a?ƥt?�L?��B@�z�@2��@:��@/�]@RjD?��c@y��@_x�@���A7y@�nB�@�5L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       53L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ?�<T���7h
+��%=��f��4
+���w�>Z�<=�"I�9u�bL?#�t?%e�	�<�����i�>������>$�N�r1I��G>;�7��"?h(����?�VI���0�T���b�=}xJ�P|[�o���r�=�[���Xp=r$��m~='�t��z=�SF<i��="ǽ��G�R0E<��:�Р=�H��g��<��c>�=U��vC=��>��<JB���@�<ԽP���_<.�=�;��8u�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ?                                                               L       idiBL       left_children[$l#L       ?               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9   ;   =��������������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ?@ƪ,@�>�A�@�J�A�A�YA�@��A�	A�t@��z@׃�@�8�@��A	VA��A��A>�lAI1@�!�@ǈ2@Uw@��@�@�C�@L�@N�?�4?���AlA��                                                                                                                                L       parents[$l#L       ?���                                                           	   	   
+   
+                                                                                                                        L       right_children[$l#L       ?               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :   <   >��������������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ?A$�IFz�Ce�D@� Dd@ @�  @�V�E�� A��@ʪ�B�  B>  F��B�  C�  A쪫B�  @UUB�  A��A   B�  B�  B.�Fv B  F�� @   B�  B�@ E��r=}xJ�P|[�o���r�=�[���Xp=r$��m~='�t��z=�SF<i��="ǽ��G�R0E<��:�Р=�H��g��<��c>�=U��vC=��>��<JB���@�<ԽP���_<.�=�;��8u�L       split_indices[$l#L       ?   !   $   '            +   $   +   %   )   *   $      '   '      !   +   +      %   %   *   $   "   $         (   $                                                                                                                                L       
+split_type[$U#L       ?                                                               L       sum_hessian[$d#L       ?DʫVD���C=��Do�EC�υB⥙B���DT��B֢EC�^AN �B�mA��@���B��cC�z�C��WBA�BkR�B�IC�+A�M@|��B��BcPAr��@\5O@�?�@D�B&�A�|A��C���B��%C�sM@�V�B.�BV��@�h�AX�A�
+;A/�C���@}zd@�h@5��?�R@Bsr@��DB&�cAr#�@�w�A)z�?�Yk@ �@E�\?�%�?���?���B�CA��A|�A���L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       63L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       /�������p�*�4=�$����2�Ϭ�>4��2_5>Q��ۦT�i�]�'	�>�8<�{&/���n?�ֽ�������>���"P����Y����?T�?[<�>B$I�7�=���N��_��Du=�Aʼ5�;��q=N��'�B;�ͨ��K���"<	b��O"=W�=�UE�	M<��>�<�i�Nv7L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       /                                               L       idiCL       left_children[$l#L       /         ����      	                              ����      !   #   %   '   )   +   -����������������������������������������������������������������������������������������L       loss_changes[$d#L       /@��@��r@��*    @�G�@�NA~l@��@ �]@��@��>A&�@�u�@*�>��?��k    @���A*)�@�Y�@�Y�A�.A�@�^&@��L                                                                                        L       parents[$l#L       /���                                                     	   	   
+   
+                                                                              L       right_children[$l#L       /         ����      
+                              ����       "   $   &   (   *   ,   .����������������������������������������������������������������������������������������L       split_conditions[$d#L       /?�  E]� @   =�$�A�  F�L E��UA�  E�  F�?F�+B(  E�� D@ B�  @������BNp�Dc� Bp  A�  C  E�` @�  C�� �7�=���N��_��Du=�Aʼ5�;��q=N��'�B;�ͨ��K���"<	b��O"=W�=�UE�	M<��>�<�i�Nv7L       split_indices[$l#L       /   &              "   $       "      $   $                !       *      %   %   )   $      %                                                                                        L       
+split_type[$U#L       /                                               L       sum_hessian[$d#L       /D̑A�v�D��'?�\Aߠ�D�k|C{}YA��@��D�EB�gkB�#C/oGA@	�A+�@��V?̆iD�.wB"ѼA��=B���Bw#�AdQhA�-HC	�A"ڬ?�w�AZ?��?�\�@u@5C�/D4�VB�1?�1XA-��A��BA~\B�&[BQ+�A�ARTb?��5@η�A.��C;�A�[L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       47L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       /;��<3��
+�)��*K=���G��>���;�p��i��>_���l�w��>@pm��<7?1HսD��=�G����?�&[���>w�̽�"A�=�i=:�ǿ�g���J�=뛭<���=��_;�vk�q�=ծ:�"�|����Լu&W>���L~<pF;�N�=�"�B��=��{� ��1������L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       /                                               L       idiDL       left_children[$l#L       /               	                        ����            !   #   %   '   )   +����   -����������������������������������������������������������������������������������������L       loss_changes[$d#L       /@��}@�=�@�ր@��A9Ɓ@;�x?���@���A�kA��@�e�@h�x@��    >~�@�&A
+�AT@+��@�@@��@�@�@�;O    ?��8                                                                                        L       parents[$l#L       /���                                                           	   	   
+   
+                                                                        L       right_children[$l#L       /               
+                        ����             "   $   &   (   *   ,����   .����������������������������������������������������������������������������������������L       split_conditions[$d#L       /D��1A�  A��nA�  B�  B�  E�� B�  F�*�B  B�  B4  A�  ��<7@   C*�@l��B�UUB)�(B/h@�  DT� B  =:��D� ��J�=뛭<���=��_;�vk�q�=ծ:�"�|����Լu&W>���L~<pF;�N�=�"�B��=��{� ��1������L       split_indices[$l#L       /   '   &   +   &      )         $      +      (          '   !   '   (   (         (                                                                                               L       
+split_type[$U#L       /                                               L       sum_hessian[$d#L       /D��vDȃA���D��C��Ad^�@��<D~`8C��C���C	>/A?��@�?���@
+'D'��C��Co}@�i@���C���B�iA@� ?��sA.,�?��?�_?� �?���C�y*C��2B¦|Cz�@�WCv�?�Q@F�*@c߹?��2B��C"%JB�d	@�Q @�$J@��A�?�5L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       47L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ;;��e=10���>K�Y<�|+�=�y���B�?|���-F=%�9�㧿��P<�vt?�aԽ�{�?O?N�`=d������[��<���>�瞿���޿�
+���W��9>�&= �>0��<כؼ؝�=�b��f�=�E"��c� �<Փҽj<���{�<��S<����:_I=�菽�L3=Y2�<�L��>M��4����=�b��2-�=u�"�I��8��<�RL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ;                                                           L       idiEL       left_children[$l#L       ;               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ;@�@���@�	+A{��AA�A %`@��A
+�@��@AX"K@��Z@�$@�t�@���?�[�@�5�?��@��@�f�@�,�@>��@�)J@��@^�@��@@��#@�L%@Z                                                                                                                        L       parents[$l#L       ;���                                                           	   	   
+   
+                                                                                                            L       right_children[$l#L       ;               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ;A  A�  Bt  A  @@  B0  A�  D�  F$ B(  E�` A�  @�  @   ?�  @X  E7� C�  @��D;� G	� FZ� @   D;� B�  F�C   A33C{  = �>0��<כؼ؝�=�b��f�=�E"��c� �<Փҽj<���{�<��S<����:_I=�菽�L3=Y2�<�L��>M��4����=�b��2-�=u�"�I��8��<�RL       split_indices[$l#L       ;   !   %   (   %      (   &         %      %   )         !         !                   %          !                                                                                                                           L       
+split_type[$U#L       ;                                                           L       sum_hessian[$d#L       ;D�� D�G0C�[AC43�D���C1��B��dB�{�B���B��D���B��BH��B�;G@UðB��A#FB7��A��B�F.A�e�D{յB|A���B�v�AB�!B�A��lB�C�?��@�&A�	B��A��?�k]B3��?�)}@@A�ǉB 
+8A�GA��?�tD��CվAs��A�,Az�K?э�B_�ABYD�@%H�A��?���B�#@`��A��<B5Bc"L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       59L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       �3*�ʽ��!����ĿV:�����{:���V��>�IVD�J��>zS0�f/h;�꨼u�%�r�M=�˥�h��}�=������K���[=�5�K�n��<~����W*<{����Tc��i�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L                                      L       idiFL       left_children[$l#L                      	   ����                        ����   ��������������������������������������������������������L       loss_changes[$d#L       @��Z@�0�?�@ @��?�o0@7�    @f�9>�@@o�?��>3 @߁@:��@��0    =5-                                                         L       parents[$l#L       ���                                                     	   	   
+   
+                              L       right_children[$l#L                      
+   ����                        ����   ��������������������������������������������������������L       split_conditions[$d#L       A�  C�  B�  C�@ B�  FX%U��{?�  @�  @   B|  @   F�< D   D�U�u�%A	$�=�˥�h��}�=������K���[=�5�K�n��<~����W*<{����Tc��i�L       split_indices[$l#L          !   %   %   +      $       !   &   	      	   $      '       !                                                        L       
+split_type[$U#L                                      L       sum_hessian[$d#L       D�`DǶ�A3A�D�BA:h�@�g@��Dś@�P@��A�@Y�_@syn@[ED�-c?��@���?�]f?� <?���@��<?�0�?�%�@T8?�Jl?��n?� �D�ĉC+F�@B9�?��nL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       31L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       /�꨻
+=ھ�C�~7�<nU>$)�Y�>��f���G=�xz��;\? �|��ݥ��<t=X����c?H]E��5s?F
+�=iN�?>h������c�!��;J?h�<ʛ���K��et����=�R��bʽ�"�����=�.M��f:�[�<�u�T��=�䮻˳=���=ݐ�<��g=�Ͻ��������L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       /                                               L       idiGL       left_children[$l#L       /               	                           ��������         !   #   %����   '����   )��������   +   -������������������������������������������������������������������������L       loss_changes[$d#L       /@���@�B"@�Ϳ@���@�=t@;��@��@��$@��A�$Al@�?ׂ�@�P@	Τ        ?�l@Uf�?r��@�{@�/�    @���    >v(�        @��?S�                                                                        L       parents[$l#L       /���                                                           	   	   
+   
+                                                                        L       right_children[$l#L       /               
+                           ��������          "   $   &����   (����   *��������   ,   .������������������������������������������������������������������������L       split_conditions[$d#L       /D�� EZ� B  A���B�  B�  C_� A0  @@  B�UU@@  EN� Ap  F =X����cB+��B2��E@ D"� A�  ����F�X ��;JF�| <ʛ���K�B<  @@  =�R��bʽ�"�����=�.M��f:�[�<�u�T��=�䮻˳=���=ݐ�<��g=�Ͻ��������L       split_indices[$l#L       /   '       )   (   %   %   %         %                        +   (          "                         %                                                                           L       
+split_type[$U#L       /                                               L       sum_hessian[$d#L       /D��DD���A��B�^D�tA
+h{Au�A �&Bp�[D��Dr5�@�@wk�A^�i?��8?�,�@�#"BgJ�@�RD�A�0A�v&Dn!�?��@i+6@g�?��@�ܫ@��'@�v�?���A�k B�f?�h?�f=C�8`B�.�@��Ah6Dk�>A�@"�?�?À�@��n?�_@��cL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       47L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ?��N<��H���=�a1���
+<�L]��H�=O��?)â�*����1>%�?�؃�S����>� W��Xn���?N��<��z�������>�/�n�
+>�n���޾Y\����t���0?T�����^;�͜=v����~k:�I�=��}��yx=��w�/�/=�sý������=b�=:���������5�=�nx�di�<�]U=tB ��ѯ��Y����=(�.��ü�u¾Gy��=&+�=�+�;��(����� WL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ?                                                               L       idiHL       left_children[$l#L       ?               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9   ;   =��������������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ?@��z@�ˋ@׵�AJ�VAL�Ao�A}m@�o'@�U@�v�@�ɎA&� @�E�Ak A&k1@�=\@�H�@�/7@��@�Qq@��L@���A6�@�AK�c?<\�@*@
+��A��@	vtA �                                                                                                                                L       parents[$l#L       ?���                                                           	   	   
+   
+                                                                                                                        L       right_children[$l#L       ?               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :   <   >��������������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ?A  A0  Cg��A  Ap  B^��C�  D�� @�  @   C+  C�  D�� B�  A�  A  B  B�m�B  Cd-F�^�B�  A'�
+F>��C��E�D�B�  A$�IC>  B  F�p ;�͜=v����~k:�I�=��}��yx=��w�/�/=�sý������=b�=:���������5�=�nx�di�<�]U=tB ��ѯ��Y����=(�.��ü�u¾Gy��=&+�=�+�;��(����� WL       split_indices[$l#L       ?   !   )   '   )   )   +   '             (            (   &   '   +   "   '       (   +   $   (          !      "   $                                                                                                                                L       
+split_type[$U#L       ?                                                               L       sum_hessian[$d#L       ?D�B�D��CZ��C�ȠDd�C�B�Q�C��B�KA�p,D]��B�,�A�[�A�DB}�B�9�C��C@��A�A)�<A���DS~~B#�:B�`Bi~�@��A̡�Ap�$A5�A�BZB`#:B(PiAkkqC���@ @G0A�џ@�d?@�|�@Ω�A�?�W�D;trB�P`A��A���A�W�Aj�?BN�@�T�?�`@���@���A�y)@��AI}�@>h�A��@�OZ@7�B%��AP�hL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       63L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ?;۳��[�W=Vd�<�?l�l/�=�-��6�=�ہ��I��A�=�r�=1GZ>�mL�c�j>>�->=[�>xD����=�n?)���u'��ڋ??q��4�=y�?��?%��K忒��?(1���<��=�&��^�<��O����?��.)�=�{����=�k߽K�_�Q+�N2<�����=�=�,�<F�}��\W;�^7�<]�<�Mp=��=��/�=�}-���b�[�=�=�˵�kV罭�<�#L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ?                                                               L       idiIL       left_children[$l#L       ?               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9   ;   =��������������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ?@�1�A�AAYD@���@�k�@졓A6��A��@�y>Al�@�8�@��A��@�Q�@��A��@��A�@�*\A.�@���@�X[@�p�A׌@��@��@��)A�@}��@�S�?��V                                                                                                                                L       parents[$l#L       ?���                                                           	   	   
+   
+                                                                                                                        L       right_children[$l#L       ?               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :   <   >��������������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ?@   D  C� D� DH  B���C#  C4  Fz�A   DW@ EK  B�  B��Cm  @�  C�  F�UBp  D  B�  A�DDA�  D@� CRUUA�  @   E۞9Dj�@�  Cn��<��=�&��^�<��O����?��.)�=�{����=�k߽K�_�Q+�N2<�����=�=�,�<F�}��\W;�^7�<]�<�Mp=��=��/�=�}-���b�[�=�=�˵�kV罭�<�#L       split_indices[$l#L       ?          +         +   +   )   $   '             '   +         $            (   "      (      
+   $   '   !   '                                                                                                                                L       
+split_type[$U#L       ?                                                               L       sum_hessian[$d#L       ?Dɖ�D-��De��C�ǼCQ�D[��B
+"C���C&1C"�B<KBDH.�B��A��dA�H�C��&A9O�B�EBd�A]�C�B��A	�A�X�D@��B`��A�<_@���At�A19@ֱQC�B�A�t�A ^�@c��B��@&��B(��Al<q?�#@�2�B�K�B>1An�DA��w@��@٣/Au��A^�D;��A��>A�g�AЪb@d� A���@*�@6�SA`��?��@��(@��@�N�@�#L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       63L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       !;�H�:�&?zb�<�B��B�?�����_<T��ڡ�?2t��D�L<��(>�8����<��=�4ڿ]7þ`)m>yT����=֡����F=v�<�Ǻ)N���=n�*������=��A���7���;���L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       !                                 L       idiJL       left_children[$l#L       !               	   ����            ��������               ����   ����������������������������������������������������L       loss_changes[$d#L       !@�*@���?��@_�iA&�+?>�0    @S��@��X@�7(A�        @f%E@�]G@	�d@���@V�    @^F                                                    L       parents[$l#L       !���                                                     	   	   
+   
+                                    L       right_children[$l#L       !               
+   ����            ��������               ����    ����������������������������������������������������L       split_conditions[$d#L       !G� C�� C��CH  A��=Bp  ��_@   B�  A�  C�� <��(>�8B�  A�  D�� A�  A�  >yTCz  =֡����F=v�<�Ǻ)N���=n�*������=��A���7���;���L       split_indices[$l#L       !       (   '   *   '   '       %   %      %           )   %         "                                                           L       
+split_type[$U#L       !                                 L       sum_hessian[$d#L       !D�O�Dț�@��XDŮ A�o�@���?��DÅ�A�#c@�6�A�"4?���@D�YAv�nD���A�/A��@6�@3�nA�w_?ڭXA?aV@]�`CR�D�=�@�j�@b�@fQ�@��n?���?�1"AZ�s@�)L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       33L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       3�A�*;�q��	U<uu��jI���-�%�F�F�2=�����8�?B�>�dA�P��5�/<��缋k�?M�%�B�>�+>��ֽ��ÿh�<��B�Y�?'�5�p��JD�A��=�v;Ny��l�>^�b<W�=l�m��o�=:����Y�"aF=������;xW;=Z����?��7=�5ս�%s�"�9=T)��l� ��~�<n�WL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       3                                                   L       idiKL       left_children[$l#L       3               	                           ����         !   #   %����   '����   )   +   -   /   1��������������������������������������������������������������������������������������������L       loss_changes[$d#L       3A �@�'�@�(�@q�]@	��A)��@
+h@�]pA�@<8?�Ml@�s�@@P�?�"p    @�:�@���AzAB��?��#    ?�bP    @N3@�Μ?�0@8�?� @                                                                                            L       parents[$l#L       3���                                                           	   	   
+   
+                                                                                    L       right_children[$l#L       3               
+                           ����          "   $   &����   (����   *   ,   .   0   2��������������������������������������������������������������������������������������������L       split_conditions[$d#L       3C�  D��1D�� @   B�  E��rD� C�� @�  Fk>9BiUUA�DDDw� B  <���F[ @X  B   A33A�  ����@   <��B@�  D'� C
+  F�D  =�v;Ny��l�>^�b<W�=l�m��o�=:����Y�"aF=������;xW;=Z����?��7=�5ս�%s�"�9=T)��l� ��~�<n�WL       split_indices[$l#L       3   %   '         %   $      %   !   $   +   (      "          !   %   !   "              (      )   $   '                                                                                            L       
+split_type[$U#L       3                                                   L       sum_hessian[$d#L       3D�h�D�!�B�s{D��A�îB&��B�D��gCq�@�_�A"WbA��VA���A�O?�?D�@�L�B�B�C��@�s?��kA�Y?�PI@��	A���A-��@�6�A���?�\�D=A�C���?���@���Ab�2B��kB�!=B/�B?��k@^�@���?�SZ?�[�@��@��A��Ax&?��T@L/@�!A�4,?�%EL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       51L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       %�"��u5߻�鲿��~<��E�Am">�h��:T
+�G�,��.�>��z?N��>��;�6����?=��2>�͡?�t1?Q��?�VШ;J	C<���M�=����:�7��Pw�������=���>o=�3�~��=ޅ����;å�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       %                                     L       idiLL       left_children[$l#L       %            ����   	   ��������                                 !   #����������������������������������������������������������������L       loss_changes[$d#L       %@��@]�
+@g�)>�Q�    @K.l@�        @ZJ@|��?��@�X�@�c�@�7�@&�F<l ?���>�S�@��?��^                                                                L       parents[$l#L       %���                                         	   	   
+   
+                                                            L       right_children[$l#L       %            ����   
+   ��������                                  "   $����������������������������������������������������������������L       split_conditions[$d#L       %?�  F� F�X D� <��EF�  F �:T
+�G�,B0  A�UUC�  D��1B��IC4  B��fB��B���D @ A�  A֪��VШ;J	C<���M�=����:�7��Pw�������=���>o=�3�~��=ޅ����;å�L       split_indices[$l#L       %   !                                    !      '   '      *   *   *         (                                                                L       
+split_type[$U#L       %                                     L       sum_hessian[$d#L       %D�vp@j�D� �@T?�$�D�) A��?��+?���D«�A>�<@�Y�At�D��,C�1�A��@�f@�I�@V A%��@�ICKHcD�6 Bc�$COtEA�?���?��?�j�@I�?���@Th?��b@��@�;@>�O?�݄L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       37L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =���(�W��=t��0�<��<=����\�g�hs�=���i$�=8��!�>��>�龺!���о��!>�r�������Y�>n7��'bm>)e�?4,���?_�*=�u?1�c��p���$>���<%1��<���m���2=�E�ip@<���&��*��$o�=�叽1&:���p�껪��=�s> BԽY������f��'�F> �b�E<��۽;��=�];��U����=���x)�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idiML       left_children[$l#L       =               	                                    !   #   %   '   )   +   -   /   1   3   5   7����   9   ;������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =@�6@���@�Q�@� �A.Y@���@�@��`@�P@���@��@��@�v�@�r@��X@���A	��A�&@��.@XSX?�TA�;@���@���@��
+@���@��@S��    A�3A�                                                                                                                        L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8����   :   <������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =BkA�  E�� A�  A  B���B<  C�A�E?� C�  A�  B�j�Gfx B   B�  A+m�B   E�� A�  B���Ck��@   @   @@  B�  E�  E��n��p�B���B8  <%1��<���m���2=�E�ip@<���&��*��$o�=�叽1&:���p�껪��=�s> BԽY������f��'�F> �b�E<��۽;��=�];��U����=���x)�L       split_indices[$l#L       =   (   &            '   %   '   +      '   '   '      "   %   !   "         *   %           )   %               (   "                                                                                                                        L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =D�b�Do��D!DPC��D��D�qB���C���BĈ!A-�D��B��wC�7�A=�Bj*5C%<�C��B�Bv��@���@%�C��^C\��A .CB���A3�C��A+`�?�p}B<��A6_B��~B}p�C��AM0�A�٥@�VWA٤�B
+&]@��?��G?���?�r+C���A�&@B��gB���@��{@;�A�B�)y@��@��~B���C�i�?�k;As�A�\�A��@��G@�JxL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =9��/>?º�U�J?O~<�i��~�o!�>Y�/?���D>1����ܿ�����=.�??޿K8�?�W<�T��������=;A?o�޾��S?)!V���Z���D<agľǙ��v>^�=�0ɼ�Q+<7� ���'=rIR><�v�VŻ<��ڽ���=e�s=GR:��>~����X.�=^�=߾�D}�럇=�ړ�֫��g�#�5<^FH�L|��`���}=C��N̢<� ]L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idiNL       left_children[$l#L       =               	                                    !   #����   %   '   )   +   -   /   1   3   5   7   9   ;������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =@��A1H�@�a�A?&AZs@��@�b@���@m�@��\@�*@�H?��A�@�8�@ZB�?��(?�    @�5@A�1@�]�@�f@�^~@��@�գ?��p@ŉ�@���@ɨ[A��                                                                                                                        L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                                     "   $����   &   (   *   ,   .   0   2   4   6   8   :   <������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =A�  E�x�BH  C��E�  A�  @   D  D� B�UUC�J�@   B|  D  F� C<9B  E(� <�T�B�8VA�  B�  B  B   B(  BX  B  C�  D#@ @@  A   =�0ɼ�Q+<7� ���'=rIR><�v�VŻ<��ڽ���=e�s=GR:��>~����X.�=^�=߾�D}�럇=�ړ�֫��g�#�5<^FH�L|��`���}=C��N̢<� ]L       split_indices[$l#L       =      $      '       &          '   %   '      %          '   (   $       *         "   "   )   %   &            &                                                                                                                        L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =D��Bԏ3D�ħA�E�B�}�B1�%D�6�A>��A�DA|�B���B5sA
+�D/�DO>'A?�@9c�@���?�@��KA/$BoȩA�~A���@���@.��@��BC�d�C9��C�#�C�X�@��C@%S�?�U?�r{?�JP@�)�@bs�?�m5@�aq@��A���B �@��i@#�(A���AHk@U؎@�g?�d�?��X@�� ?��CeqCU�EB�7B��C�iA�CB�,�Cw�#L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       /���5�> >���>B�뼮.����@?�~>�.i�S�O��.��;F�<�w=���?F��ݞ?\��=��?h��[:>�� �0>'sF�ٷ?vj\���<�X�����=�q��JՏ�ܢ�=���=�һ�zow��5<���=�&��Ä18�eI��b�:��=t�S�k���k�;�9=�O=�s��9�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       /                                               L       idiOL       left_children[$l#L       /               	                  ��������                  !   #   %   '   )   +   -����������������������������������������������������������������������������������������L       loss_changes[$d#L       /@��@E$n@e�+@��@���A_�@;��@���@�I @�y@x��        @��?a�@���@���?��x@�+%@�J2@��@�Q�@�gq?���@,1O                                                                                        L       parents[$l#L       /���                                                           	   	   
+   
+                                                                        L       right_children[$l#L       /               
+                  ��������                   "   $   &   (   *   ,   .����������������������������������������������������������������������������������������L       split_conditions[$d#L       /A   E(� B|  E�j�EZ� B1$�B�C^D  A�  EJ�E�P �<�w=���@   B�  @⪫E� B�  @�$�B���BF��A�  E�  B�  B�  <�X�����=�q��JՏ�ܢ�=���=�һ�zow��5<���=�&��Ä18�eI��b�:��=t�S�k���k�;�9=�O=�s��9�L       split_indices[$l#L       /      $              *   *      %                         !         !   %   *   &          %                                                                                        L       
+split_type[$U#L       /                                               L       sum_hessian[$d#L       /D�o�D��A���B�,�D��G@S��A�l�B8�	A�[
+B EbD��?��a@)Ak|�@r�A���A��[@��9A�3|A'M�A���B糀D��A;g5@@VR?���?�	Aq��?ھ�A��@�ih@T�?�>�AP�@Ԓ�A	��?�kA`�A�3�B�7�A��'A���D���?��ZA �j?�zD?�2`L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       47L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       +��c��w�f�*�=�"/=���5%����Q��<]I>�7q�����X=��\���B�я�����=�Ǿܳ�?8fp�RM��
+�>p�v��P8<��(���l<�h<����7����<>A�=�D;k�R���6=H��=F0���}�=#����Ӫ=E��y�<zP��6��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       +                                           L       idiPL       left_children[$l#L       +            ����   	                     ������������               !   #   %   '   )������������������������������������������������������������������������L       loss_changes[$d#L       +@���@F�t@�?�p    A2A�@��?Ry�A	^�@���AO�@���            ?��A<&@�?�@�4�@�#}@z� @�H!A	n:@���                                                                        L       parents[$l#L       +���                                                     	   	   
+   
+                                                                  L       right_children[$l#L       +            ����   
+                     ������������                "   $   &   (   *������������������������������������������������������������������������L       split_conditions[$d#L       +@   C���B
+ffB���=�"/D�@ @@  @   B�  F@ @@  A�E�P =��\���B�я�B�  A(  F� B   E� A   B�UUA�  E�0 ���l<�h<����7����<>A�=�D;k�R���6=H��=F0���}�=#����Ӫ=E��y�<zP��6��L       split_indices[$l#L       +   %   '   %   '                )         !                      !      %      "   %   "                                                                            L       
+split_type[$U#L       +                                           L       sum_hessian[$d#L       +D�@�An��D�b�A[�?�ݥC��D�(�@8{A-CbWB_/!B��D�(<?�r�?��#@�ׂ@~�C>��B�>Bv)A�q�BY�WA��C�pD\A�@��?��CI=B�*A�=�A?}}A�G<AJ-A�!A5�@?�BPXA���@G�A���C�3�C^�"D$�wL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       43L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =���
+>� ��K�u��u4?,������=�ԋ?zr����(?��V�������8ؗ>Xuڽ�[O?ym�>���-H�?X�
+���?�jg?	ƥ<�ag�O���b�Ƚ���?`����N>�f���D�<B�=� k�C=���=�#����<^
+�=��2=�П=Z�>WWO�I�+=����<oS8�!��e�<޾ +��w=� �V3�>�g�,�:Įx=��<�Rk���3=)��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idiQL       left_children[$l#L       =               	                              ����      !   #   %   '   )   +   -   /   1   3   5   7   9   ;������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =@�E�@���@�{�@��L@��*A��@ܕ&@��@�c�@��@�04@�1�A?�@ʄ�@�t$    ?;DX?���?��@>���@a��@=�@@E*�@�;�A;z�A0�tAc@Z"J@�N0@��V@�c                                                                                                                        L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                              ����       "   $   &   (   *   ,   .   0   2   4   6   8   :   <������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =E� AP  BkB��C?  BV��B�  E@ @   A�  D  B�  B�  A�  B�  ��[O?�  A�  @	$�D�� B  @@  Dr� A�  B���A@  D@ @@  Bi�B|N�A0  <B�=� k�C=���=�#����<^
+�=��2=�П=Z�>WWO�I�+=����<oS8�!��e�<޾ +��w=� �V3�>�g�,�:Įx=��<�Rk���3=)��L       split_indices[$l#L       =   $   &   (   '      (          $               '          &      !      (   #         *   )      #   '   (   &                                                                                                                        L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =Dĸ�BI�D�k�A�'A� Da�D!&@�2�A��jA`SA�l�DNz�B�ܛC�ՄCPّ?�i1@ǘ?@��AL&�@0z{@��h@ԥ�A$�)D �C6� A�RB;�@�ҞC�f9C6Z�A��?�@X@�H)?�MP@K�?���A9��?�&{?��{@j#@l��@0�l@xh�@���@�HtC�Z�CNBLB��Bp�A�"A��AB�A�@e@� Bc	C���A��C!%A�cAқL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ?� m���>=^A�=�F����>F3����>��нU����9�W4e?!�=��'�Ŝ=��?C����b����>9G�Xv����<�@n�^�s��"�?=�S�ޛ�>�������>�Ź>�)��l�n=��:�{��o�u<���N�/=�l �{e�=Sս�xK=u��<8��,]<;��/��${�,�Ǽ
+�?��%���J��=�U�;��*�8e�=�=ļ�� �
+�g=��=��<��U�=����O�o;�O�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ?                                                               L       idiRL       left_children[$l#L       ?               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9   ;   =��������������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ?@���@޿@��T@�fA*v�A(�|@���AD�A Rf@�@�+�AC�A��A:��AV8@�n�@�(�@��A�h�@�F@�Ҙ@��P@�9*>��P@Á�@��A�2A��@�M'AJ@�8�                                                                                                                                L       parents[$l#L       ?���                                                           	   	   
+   
+                                                                                                                        L       right_children[$l#L       ?               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :   <   >��������������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ?C̀ E��rD� CUUE�p @   @   @�ffCt>BH  D� E]� C�  D@� B$  E�p @�  BӪ�A0  BP  C  B�  F�Btq�@�  C@ A   B�iiA�  @�  Bp  =��:�{��o�u<���N�/=�l �{e�=Sս�xK=u��<8��,]<;��/��${�,�Ǽ
+�?��%���J��=�U�;��*�8e�=�=ļ�� �
+�g=��=��<��U�=����O�o;�O�L       split_indices[$l#L       ?      $      '              !   '                   %       !   *   &                *   &   %      *      %   %                                                                                                                                L       
+split_type[$U#L       ?                                                               L       sum_hessian[$d#L       ?D�^�DaZ�D-c4C5CD4CL7DC��B���B�n�C�"D\�B*��C!wLCR��C�P�B8SB�B+&BB��uA�N�B���Cí�C:�@L�B";B�{�Bn��C"x�B@��BoF[CZ�@A� �@ᾲAM�A�_B%0m?���A��jBEʴA�4�?�B1PB��C��5A �B���B�\{?�Ʀ?���@C�B	B���A�s0B!�A��C�MA��;A|kB�:A�\^B�,A��&CD�<L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       63L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ;�.�����=���Q�c��>Ef��#�D�[?/�p���k>���>W?�P߾�C<�o\����=)�?[|N�`�?�qQ��up���?�E<{kj>�.E�}5?�q>��[��w��>��<Bx��?�\<��l��>=U<��ؽ�5{:�2ѼV�f`=엢:����9�<�J�<6�=��1=�ӷ���X<+�C>Xҽ��N�=��V</����<�_�/t�=&���GL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ;                                                           L       idiSL       left_children[$l#L       ;               	                                    !   #����   %   '����   )   +   -   /   1   3   5   7   9����������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ;@�}@�:@�?A�@�ӆA>�A1��@�@�?j@��:A�5@��j@���@���A �^A@8@��@�X�    ?�Q�@��n    @�g�@�=C@��4@!B�@��D@���Al�@�r�AK�9                                                                                                                L       parents[$l#L       ;���                                                           	   	   
+   
+                                                                                                            L       right_children[$l#L       ;               
+                                     "   $����   &   (����   *   ,   .   0   2   4   6   8   :����������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ;A0  CI�E�
+�@�  C+  D  E�ʫ@   BT  CZ��@ǔ6D�  B�  A`  Bx  D� B�  @�ff�`�?B�  Ex  ���CJ� @   @�  B�  @�y~E�� B��Bt  C���<Bx��?�\<��l��>=U<��ؽ�5{:�2ѼV�f`=엢:����9�<�J�<6�=��1=�ӷ���X<+�C>Xҽ��N�=��V</����<�_�/t�=&���GL       split_indices[$l#L       ;   &   '          (   '          "   '   +         &   (      %   !       (          (         %   +       (   )   '                                                                                                                L       
+split_type[$U#L       ;                                                           L       sum_hessian[$d#L       ;D�f6DS�Dzx�CăC@HCZ�_DC�GC�~�A�F"C'��A�;�CQ�A�B~vD3��B���C���A��i?���AKܨC�@V6A�p�C�dB��S@)��@Ę8A"#1BU�?D��B�j�B��B��JC%{B�$�AR@�A.�.?��B黱B��A޿AQ1B��DBzcB[B Ӈ?�U�?�q�?�7@�5�@y!�@ǵ�Ap�B��C�m�C��-B�$�A�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       59L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =<;�p<ᄾ�)�p>6o7�)�>�|��ʴ=ʻM?/Ǿ�{X<�8(?#�����/���V>�Oٽ[
+?go?:�꿊ȣ��$�>�H_;�#&>jI�?� �=k��k�����>B~O>�N��WR:�%=���;��=ǳQ<8�轈��=��o��D�<�;�ʽ���=��⼘����5;.R���~H=O��>+!<�G����P��䝼[3� ��k(=���=y�H�xs�SO�=��L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idiTL       left_children[$l#L       =               	                                    !   #   %   '   )   +   -   /   1����   3   5   7   9   ;������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =@���@ŀ�@���@�j@��@�@�G&@�k@��\AUB@��5@�:�@�s�@�~�A0��@�Al��?��p@�'y@J�A3At@��)@�gG?�YH    >۲�@2�x@xc�@�gP@���                                                                                                                        L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                                     "   $   &   (   *   ,   .   0   2����   4   6   8   :   <������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =F�L BUUA���D� @@  C� A�  @uUU@@  @$�IA�  B�  A�  @@  Bp  @`  A0  B   E� FKƫB�UUB�  B���@   CG  =k��Ap  Bl  A@  B�  Eπ :�%=���;��=ǳQ<8�轈��=��o��D�<�;�ʽ���=��⼘����5;.R���~H=O��>+!<�G����P��䝼[3� ��k(=���=y�H�xs�SO�=��L       split_indices[$l#L       =   $   %   *            %   !      !   '      "      %   %   "   %      $   %      '      %       &      )                                                                                                                              L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =D�.D���C%Cd(yD�$}A��	B���C?�xB0B���D�5nA�v@�NA�^XB��ABe�Ck�A�&OATswAuoB�CB;]hD�Z�A6J5@��m?�fG@���Aq@�UYA�[Be��A�}�A�q@�$�C ��A�D�@C@���@��A`��?�b�Bx&iA!AؖA�$�B��D�?�5�A��@h�?���@��,?�V>@=uAA��@9 @m��A��@�L|BH �@�P�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       );zo� n?�<�/O��WO?H�w��s<�#�?!۹>�����-?�EI>���=�6��xM=��Z��?�i�+#�?=�/<˪�>0|�?wٽmJ;2�=������<X����=���<��>ڽ�1<"��!s�v<��t�=54=�M�=��/L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       )                                         L       idiUL       left_children[$l#L       )               	   ����                        ����         !   #   %��������   '��������������������������������������������������������������������L       loss_changes[$d#L       )@|�@p�@�w@[@�_h@]�4    @ex�@2��@��6@l��?���@�@�A:��    @�ˣ@���?���@�t�@�g1        @��                                                                    L       parents[$l#L       )���                                                     	   	   
+   
+                                                            L       right_children[$l#L       )               
+   ����                        ����          "   $   &��������   (��������������������������������������������������������������������L       split_conditions[$d#L       )CR  D�� Cn  A   @�  C�� ��sC4  E�� F� @   C�  @   C2  E� =��ZB�  A�  @�  B�IA�  <˪�>0|�B�  �mJ;2�=������<X����=���<��>ڽ�1<"��!s�v<��t�=54=�M�=��/L       split_indices[$l#L       )   )      )      *          )               	   )          )   &      *                                                                                  L       
+split_type[$U#L       )                                         L       sum_hessian[$d#L       )D���D�OA<�D���C�4jA)ze?�=�D���A��A�&�C�q�@y�E@�0'D�JB3�@��!@;��A��E@E$jC�Z
+B�_�?�� @0�E@��(?·�D�H�@Ѩ�A���A���?���?�~Ah��@��j?�R�?���C[LB��B�A�x?�G1@u��L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       41L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =<|𽽰d+=T�>*9q�]*=!:a>�(�?̗��c�H_�>��>��<�b1>����Rg?AHn�i�^>���<L����<F��?��^>�߃����<?��>�6S=5?7��<;��%��<MQZ=��׽���=/�����]�=��Y�U͛;Ɏ$�t?��o2��5����s<�ܮ:� 2>��=����c�׽K��=�;2����fn����=���=��Ƚq��=�L����P=��<����L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idiVL       left_children[$l#L       =               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9   ;����������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =@���@�f@���A	��@��@�)l@�H�Awr@���@��R@�_�@�b�@|I�@�u@���A
+�@s��@�0@��J@͟jA`�@9Y}@;L@���@�:�@��@��@�7�@�F@}g�                                                                                                                            L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :   <����������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =B
+  @�E�� @   E� DY� D���B4  @��SC:�B�  C  G}� A�  Fr0 A�  C  E$� A��B � A�  A�UU@   BX  B�  CC� B&ffEB` F�� C
+  �%��<MQZ=��׽���=/�����]�=��Y�U͛;Ɏ$�t?��o2��5����s<�ܮ:� 2>��=����c�׽K��=�;2����fn����=���=��Ƚq��=�L����P=��<����L       split_indices[$l#L       =   (   +               '      +   '            &          %      (   (   &   *       +      (   (         %                                                                                                                            L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =D�R�C���D�^vB���C��D��?B8�B;BT��C��xA��B�$nD���B0]@ƴ�A�@��oB'��A3?UC�	C"��A��@��BK"~A�L�D|��A�ExAa��A�bP@��1?�b�AQ��A�G?@v݊@3UB��@�oABA@G�QB���A~�gB���B��@�}A���?�D7@��B�4AU�+Aq��Aj��Dn�B`Q7@l�aA���@��?@�jA��'@�T�@�@#�PL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       5<����(<{5�=�����s;��>HS>�OϿ2�ѿC���f�=X�{�vm>�f¿?>/��>�����;�a5�v�u�� =ꤢ��P=?=>����(9�6�?'��=><>���V 6��?o=�����"����=��нTc�;�����=s=`QG�>����o�;��⺿�&��=!��=�=l˼�"�-{�=�c����<�nsL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       5                                                     L       idiWL       left_children[$l#L       5               	                                 ������������   !   #��������   %   '   )   +   -   /   1   3����������������������������������������������������������������������������������������L       loss_changes[$d#L       5@R�@�t�@leK@���?���@���A>o�@FI�?݌@|@�&@[�@@��`AB�@�x@=�            ?1W`@�6        @Mj{@��@B�6@�Ð@�@A��@ ,}@z'�                                                                                        L       parents[$l#L       5���                                                           	   	   
+   
+                                                                                          L       right_children[$l#L       5               
+                                  ������������   "   $��������   &   (   *   ,   .   0   2   4����������������������������������������������������������������������������������������L       split_conditions[$d#L       5@@  A�  B�  B���F$��D�� AffB�  D@� B  F%-�@�  D�� B�  E�� B1  >�����;�a5C   B  =ꤢ��PD�  B@  B  B�  F%UA  B^֚@   ��?o=�����"����=��нTc�;�����=s=`QG�>����o�;��⺿�&��=!��=�=l˼�"�-{�=�c����<�nsL       split_indices[$l#L       5   %   "      *   $      !   )                      $   +                  (              "   "      $   +   *                                                                                           L       
+split_type[$U#L       5                                                     L       sum_hessian[$d#L       5D�f�B�=D�2Af�dA���D��B�W�A.&@bEXAl�!@���DGP�D"ȣB���AnA3A�?�;�@T?��A6�9@X?�?��u@0��D:BT�TAy�OD�nB+nCB=�@��AG<@ɺ@a@ͶA��?��@5�D8�#@��xB:�A���A8��@��D`QBX!�A樂ANo�A�TUA��?�M7?��}A%�@eL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       53L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       9<�۽_͑=c�b���������=�䁽@�6?N)L=�� �=ٽ�r+?{�>��W=�'��*̅��H��~<?�d>S��u���m���B޾��Z?l�=g��?C��?��k=UER�)v�<(�6�wҐ;1Ƚ���=V_>1��<��=�D��,���s;����N<156���9<�=�d���z�<��%>)�d=��(�<G=��ҽ�_�>	=0���Aag=)5�L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       9                                                         L       idiXL       left_children[$l#L       9               	            ����                        !   #   %   '   )   +   -   /   1   3   5   7����������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       9@��6@���@��_@ў�@�\�A
+��@�u@㭡@�b�    @�+�@�6A (A%.,A�+@�L\@��?��u?��@k~�@���@��@���@�'�@��A�A@�ep?t��A\                                                                                                                L       parents[$l#L       9���                                                           
+   
+                                                                                                            L       right_children[$l#L       9               
+            ����                         "   $   &   (   *   ,   .   0   2   4   6   8����������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       9E+� C9  @�  C0  @S��BH  @p  CX  @�|B=�� Ekj�B4  E��IC33D%  BbDDA�k�A�  Cn��B�  F1UA�  B�  B�  Cl��E�P B�UUAk��B���)v�<(�6�wҐ;1Ƚ���=V_>1��<��=�D��,���s;����N<156���9<�=�d���z�<��%>)�d=��(�<G=��ҽ�_�>	=0���Aag=)5�L       split_indices[$l#L       9      )      )   +      !   %   +       $          %      *   +      '   %   $            '       *   +   *                                                                                                                L       
+split_type[$U#L       9                                                         L       sum_hessian[$d#L       9DĄ;D&�gDb>D ܠA���C�܀C���D�@AW�?�jA�"?C�ؔA�>�B���C�2�D�B���@RL%@���@���A���C�0�B<�@��A~��B:��B��@���C�\rC��C��B��A�9y@VS?��@pJ?���@-~S?��Ac�Y@]��C&��C-nA�=A:�\?���@��A��@��@���B$B�B
+�i?��C@��C@L�C���Bf@L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       57L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       9<T/�����=�z=�;ާ;�b�=�w7���u�r��?4�w>���B�;>��7=��"�ˡ?6ML���@>;��>����v����>*9#����>��!����?'���6~�=���LKA? �$��.=���|�W�k��=D�Z�Ik�=�����)Y�&��=¼H��<���������C��p===�B��i�=T.�;dׅ=����eݽ�w{<�EԻ�M��1|���=�Xm�-sKL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       9                                                         L       idiYL       left_children[$l#L       9               	                                    !����   #   %   '   )   +   -   /   1   3   5   7����������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       9@fT%@�ǡ@���@�8@�5�@�
+�@��@��"@�DmA\�@�D7@�8�@��T@�S�?T�h@��@��    @Nj�@�҂@���@}��@�	�@�4�@�jF@�(V@�~X@�0?��                                                                                                                L       parents[$l#L       9���                                                           	   	   
+   
+                                                                                                      L       right_children[$l#L       9               
+                                     "����   $   &   (   *   ,   .   0   2   4   6   8����������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       9A   B���C  @@  C  A��@�  B�UUE�UA0  B�  @�  BИD��D�  BrB�  >��B�  B���B�  EPUUC&UUFKƫE�<rB\  B�k�C
+UUA�  ��.=���|�W�k��=D�Z�Ik�=�����)Y�&��=¼H��<���������C��p===�B��i�=T.�;dׅ=����eݽ�w{<�EԻ�M��1|���=�Xm�-sKL       split_indices[$l#L       9      '   +      '   *   #   +   $   "      &   *   '      '             *      $   '   $   $   )   *   '   "                                                                                                                L       
+split_type[$U#L       9                                                         L       sum_hessian[$d#L       9D�.D�K�C���C]�Dc��C�oHA��PC
+�}@�	sC�5�D#d�B6)C��A���@AD�B��A�c�@v�E@sv�@�j�C~0JDf�B��@��A�pB,�C�"�A��n@�!?���?�B��B7��A���@���?��i@)l@C*L?�U�B:�CO�CBcB5D2�@d�B��@[�6@?�A
+�3A�D�BZK�A�pCv��Cr	@�C�A,~�?�PZ?���L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       57L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       =;Z:��uN<=C�L=��L�ߏ�>4�|�62�=:L?�׉�����O��˖�>f��>2�̽;(üЫ*?C��=$��>U�߾�vf�&a��?ݓ� ��}�
+>��"C<>�{潠~'��t�> B=鼃�U> ���O?=b�۽��ؼ'���]�y;�x�O�5��	=�+����r��lI<��`��;��=���1G=gW�5�=OX��X�=��P��Hf�nؼ�N{=wϚ;l�SL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       =                                                             L       idiZL       left_children[$l#L       =               	                                    !   #����   %   '   )   +   -   /   1   3   5   7   9   ;������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       =@�SA@�h�@߱�A��@�N�AbU@��@��A��@�Q�A�4@f0@���@�m#@��@��*A
+8�@�    A ��@���?�@@��@�M�?�`�@�y�@�&�@�A�@�ף@�!�@�S�                                                                                                                        L       parents[$l#L       =���                                                           	   	   
+   
+                                                                                                                  L       right_children[$l#L       =               
+                                     "   $����   &   (   *   ,   .   0   2   4   6   8   :   <������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       =E&� E��9Ed� A�  C;  @@  B�  B�  A�yA�UUF,eUF�� B�  F^ G, A@  A   B  >U��A���BF��A�  B�  A0  @�  B�  A�  C.  A�  F�� A�  =鼃�U> ���O?=b�۽��ؼ'���]�y;�x�O�5��	=�+����r��lI<��`��;��=���1G=gW�5�=OX��X�=��P��Hf�nؼ�N{=wϚ;l�SL       split_indices[$l#L       =      $      &   )   )         (   (   $                            (   *      *   &      (   "   )         (                                                                                                                        L       
+split_type[$U#L       =                                                             L       sum_hessian[$d#L       =D��fD!�Df�C�fC��C�9D�1C}p@羼C�Aj�A��C�0�B��DB:C ��A;�O@uA@Z<aB��zCɢ.A<;1@:�YAs�@�5ChՎB.bBBh�BGօC�uB��B@B��6A5"@Q̶@�"?���B[�A���C,J�Cf��@���@�ץ?�p6?�*{@�y�A+6�@���?��0CA�B1�A8J[A�7�B9�$@��@���B/]�C��%B�@A���B���L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       61L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       1�FB�>P����>�ǿA
+h=l����>7:�?M<��4�=�p<{��?0�<�h>�0i��>�1?}.ʽ"�3�ީY=�ck��U>?]w鼚�R>��h��d����νgm�<��<�fH=��<>�$=_���E�����|�<fۍ<�s����>=��:=P�Ve���#=Jȫ�q��=6�:� 3��V8L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       1                                                 L       idi[L       left_children[$l#L       1               	            ��������                     ����   !   #   %   '   )   +   -   /����������������������������������������������������������������������������������������L       loss_changes[$d#L       1@�ë@�-z@n�@���@��@��V@��@���@r�$        @��s@=�.@�lD@�]d@˛�@]f?�|8    @���@�x?��x@/��@�6�@��-@�~�@��                                                                                        L       parents[$l#L       1���                                                                                                                                                  L       right_children[$l#L       1               
+            ��������                      ����   "   $   &   (   *   ,   .   0����������������������������������������������������������������������������������������L       split_conditions[$d#L       1A�  C�� D�� B��rC�  @�  B�  @   C1��4�=�p@@  E%� @   E�  A0  ?�  E� �"�3B�UU@   E�  E�� C&��B�  EE� B�  �gm�<��<�fH=��<>�$=_���E�����|�<fۍ<�s����>=��:=P�Ve���#=Jȫ�q��=6�:� 3��V8L       split_indices[$l#L       1      %      *   %      %      *                        &             %   
+   $       (                                                                                                 L       
+split_type[$U#L       1                                                 L       sum_hessian[$d#L       1D�<,B�_�D�V,B�E@�ۓD��DY�iB��(Ab8�@�L�?�<:D-,Al�C��CŴJB>ѫB
+��AF�?�CL�xC��@�;AJ�6C�L�BD�EBVQ�C��Ae oB��A�78A$%@�i�@���CE�4@��oB��HC���?���?�	�?��A2�C�?�A��@AJ��BbBC�h@��C9�C�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       49L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       <k\ۿj��<���qP����<O�B?�_�4������<��D�5w?a0���&j<D�0>���]
+>ڿ7���?��;lА�I��=G��/���ƽ�(�=�y��������f=a��>c<ׁL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L                                      L       idi\L       left_children[$l#L                   ����   	   ��������         ����                  ������������������������������������������������L       loss_changes[$d#L       @�O:?��2@wyE?ϧ$    @��@�P�        @� @��@.��    @��2A��@��@cg�?�lA?�                                                L       parents[$l#L       ���                                         	   	   
+   
+                                          L       right_children[$l#L                   ����   
+   ��������         ����                  ������������������������������������������������L       split_conditions[$d#L       ?�  F� F�  D%  ����F�@ A�UU�4������Fv B�I%@   ��&jE�� DH@ B���C̀ A$�D�@ ;lА�I��=G��/���ƽ�(�=�y��������f=a��>c<ׁL       split_indices[$l#L          !                  $   !           $   +                +      !                                                   L       
+split_type[$U#L                                      L       sum_hessian[$d#L       D�e[@i^pD��@ ��?���DÄA6GL?�B�?�ҎD��B��A��@G D��B��	B���An��@��@�WD��HCLJ7B��@�#�B��Av3IA��@�?�?�l@?���@��	?��8L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       31L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ���b�C;,2�	�}�5�����? �!=*a�2�q?B�h�³ɽ�'�=���Լ�>
+�>��2?����Mե�r=�-;Y��=e<�=RP;�C=[Z=~�ýb@>Pm�v�sL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L                                    L       idi]L       left_children[$l#L                ��������      	         ����                  ������������������������������������������������L       loss_changes[$d#L       @l?k?��@Hf�        @4=�@��@@��A�A@PT    @��E@�pd@���@�L�?�Ԁ@&�                                                L       parents[$l#L       ���                                               	   	                                    L       right_children[$l#L                ��������      
+         ����                  ������������������������������������������������L       split_conditions[$d#L       ?�  D   CS  �	�}�5�DY� Cn  B2Y�B  B�  �³�B�  @l��D  @   B���B  �Mե�r=�-;Y��=e<�=RP;�C=[Z=~�ýb@>Pm�v�sL       split_indices[$l#L          !      )              )   *   +             !         *                                                   L       
+split_type[$U#L                                    L       sum_hessian[$d#L       D��@l9lDÑi?�j�?� D�%	A6/�D@�aDC��A!9[?���C�X)C��D�vCD��@@Z@�E�CQ��Bd�SCZ&C�ÆA,D+�C(�oA���?�%w?���@��?�o�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       29L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       1<I]�=1|6�m\w<���>]ֽ�[��Fu���vY=^Q�>�ı<l|=����Gپr<�=�><�� �=۝]?b�>i�x��1�9�>��$?g�������3����!��*@J=�4<(�0=G��;F޿���-�*�c=n�>+N�=EM�=�_���Ľ^��=T�=��v����6�=<[�>'�>0�<�ݞ����L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       1                                                 L       idi^L       left_children[$l#L       1               	����                                    !   #   %   '   )   +   -   /������������������������������������������������������������������������������������������������L       loss_changes[$d#L       1@[�[@mob@��@W��@ƯF    @�X@@�-T@Ȇ�@�@@�p�AP0@�bq@���@��	@�o @��@��@���@�*V@�P@�B@r�$@�0�@�,�                                                                                                L       parents[$l#L       1���                                                     	   	   
+   
+                                                                                    L       right_children[$l#L       1               
+����                                     "   $   &   (   *   ,   .   0������������������������������������������������������������������������������������������������L       split_conditions[$d#L       1D� D�� B  BИB`  ��[�@�܎A�  A�  F
+UCl��A�  @�  A@  C{  C�  D�  @�  F ( E�^9F ( A@  E�� @   C\  �3����!��*@J=�4<(�0=G��;F޿���-�*�c=n�>+N�=EM�=�_���Ľ^��=T�=��v����6�=<[�>'�>0�<�ݞ����L       split_indices[$l#L       1            *   )       +             '   &   *   )   %                $       &   $   	                                                                                                   L       
+split_type[$U#L       1                                                 L       sum_hessian[$d#L       1DĻ8D�x4C�Du9�Bݷ&@e�C�@0CR�}D@��B8��B�Z3B�s�C�cJB���B���CyAD;]A�N�A�$�B�IA��<BJ`B�C�@���C��@B�ޫA�HBӬ?A ��CE��BNĐC�Bg)�A7�AH��@εsAz��A��A�l�A��,@�?@��B.ErA(sBZjP@r  ?�	�B>KC��wL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       49L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       5�;��9S�о��<!�
+����]�;��׼{e�>&�]�'G��4��=�T��@\���G>�m����{���>����{�?Y�����N�Z�?����<�/���z��W�*�b�?&Ħ��W:�n?�X���c5=5.����=@���y�<��^���=����E�~=�@7;��,��xĽ�ҵ=���� �ͼz�=B@-�,�1<��s��Z���=�RGL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       5                                                     L       idi_L       left_children[$l#L       5               	                  ����                  !   #   %   '   )   +����   -   /   1   3����������������������������������������������������������������������������������������������������L       loss_changes[$d#L       5@��@�>
+@�1�@��#@�+R@�iB@É@�:�@Ÿ?A<@ ј    @rլ@tl�@��@]�/@�� @���@�ԣ@��)@���?���@h2�    ?� @���@
+��@>�N                                                                                                    L       parents[$l#L       5���                                                           	   	   
+   
+                                                                                          L       right_children[$l#L       5               
+                  ����                   "   $   &   (   *   ,����   .   0   2   4����������������������������������������������������������������������������������������������������L       split_conditions[$d#L       5C� C�� C� D1� D�� A�  E%� D,� E� @H  E� =�TEkj�A�  @   B0  Fz�A�  @   B�  BH  Bs��@��n<�/�B�I%B�  C  B�  ��W:�n?�X���c5=5.����=@���y�<��^���=����E�~=�@7;��,��xĽ�ҵ=���� �ͼz�=B@-�,�1<��s��Z���=�RGL       split_indices[$l#L       5   +   %   +         %         $   !          $            $                '   !       (      +                                                                                                       L       
+split_type[$U#L       5                                                     L       sum_hessian[$d#L       5DĔ�D��B��1D���B=FhA'�@Bq_�D�1�CL��A��$A���?�G�AiKB=��AOfD��A�)B��:B�J@��gA�s�Ap��@Y
+?�V�@�<�A�G�A��pA8��?���D��QC:4�AE�@�i�A���B�'�B/��B�8�?�HQ@ʫRA�}F?�h>?ǺAW��?�J1?���@ӹ{?��A*�2AN�@-~PA�D�?�L^AE@L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       53L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ?�'l�ȶ�<^>Z��2͡<�����[>u���ԑ��τ���i=����G,=�κ>�`����<��?(��?!tD�=uF�/�>����>~�=y�R>�m�!~<�!o�t>���=��<X�c���=,�'��=��[�=����������+> ����c=�<;_9j�+H�=Z����޼bR<���qk�<������W<���<�}�=�[s�٦�����\�3=� <<�Z���5<VK>
+حL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       ?                                                               L       idi`L       left_children[$l#L       ?               	                                    !   #   %   '   )   +   -   /   1   3   5   7   9   ;   =��������������������������������������������������������������������������������������������������������������������������������L       loss_changes[$d#L       ?@O@�C@N�h@���@��@dUA��@��>@�5P@��@�U�@�?�@\`
+@Q��@��I@qQ�@�.�@0d?�lV@*��@���A�1Aԛ@��@ϟ#@v+�@���@�Ш@�x�A�|@� ,                                                                                                                                L       parents[$l#L       ?���                                                           	   	   
+   
+                                                                                                                        L       right_children[$l#L       ?               
+                                     "   $   &   (   *   ,   .   0   2   4   6   8   :   <   >��������������������������������������������������������������������������������������������������������������������������������L       split_conditions[$d#L       ?@   B`  F��B�  B�j�@   F�� @   B���Bp  B�iiB  D@� B�  BT  @�33BL*�BӪ�B  A   Fk>9B:  FCP @   B@  A�  @   B̪�@   B�  Gr0 =��<X�c���=,�'��=��[�=����������+> ����c=�<;_9j�+H�=Z����޼bR<���qk�<������W<���<�}�=�[s�٦�����\�3=� <<�Z���5<VK>
+حL       split_indices[$l#L       ?   
+   %   $   *   '      $      (      *   "         )   !   *   *   %   &   $   (             "      %      %                                                                                                                                   L       
+split_type[$U#L       ?                                                               L       sum_hessian[$d#L       ?D�~�C���D�YB���Cv��D��Bݑ�B��A]O_Bs�CV��DF�C�q�B+�B�CB>A��A)R�@O�@;W�A�|�C7#�A�2�C��AC�aC��Bs{B�A��B.9A��A�d�A�UA�T�A;��@̐�@��@�?��?��?ţtA�+}@Z�&BȦhB���A�*E@�!�C��?B��A"�C`�C��BC(p�BU_�@�fA��&Ap��@�G�@TF�A�-�A���A�R�@�&�L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       63L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       5;�{�<:���R��=m8>9��'����g=���=��:E?U�?j�Y�<>��-���4�(�>��/�;?��d=���{m����[)?MKj>E뵽Π���ھ,ͼ�l =�����W��tg=��˽쏅<�C ���<d�J�ɾc>:�G���|��I<:ԏ�N��=Hzg��<�=�X�<�{=Æ�=Ǯ�g�z=Jq{��sHL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       5                                                     L       idiaL       left_children[$l#L       5               	                                    !   #   %   '   )   +   -����   /   1����   3����������������������������������������������������������������������������������������������������L       loss_changes[$d#L       5@F~@D<�@���@��n@�g�@)��@P!�@�ǲ@���@�@$@av�?v@��@_E�?k!�@���A�@���@B��@�|@e�6@���@b��    >�6�@=J+    @4q)                                                                                                    L       parents[$l#L       5���                                                           	   	   
+   
+                                                                                          L       right_children[$l#L       5               
+                                     "   $   &   (   *   ,   .����   0   2����   4����������������������������������������������������������������������������������������������������L       split_conditions[$d#L       5C$q�AH�By  B   BH  A`  B�  AD'�@@  AJWjC� @   @��9@�rCq  @�  B�  D,� @s33C�� @@  D@� B�  �[)@��A�  �Π�A`  �,ͼ�l =�����W��tg=��˽쏅<�C ���<d�J�ɾc>:�G���|��I<:ԏ�N��=Hzg��<�=�X�<�{=Æ�=Ǯ�g�z=Jq{��sHL       split_indices[$l#L       5   *   +   +         &      +      +   +      !   !         )      !      )      *       !   &       &                                                                                                    L       
+split_type[$U#L       5                                                     L       sum_hessian[$d#L       5D���D���A�<8DG�ND7� A#j/A{BDgsCL{jDb�Ch@��V@�AP�@,-
+D�aA2D�CA�ZA,��@���DS�C2jAcY�?��@��k@C�n?��A@�z�@��?��?�L+A.��D�@.P�A�qC��B�O@@h�@��t@00�?��rB�D��B�M�A`�0AR��?��/?��-@K9??�П?ز=@=�@��L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       53L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       3�yq$��w����>� �8����k�>y�?���N�^�b=�g<i_���r��r�>��>��p�����=�l�zTp=ܹ�eɠ=���<�騿���
+op=�Ԑ>t�'�_�=�{?^�!<d$��͈��tý�W��%f<��a��׾$�"�A�罕�+=c:�7�!_�=�8���<��==�⽊�_=��)�ݕL       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L       3                                                   L       idibL       left_children[$l#L       3               	                              ��������   ����   !������������   #   %   '   )   +   -   /   1��������������������������������������������������������������������������������L       loss_changes[$d#L       3@@sN@��@1��@u�S@�0@6��@���?��d@-.f@j�?���@���@�y�@�@���        ?�=    ?���            @���?�W�@ri>@�|h?�s�@��@���@3�t                                                                                L       parents[$l#L       3���                                                           	   	   
+   
+                                                                                    L       right_children[$l#L       3               
+                              ��������    ����   "������������   $   &   (   *   ,   .   0   2��������������������������������������������������������������������������������L       split_conditions[$d#L       3@   B  BP  @l��B�e�B  @333Bd  B   D� A�  FM  DO� D�� B�  >��p�E�0 =�lA�DD=ܹ�eɠ=���B   BqWDh� @�r?�  B�ffB  G'� <d$��͈��tý�W��%f<��a��׾$�"�A�罕�+=c:�7�!_�=�8���<��==�⽊�_=��)�ݕL       split_indices[$l#L       3      )      !   *      !   +   "      "            )                  (                  *      +      +   )                                                                                   L       
+split_type[$U#L       3                                                   L       sum_hessian[$d#L       3D�a�A䵠D���A,#�A���D���B%��@u�*@݄�Aq�^@.(�Dz��C�2@܇JB
+�@2i�?�6�@�Ҽ?��\A`f�?��Z?�%	?�,^Dz)&@K�C��kB�g@��@���A��An@ ӕ@R��?� �AGB�D_#B��?��	?�C��A��A��'B���?���?��t@Z�?�+AW�@�"sA[*Q?��kL       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       51L       size_leaf_vectorSL       1}}{L       base_weights[$d#L       ;�'۽���<	]m;��?3���Z�<5��=�&P=�A�<��$�)<���dT=�P���ܽMM8<�D"����=hm(;�m����S��Lk��*L       
+categories[$l#L        L       categories_nodes[$l#L        L       categories_segments[$L#L        L       categories_sizes[$L#L        L       default_left[$U#L                              L       idicL       left_children[$l#L          ����            	   ����               ����������������������������������������L       loss_changes[$d#L       @��    @Y��@B@�@�6@6s3@v��    @LQ�?�yG@q��@Hc�?�/                                        L       parents[$l#L       ���                                               	   	   
+   
+            L       right_children[$l#L          ����            
+   ����               ����������������������������������������L       split_conditions[$d#L       ?�  ����G� ?�  AΪ�Bh  A�  =�&PA�  A0  B�  C@ F<^9=�P���ܽMM8<�D"����=hm(;�m����S��Lk��*L       split_indices[$l#L          %           &   *   %   !                %   $                                        L       
+split_type[$U#L                              L       sum_hessian[$d#L       D¿�@��D�9iD�w�@�ȳA��aD�@+@8OR@KBAM��AND�<A���?�?�Ѩ@w��A��A5{2?�F|D�K:C�8Ao@�=L       
+tree_param{L       num_deletedSL       0L       num_featureSL       44L       	num_nodesSL       23L       size_leaf_vectorSL       1}}}L       nameSL       gbtree}L       learner_model_param{L       
+base_scoreSL       [3.4380576E-1]L       boost_from_averageSL       1L       	num_classSL       0L       num_featureSL       44L       
+num_targetSL       1}L       	objective{L       nameSL       binary:logisticL       reg_loss_param{L       scale_pos_weightSL       1}}}L       version[#L       iii}}PK     0�6]-zŋM= M=    schema.json{
+  "__class__": "XGBClassifier",
+  "__module__": "xgboost.sklearn",
+  "__loader__": "ObjectNode",
+  "content": {
+    "__class__": "dict",
+    "__module__": "builtins",
+    "__loader__": "DictNode",
+    "content": {
+      "n_estimators": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "100",
+        "is_json": true,
+        "__id__": 140711810871304
+      },
+      "objective": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "\"binary:logistic\"",
+        "is_json": true,
+        "__id__": 1509233823216
+      },
+      "max_depth": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "5",
+        "is_json": true,
+        "__id__": 140711810868264
+      },
+      "max_leaves": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "max_bin": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "grow_policy": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "learning_rate": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "0.1",
+        "is_json": true,
+        "__id__": 1507607187888
+      },
+      "verbosity": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "booster": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "tree_method": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "gamma": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "min_child_weight": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "max_delta_step": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "subsample": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "0.8",
+        "is_json": true,
+        "__id__": 1507607187792
+      },
+      "sampling_method": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "colsample_bytree": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "0.8",
+        "is_json": true,
+        "__id__": 1507607187472
+      },
+      "colsample_bylevel": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "colsample_bynode": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "reg_alpha": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "reg_lambda": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "scale_pos_weight": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "base_score": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "missing": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "NaN",
+        "is_json": true,
+        "__id__": 1507607187728
+      },
+      "num_parallel_tree": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "random_state": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "42",
+        "is_json": true,
+        "__id__": 140711810869448
+      },
+      "n_jobs": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "monotone_constraints": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "interaction_constraints": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "importance_type": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "device": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "validate_parameters": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "enable_categorical": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "true",
+        "is_json": true,
+        "__id__": 140711809978800
+      },
+      "feature_types": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "feature_weights": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "max_cat_to_onehot": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "max_cat_threshold": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "multi_strategy": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "eval_metric": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "\"auc\"",
+        "is_json": true,
+        "__id__": 1507607562976
+      },
+      "early_stopping_rounds": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "callbacks": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "null",
+        "is_json": true,
+        "__id__": 140711809978864
+      },
+      "n_classes_": {
+        "__class__": "str",
+        "__module__": "builtins",
+        "__loader__": "JsonNode",
+        "content": "2",
+        "is_json": true,
+        "__id__": 140711810868168
+      },
+      "_Booster": {
+        "__class__": "Booster",
+        "__module__": "xgboost.core",
+        "__loader__": "ObjectNode",
+        "content": {
+          "__class__": "dict",
+          "__module__": "builtins",
+          "__loader__": "DictNode",
+          "content": {
+            "handle": {
+              "__class__": "bytearray",
+              "__module__": "builtins",
+              "__loader__": "BytearrayNode",
+              "file": "6f8e5077-8940-4729-aa6d-a6ad28524993.bin",
+              "__id__": 1507607849648
+            }
+          },
+          "key_types": {
+            "__class__": "list",
+            "__module__": "builtins",
+            "__loader__": "ListNode",
+            "content": [
+              {
+                "__class__": "str",
+                "__module__": "builtins",
+                "__loader__": "TypeNode",
+                "__id__": 140711809958080
+              }
+            ],
+            "__id__": 1507607655104
+          },
+          "__id__": 1507607850240
+        },
+        "__id__": 1507580809232
+      },
+      "evals_result_": {
+        "__class__": "dict",
+        "__module__": "builtins",
+        "__loader__": "DictNode",
+        "content": {
+          "validation_0": {
+            "__class__": "OrderedDict",
+            "__module__": "collections",
+            "__loader__": "DictNode",
+            "content": {
+              "auc": {
+                "__class__": "list",
+                "__module__": "builtins",
+                "__loader__": "ListNode",
+                "content": [
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9328802968919717",
+                    "is_json": true,
+                    "__id__": 1507607187856
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9266976559169525",
+                    "is_json": true,
+                    "__id__": 1507607195344
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.939289270515689",
+                    "is_json": true,
+                    "__id__": 1507607195376
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9419244725028413",
+                    "is_json": true,
+                    "__id__": 1507607195408
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9425692756748182",
+                    "is_json": true,
+                    "__id__": 1507607195440
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9417305066057451",
+                    "is_json": true,
+                    "__id__": 1507607195312
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9431568920461695",
+                    "is_json": true,
+                    "__id__": 1507607195472
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.944558291253705",
+                    "is_json": true,
+                    "__id__": 1507607195504
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9452517618593425",
+                    "is_json": true,
+                    "__id__": 1507607195536
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9455470705875645",
+                    "is_json": true,
+                    "__id__": 1507607195568
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9459944913176898",
+                    "is_json": true,
+                    "__id__": 1507607195600
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9465849621413116",
+                    "is_json": true,
+                    "__id__": 1507607195632
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9467426168638909",
+                    "is_json": true,
+                    "__id__": 1507607195664
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9471758386490745",
+                    "is_json": true,
+                    "__id__": 1507607195696
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9476681876758964",
+                    "is_json": true,
+                    "__id__": 1507607195728
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9479772016852256",
+                    "is_json": true,
+                    "__id__": 1507607195760
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9485025284337416",
+                    "is_json": true,
+                    "__id__": 1507607195792
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9487213876962726",
+                    "is_json": true,
+                    "__id__": 1507607195824
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9491040944742369",
+                    "is_json": true,
+                    "__id__": 1507607195856
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9494183677141194",
+                    "is_json": true,
+                    "__id__": 1507607195888
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9497026740929218",
+                    "is_json": true,
+                    "__id__": 1507607195920
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9498133036694483",
+                    "is_json": true,
+                    "__id__": 1507607195952
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9501849934347109",
+                    "is_json": true,
+                    "__id__": 1507607195984
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9505920265978645",
+                    "is_json": true,
+                    "__id__": 1507607196016
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9508854437626811",
+                    "is_json": true,
+                    "__id__": 1507607196048
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.951170820561085",
+                    "is_json": true,
+                    "__id__": 1507607196080
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9514803428975308",
+                    "is_json": true,
+                    "__id__": 1507607196112
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9516820021300275",
+                    "is_json": true,
+                    "__id__": 1507607196144
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9519986508216282",
+                    "is_json": true,
+                    "__id__": 1507607196176
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9523793536176903",
+                    "is_json": true,
+                    "__id__": 1507607196208
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9526397050811196",
+                    "is_json": true,
+                    "__id__": 1507607196240
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9527460627547617",
+                    "is_json": true,
+                    "__id__": 1507607196272
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.952954071188456",
+                    "is_json": true,
+                    "__id__": 1507607196304
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.953153995265891",
+                    "is_json": true,
+                    "__id__": 1507607196336
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9533998300799307",
+                    "is_json": true,
+                    "__id__": 1507607196368
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9536033319982252",
+                    "is_json": true,
+                    "__id__": 1507607196400
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9537979235286957",
+                    "is_json": true,
+                    "__id__": 1507607196432
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9539883115849324",
+                    "is_json": true,
+                    "__id__": 1507607196464
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9540436068221526",
+                    "is_json": true,
+                    "__id__": 1507607196496
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9542977117273598",
+                    "is_json": true,
+                    "__id__": 1507607196528
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9545979424306441",
+                    "is_json": true,
+                    "__id__": 1507607196560
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9547035962667401",
+                    "is_json": true,
+                    "__id__": 1507607196592
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9551362461839175",
+                    "is_json": true,
+                    "__id__": 1507607196624
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9552742081184865",
+                    "is_json": true,
+                    "__id__": 1507607196656
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9555520431020729",
+                    "is_json": true,
+                    "__id__": 1507607196688
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9557002595586687",
+                    "is_json": true,
+                    "__id__": 1507607196720
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9557495037480962",
+                    "is_json": true,
+                    "__id__": 1507607196752
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9559758950499232",
+                    "is_json": true,
+                    "__id__": 1507607196784
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9561462628381802",
+                    "is_json": true,
+                    "__id__": 1507607196816
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9564709127941077",
+                    "is_json": true,
+                    "__id__": 1507607196848
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9566474342731327",
+                    "is_json": true,
+                    "__id__": 1507607196880
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9568731266251743",
+                    "is_json": true,
+                    "__id__": 1507607196912
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9569815127195224",
+                    "is_json": true,
+                    "__id__": 1507607196944
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9571781864360671",
+                    "is_json": true,
+                    "__id__": 1507607196976
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9574092162228337",
+                    "is_json": true,
+                    "__id__": 1507607197008
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9575921895460319",
+                    "is_json": true,
+                    "__id__": 1507607197040
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9578088395407096",
+                    "is_json": true,
+                    "__id__": 1507607197072
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9581620095805389",
+                    "is_json": true,
+                    "__id__": 1507607197104
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9582887687674982",
+                    "is_json": true,
+                    "__id__": 1507607197136
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9585623465114825",
+                    "is_json": true,
+                    "__id__": 1507607197168
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9587805214875103",
+                    "is_json": true,
+                    "__id__": 1507607197200
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9592236263249045",
+                    "is_json": true,
+                    "__id__": 1507607197232
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9593954995434685",
+                    "is_json": true,
+                    "__id__": 1507607197264
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9595509449981946",
+                    "is_json": true,
+                    "__id__": 1507607197296
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9599439991656397",
+                    "is_json": true,
+                    "__id__": 1507607197328
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9602335110096273",
+                    "is_json": true,
+                    "__id__": 1507607197360
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9606800714938628",
+                    "is_json": true,
+                    "__id__": 1507607197392
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9609609955422351",
+                    "is_json": true,
+                    "__id__": 1507607197424
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.961222041067689",
+                    "is_json": true,
+                    "__id__": 1507607197456
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.961426413007395",
+                    "is_json": true,
+                    "__id__": 1507607197488
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9614662629206855",
+                    "is_json": true,
+                    "__id__": 1507607197520
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9615947328239028",
+                    "is_json": true,
+                    "__id__": 1507607197552
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9620861434006632",
+                    "is_json": true,
+                    "__id__": 1507607197584
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9625376991763722",
+                    "is_json": true,
+                    "__id__": 1507607197616
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9626423461337563",
+                    "is_json": true,
+                    "__id__": 1507607197648
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9628275336125685",
+                    "is_json": true,
+                    "__id__": 1507607197680
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9629309146399216",
+                    "is_json": true,
+                    "__id__": 1507607197712
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9633317354591782",
+                    "is_json": true,
+                    "__id__": 1507607197744
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9636712833098329",
+                    "is_json": true,
+                    "__id__": 1507607197776
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9638667155351502",
+                    "is_json": true,
+                    "__id__": 1507607197808
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9639614061239126",
+                    "is_json": true,
+                    "__id__": 1507607197840
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9643467034150677",
+                    "is_json": true,
+                    "__id__": 1507607197872
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.964803943656514",
+                    "is_json": true,
+                    "__id__": 1507607197904
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9651945197292654",
+                    "is_json": true,
+                    "__id__": 1507607197936
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9654548516416517",
+                    "is_json": true,
+                    "__id__": 1507607197968
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9656321160603089",
+                    "is_json": true,
+                    "__id__": 1507607198000
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9659904182489122",
+                    "is_json": true,
+                    "__id__": 1507607198032
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9661796185792897",
+                    "is_json": true,
+                    "__id__": 1507607198064
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9664987258145412",
+                    "is_json": true,
+                    "__id__": 1507607198096
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9667856862474239",
+                    "is_json": true,
+                    "__id__": 1507607198128
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9671373752957498",
+                    "is_json": true,
+                    "__id__": 1507607198160
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9672965207853541",
+                    "is_json": true,
+                    "__id__": 1507607198192
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9674167450362077",
+                    "is_json": true,
+                    "__id__": 1507607198224
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9675448972349772",
+                    "is_json": true,
+                    "__id__": 1507607198256
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9678357581009283",
+                    "is_json": true,
+                    "__id__": 1507607198288
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.96804156215453",
+                    "is_json": true,
+                    "__id__": 1507607198320
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9683023144143398",
+                    "is_json": true,
+                    "__id__": 1507607198352
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9685327087922105",
+                    "is_json": true,
+                    "__id__": 1507607198384
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9687062438494252",
+                    "is_json": true,
+                    "__id__": 1507607198416
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.968706581104916",
+                    "is_json": true,
+                    "__id__": 1507607198448
+                  }
+                ],
+                "__id__": 1509231562112
+              }
+            },
+            "key_types": {
+              "__class__": "list",
+              "__module__": "builtins",
+              "__loader__": "ListNode",
+              "content": [
+                {
+                  "__class__": "str",
+                  "__module__": "builtins",
+                  "__loader__": "TypeNode",
+                  "__id__": 140711809958080
+                }
+              ],
+              "__id__": 1507607846848
+            },
+            "__id__": 1509233155904
+          },
+          "validation_1": {
+            "__class__": "OrderedDict",
+            "__module__": "collections",
+            "__loader__": "DictNode",
+            "content": {
+              "auc": {
+                "__class__": "list",
+                "__module__": "builtins",
+                "__loader__": "ListNode",
+                "content": [
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9372292546602233",
+                    "is_json": true,
+                    "__id__": 1507578888944
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9342512144696288",
+                    "is_json": true,
+                    "__id__": 1507607198544
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9449503853747838",
+                    "is_json": true,
+                    "__id__": 1507607198576
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9470728005310266",
+                    "is_json": true,
+                    "__id__": 1507607198608
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9476294060197106",
+                    "is_json": true,
+                    "__id__": 1507607198640
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9472634796615974",
+                    "is_json": true,
+                    "__id__": 1507607198512
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9479880392181733",
+                    "is_json": true,
+                    "__id__": 1507607198672
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.948936044274764",
+                    "is_json": true,
+                    "__id__": 1507607198704
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9494904301061631",
+                    "is_json": true,
+                    "__id__": 1507607198736
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9494737298275432",
+                    "is_json": true,
+                    "__id__": 1507607198768
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9499161815130029",
+                    "is_json": true,
+                    "__id__": 1507607198800
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9503174109917428",
+                    "is_json": true,
+                    "__id__": 1507607198832
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9501648888268794",
+                    "is_json": true,
+                    "__id__": 1507607198864
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.950534197519903",
+                    "is_json": true,
+                    "__id__": 1507607198896
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9509729497765546",
+                    "is_json": true,
+                    "__id__": 1507607198928
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.95108446113063",
+                    "is_json": true,
+                    "__id__": 1507607198960
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9512299015317749",
+                    "is_json": true,
+                    "__id__": 1507607198992
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9513417299797483",
+                    "is_json": true,
+                    "__id__": 1507607199024
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9516932814144925",
+                    "is_json": true,
+                    "__id__": 1507607199056
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9519898699069436",
+                    "is_json": true,
+                    "__id__": 1507607199088
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.952269123932979",
+                    "is_json": true,
+                    "__id__": 1507607199120
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9523385674966071",
+                    "is_json": true,
+                    "__id__": 1507607199152
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9526225779311103",
+                    "is_json": true,
+                    "__id__": 1507607199184
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9528311200179264",
+                    "is_json": true,
+                    "__id__": 1507607199216
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9529228658523695",
+                    "is_json": true,
+                    "__id__": 1507607199248
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9529752920434799",
+                    "is_json": true,
+                    "__id__": 1507607199280
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9530901857324657",
+                    "is_json": true,
+                    "__id__": 1507607199312
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9531192526731016",
+                    "is_json": true,
+                    "__id__": 1507607199344
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9532440819708865",
+                    "is_json": true,
+                    "__id__": 1507607199376
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9533636263703741",
+                    "is_json": true,
+                    "__id__": 1507607199408
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.953488878460023",
+                    "is_json": true,
+                    "__id__": 1507607199440
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9535771362615898",
+                    "is_json": true,
+                    "__id__": 1507607199472
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9536459456374221",
+                    "is_json": true,
+                    "__id__": 1507607199504
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9537736287802877",
+                    "is_json": true,
+                    "__id__": 1507607199536
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9539147355648288",
+                    "is_json": true,
+                    "__id__": 1507607199568
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9540546796717444",
+                    "is_json": true,
+                    "__id__": 1507607199600
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9541806716471548",
+                    "is_json": true,
+                    "__id__": 1507607199632
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9541724272058109",
+                    "is_json": true,
+                    "__id__": 1507607199664
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9541352215217971",
+                    "is_json": true,
+                    "__id__": 1507607199696
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9542036081057657",
+                    "is_json": true,
+                    "__id__": 1507607593104
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9542205197803173",
+                    "is_json": true,
+                    "__id__": 1507607593200
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9543040211734165",
+                    "is_json": true,
+                    "__id__": 1507607593168
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9544123615885136",
+                    "is_json": true,
+                    "__id__": 1507607593264
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9544802196826524",
+                    "is_json": true,
+                    "__id__": 1507607593232
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9546473281668167",
+                    "is_json": true,
+                    "__id__": 1507607593328
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9547194141795935",
+                    "is_json": true,
+                    "__id__": 1507607593296
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9546993315660633",
+                    "is_json": true,
+                    "__id__": 1507607593392
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9548168677041979",
+                    "is_json": true,
+                    "__id__": 1507607593360
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9548621064336238",
+                    "is_json": true,
+                    "__id__": 1507607593456
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.954955754831454",
+                    "is_json": true,
+                    "__id__": 1507607593072
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9550219217581377",
+                    "is_json": true,
+                    "__id__": 1507607593424
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9551047889634412",
+                    "is_json": true,
+                    "__id__": 1507607593488
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9551244487851076",
+                    "is_json": true,
+                    "__id__": 1507607593136
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9550798442434774",
+                    "is_json": true,
+                    "__id__": 1507607593552
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9552931427387611",
+                    "is_json": true,
+                    "__id__": 1507607593584
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9552906059875784",
+                    "is_json": true,
+                    "__id__": 1507607593040
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9552736943130267",
+                    "is_json": true,
+                    "__id__": 1507607593648
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9553709364416991",
+                    "is_json": true,
+                    "__id__": 1507607593680
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9555017905235431",
+                    "is_json": true,
+                    "__id__": 1507607593520
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9555649979071803",
+                    "is_json": true,
+                    "__id__": 1507607593744
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9556499790718027",
+                    "is_json": true,
+                    "__id__": 1507607593776
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9557129750595079",
+                    "is_json": true,
+                    "__id__": 1507607593616
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9558598952321762",
+                    "is_json": true,
+                    "__id__": 1507607593840
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9559958228163857",
+                    "is_json": true,
+                    "__id__": 1507607593872
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9561645167700393",
+                    "is_json": true,
+                    "__id__": 1507607593712
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9562408307014539",
+                    "is_json": true,
+                    "__id__": 1507607593936
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9564067765079929",
+                    "is_json": true,
+                    "__id__": 1507607593968
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9564824562516119",
+                    "is_json": true,
+                    "__id__": 1507607593808
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9566693302554086",
+                    "is_json": true,
+                    "__id__": 1507607594032
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9567657268003534",
+                    "is_json": true,
+                    "__id__": 1507607594064
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9567720686783103",
+                    "is_json": true,
+                    "__id__": 1507607593904
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9567119265356857",
+                    "is_json": true,
+                    "__id__": 1507607594128
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9568529276222608",
+                    "is_json": true,
+                    "__id__": 1507607594160
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9570606241253493",
+                    "is_json": true,
+                    "__id__": 1507607594000
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.957081552322607",
+                    "is_json": true,
+                    "__id__": 1507607594224
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9572280497034115",
+                    "is_json": true,
+                    "__id__": 1507607594256
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9572134633841106",
+                    "is_json": true,
+                    "__id__": 1507607594096
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.957155540898771",
+                    "is_json": true,
+                    "__id__": 1507607594320
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9573016154877115",
+                    "is_json": true,
+                    "__id__": 1507607594352
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9574616422081573",
+                    "is_json": true,
+                    "__id__": 1507607594192
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9575121658358806",
+                    "is_json": true,
+                    "__id__": 1507607594416
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.95755444502226",
+                    "is_json": true,
+                    "__id__": 1507607594448
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9575645920269911",
+                    "is_json": true,
+                    "__id__": 1507607594288
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.957775353771092",
+                    "is_json": true,
+                    "__id__": 1507607594512
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9578180557493352",
+                    "is_json": true,
+                    "__id__": 1507607594544
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9577829640246404",
+                    "is_json": true,
+                    "__id__": 1507607594384
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.957875766838743",
+                    "is_json": true,
+                    "__id__": 1507607594608
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9579167776495309",
+                    "is_json": true,
+                    "__id__": 1507607594640
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9579558858969318",
+                    "is_json": true,
+                    "__id__": 1507607594480
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9579732203633473",
+                    "is_json": true,
+                    "__id__": 1507607594704
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9579558858969318",
+                    "is_json": true,
+                    "__id__": 1507607594736
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9580182476968413",
+                    "is_json": true,
+                    "__id__": 1507607594576
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.958051648254081",
+                    "is_json": true,
+                    "__id__": 1507607594800
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9580715194716792",
+                    "is_json": true,
+                    "__id__": 1507607594832
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9580260693463215",
+                    "is_json": true,
+                    "__id__": 1507607594672
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9579692038406413",
+                    "is_json": true,
+                    "__id__": 1507607594896
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9580013360222895",
+                    "is_json": true,
+                    "__id__": 1507607594928
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9580772271618405",
+                    "is_json": true,
+                    "__id__": 1507607594768
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.958121197515675",
+                    "is_json": true,
+                    "__id__": 1507607594992
+                  },
+                  {
+                    "__class__": "str",
+                    "__module__": "builtins",
+                    "__loader__": "JsonNode",
+                    "content": "0.9581205633278793",
+                    "is_json": true,
+                    "__id__": 1507607595024
+                  }
+                ],
+                "__id__": 1509229379392
+              }
+            },
+            "key_types": {
+              "__class__": "list",
+              "__module__": "builtins",
+              "__loader__": "ListNode",
+              "content": [
+                {
+                  "__class__": "str",
+                  "__module__": "builtins",
+                  "__loader__": "TypeNode",
+                  "__id__": 140711809958080
+                }
+              ],
+              "__id__": 1507607456128
+            },
+            "__id__": 1507607477568
+          }
+        },
+        "key_types": {
+          "__class__": "list",
+          "__module__": "builtins",
+          "__loader__": "ListNode",
+          "content": [
+            {
+              "__class__": "str",
+              "__module__": "builtins",
+              "__loader__": "TypeNode",
+              "__id__": 140711809958080
+            },
+            {
+              "__class__": "str",
+              "__module__": "builtins",
+              "__loader__": "TypeNode",
+              "__id__": 140711809958080
+            }
+          ],
+          "__id__": 1507607847232
+        },
+        "__id__": 1507607685760
+      }
+    },
+    "key_types": {
+      "__class__": "list",
+      "__module__": "builtins",
+      "__loader__": "ListNode",
+      "content": [
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        },
+        {
+          "__class__": "str",
+          "__module__": "builtins",
+          "__loader__": "TypeNode",
+          "__id__": 140711809958080
+        }
+      ],
+      "__id__": 1507607647936
+    },
+    "__id__": 1507607588928
+  },
+  "__id__": 1507579540688,
+  "protocol": 2,
+  "_skops_version": "0.15.0"
+}PK      0�6]�T�� � (           �    6f8e5077-8940-4729-aa6d-a6ad28524993.binPK      0�6]-zŋM= M=            �X� schema.jsonPK      �   �   
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-bbd9adad2dfc4a43930444e47c67bfb9\artifacts\python_env.yaml
+
+```yaml
+python: 3.13.15
+build_dependencies:
+- pip==26.2.1
+- setuptools
+- wheel
+dependencies:
+- -r requirements.txt
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: mlruns\models\m-bbd9adad2dfc4a43930444e47c67bfb9\artifacts\requirements.txt
+
+```txt
+mlflow==3.16.1
+numpy==2.5.3
+pandas==2.3.3
+pytest==9.1.1
+scikit-learn==1.9.1
+scipy==1.18.1
+skops==0.15.0
+xgboost==3.4.1
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: models\classification_metadata.json
+
+```json
+{
+  "target": "IS_30DAY_READMISSION",
+  "features": [
+    "BENE_SEX_IDENT_CD",
+    "SP_STATE_CODE",
+    "BENE_COUNTY_CD",
+    "BENE_HI_CVRAGE_TOT_MONS",
+    "BENE_SMI_CVRAGE_TOT_MONS",
+    "BENE_HMO_CVRAGE_TOT_MONS",
+    "PLAN_CVRG_MOS_NUM",
+    "SP_ALZHDMTA",
+    "SP_CHF",
+    "SP_CHRNKIDN",
+    "SP_CNCR",
+    "SP_COPD",
+    "SP_DEPRESSN",
+    "SP_DIABETES",
+    "SP_ISCHMCHT",
+    "SP_OSTEOPRS",
+    "SP_RA_OA",
+    "SP_STRKETIA",
+    "MEDREIMB_IP",
+    "BENRES_IP",
+    "PPPYMT_IP",
+    "MEDREIMB_OP",
+    "BENRES_OP",
+    "PPPYMT_OP",
+    "MEDREIMB_CAR",
+    "BENRES_CAR",
+    "PPPYMT_CAR",
+    "source_year",
+    "AGE",
+    "RACE",
+    "IS_DECEASED",
+    "TOTAL_ADMISSIONS",
+    "AVG_ADMISSION_COST",
+    "AVG_LENGTH_OF_STAY",
+    "UNIQUE_DIAGNOSES_COUNT",
+    "INPATIENT_CLAIM_COUNT",
+    "AVG_INPATIENT_COST",
+    "AVG_DAYS_BETWEEN_INPATIENT_CLAIMS",
+    "OUTPATIENT_CLAIM_COUNT",
+    "AVG_OUTPATIENT_COST",
+    "AVG_DAYS_BETWEEN_OUTPATIENT_CLAIMS",
+    "DRUG_CLAIM_COUNT",
+    "AVG_DRUG_COST",
+    "AVG_DAYS_BETWEEN_DRUG_CLAIMS"
+  ],
+  "n_features": 44,
+  "test_auc_roc": 0.953467459201809,
+  "test_accuracy": 0.877665544332211,
+  "shap_sample_size": 2000
 }
 ```
 
@@ -1884,6 +9083,812 @@ And in your `docs/` folder:
 If any of these commands throw an error (e.g., a PySpark Java path issue, or a Great Expectations version mismatch), **don't panic**. This is normal in data engineering. Just copy the **last 10-15 lines of the error traceback** and paste it here. I will give you the exact fix.
 
 Otherwise, paste the success output here, and we will immediately move to **Phase 2: Econometric, Statistical & ML Modeling** (Clustering, XGBoost, and Time-Series)!
+
+
+
+
+
+
+# #####################################################################################################################################################
+
+
+
+
+# ValueAI — Healthcare Value Intelligence Platform
+
+> An end-to-end healthcare analytics and AI platform that transforms claims data into patient segmentation, readmission-risk intelligence, cost forecasting, scenario analysis, and evidence-grounded executive recommendations.
+
+---
+
+## Overview
+
+**ValueAI** is an end-to-end healthcare value intelligence platform built to demonstrate how modern data engineering, machine learning, explainable AI, forecasting, MLOps, and generative AI can be combined into a single business-facing solution.
+
+The platform processes **230,890 healthcare beneficiary records** derived from the CMS DE-SynPUF dataset and produces analytical intelligence across:
+
+* Patient risk segmentation
+* Readmission prediction
+* Explainable machine learning
+* Healthcare cost forecasting
+* Monte Carlo scenario analysis
+* MLOps and model tracking
+* Evidence-first agentic AI
+* Executive business intelligence
+
+The final application is delivered through a **Streamlit executive dashboard**, allowing stakeholders to explore analytical results and interact with a local **Qwen 2.5 7B + LangGraph** data science assistant using natural-language business questions.
+
+---
+
+# Business Problem
+
+Healthcare organizations generate large volumes of claims and utilization data, but raw claims data does not directly answer executive questions such as:
+
+* Which patient populations require the greatest attention?
+* Which characteristics are associated with higher readmission risk?
+* What factors are most important to the predictive model?
+* How does utilization differ between patient segments?
+* What might future healthcare costs look like?
+* Where could targeted interventions potentially create value?
+* Can decision-makers query analytical evidence using natural language?
+
+ValueAI addresses these questions by connecting the analytical lifecycle from **raw data to executive decision support**.
+
+---
+
+# Solution Architecture
+
+```text
+                         VALUEAI
+              Healthcare Value Intelligence
+                              │
+                              ▼
+                    ┌───────────────────┐
+                    │   CMS DE-SynPUF   │
+                    │   Claims Data     │
+                    └─────────┬─────────┘
+                              │
+                              ▼
+                    Data Engineering Layer
+                              │
+                    ┌─────────┴─────────┐
+                    │                   │
+              Feature Engineering   Data Validation
+                    │                   │
+                    └─────────┬─────────┘
+                              │
+                              ▼
+                     Analytical Dataset
+                       230,890 records
+                              │
+          ┌───────────────────┼────────────────────┐
+          │                   │                    │
+          ▼                   ▼                    ▼
+     GMM Clustering      XGBoost Model        ARIMA Forecast
+          │                   │                    │
+          ▼                   ▼                    ▼
+   Patient Segments       Readmission          Cost Projection
+                          Prediction
+                              │
+                              ▼
+                       SHAP Explainability
+                              │
+                              ▼
+                    Monte Carlo Simulation
+                              │
+                              ▼
+                         MLflow / MLOps
+                              │
+                              ▼
+                    Evidence-First AI Layer
+                              │
+                    ┌─────────┴─────────┐
+                    │                   │
+                 LangGraph           Qwen 2.5
+                    │                  7B
+                    └─────────┬─────────┘
+                              │
+                              ▼
+                   Executive Streamlit
+                        Dashboard
+                              │
+          ┌───────────────────┼────────────────────┐
+          │                   │                    │
+          ▼                   ▼                    ▼
+     Segmentation       Readmission          Forecasting
+     Intelligence        Intelligence        Intelligence
+                              │
+                              ▼
+                    Business Recommendations
+```
+
+---
+
+# Key Capabilities
+
+## 1. Patient Risk Segmentation
+
+A **Gaussian Mixture Model (GMM)** is used to segment beneficiaries according to healthcare utilization and risk characteristics.
+
+The resulting clusters provide a population-level view of differences in:
+
+* Age
+* Inpatient utilization
+* Outpatient utilization
+* Admission frequency
+* Diagnosis burden
+* Healthcare costs
+
+The platform identifies a high-risk segment and makes its characteristics available to downstream analytical and AI components.
+
+---
+
+## 2. Readmission Risk Prediction
+
+An **XGBoost classification model** predicts readmission risk using engineered healthcare utilization and beneficiary features.
+
+The model is evaluated using metrics including:
+
+* AUC-ROC
+* Accuracy
+* Training/test sample counts
+
+Model artifacts and metadata are persisted under:
+
+```text
+models/
+├── classification_model.pkl
+└── classification_metadata.json
+```
+
+The final dashboard exposes the model's evaluation results to stakeholders.
+
+---
+
+## 3. Explainable AI with SHAP
+
+Model predictions are supported by **SHAP (SHapley Additive exPlanations)** analysis.
+
+The platform calculates feature importance using mean absolute SHAP values and exposes the results through:
+
+```text
+docs/
+├── shap_feature_importance.csv
+└── shap_summary.png
+```
+
+This allows stakeholders to understand which features have the greatest influence on model predictions.
+
+### Important analytical distinction
+
+Mean absolute SHAP importance represents the **magnitude of a feature's contribution to model predictions**.
+
+It does not by itself:
+
+* establish causation;
+* indicate whether higher or lower values increase risk;
+* prove that changing a feature will change patient outcomes.
+
+This distinction is explicitly communicated within the dashboard and AI assistant.
+
+---
+
+# 4. Healthcare Cost Forecasting
+
+ValueAI includes a time-series forecasting pipeline using **ARIMA** to project healthcare costs.
+
+Forecast artifacts include:
+
+```text
+docs/
+├── timeseries_forecast.csv
+├── timeseries_forecast.png
+├── timeseries_holdout_evaluation.csv
+├── timeseries_model_metrics.csv
+└── timeseries_model_metadata.json
+```
+
+The dashboard presents:
+
+* Forecasted costs
+* Average projected monthly cost
+* Forecast horizon
+* Model evaluation metrics
+* Comparison against a baseline
+
+This provides a forward-looking component alongside the historical and predictive analytics.
+
+---
+
+# 5. Monte Carlo Scenario Analysis
+
+The platform also performs Monte Carlo simulation to model uncertainty around healthcare admission costs.
+
+Outputs include:
+
+```text
+data/processed/
+├── monte_carlo_results.json
+└── monte_carlo_projection.png
+```
+
+This extends the platform beyond point estimates by allowing uncertainty and potential cost distributions to be examined.
+
+---
+
+# 6. Evidence-First Agentic AI
+
+The platform includes an AI assistant built with:
+
+* **LangGraph**
+* **Qwen 2.5 7B**
+* Deterministic analytical tools
+* Evidence retrieval from Phase 2 artifacts
+
+The architecture is intentionally **evidence-first**.
+
+Instead of allowing the language model to independently invent analytical conclusions, the system routes relevant questions toward specialized analytical evidence before generating the final response.
+
+Example question:
+
+```text
+Analyze the high-risk cluster.
+
+What are the top 3 drivers of readmission based on
+the SHAP values, and generate 3 strategic,
+value-based recommendations for the business?
+```
+
+The assistant can return:
+
+* Executive summary
+* High-risk population characteristics
+* SHAP model drivers
+* Observed data findings
+* Strategic intervention hypotheses
+* Value mechanisms
+* Suggested KPIs
+* Model/data caveats
+
+This creates a bridge between **technical analytics and executive decision support**.
+
+---
+
+# 7. Executive Dashboard
+
+The final application is implemented using **Streamlit**.
+
+The main dashboard contains five sections:
+
+### Executive Overview
+
+Provides high-level business metrics and findings.
+
+### Patient Segmentation
+
+Provides:
+
+* Cluster distribution
+* Cluster characteristics
+* SHAP visualization
+* Risk-segment analysis
+
+### Readmission Risk
+
+Provides:
+
+* XGBoost model performance
+* Training/test information
+* SHAP feature importance
+* Model interpretation guidance
+
+### Cost Forecasting
+
+Provides:
+
+* ARIMA forecast visualization
+* Model evaluation
+* Forecast metrics
+* Projected cost information
+
+### AI Business Assistant
+
+Provides a natural-language interface to the evidence-first AI agent.
+
+---
+
+# Example Analytical Insight
+
+The current analytical artifacts identify **Cluster 2** as the high-risk segment.
+
+The available analysis reports:
+
+* **30,298 patients**
+* **13.12%** of the 230,890-record population
+* Average age of approximately **75 years**
+* Approximately **2.91 inpatient admissions per patient**
+* Average inpatient length of stay of approximately **5.62 days**
+* Average inpatient cost of approximately **$9,484**
+* Average diagnosis count of approximately **22.09**
+
+The three highest mean absolute SHAP features currently reported for readmission prediction are:
+
+1. `AVG_DAYS_BETWEEN_INPATIENT_CLAIMS`
+2. `TOTAL_ADMISSIONS`
+3. `BENRES_IP`
+
+These findings are presented as **model evidence rather than causal conclusions**.
+
+---
+
+# Technology Stack
+
+| Area             | Technology                 |
+| ---------------- | -------------------------- |
+| Language         | Python                     |
+| Data Processing  | PySpark, Pandas, NumPy     |
+| Data Format      | Parquet, CSV, JSON         |
+| Machine Learning | Scikit-learn, XGBoost      |
+| Clustering       | Gaussian Mixture Model     |
+| Explainability   | SHAP                       |
+| Time Series      | Statsmodels / ARIMA        |
+| Simulation       | Monte Carlo                |
+| Generative AI    | Qwen 2.5 7B                |
+| Agent Framework  | LangGraph                  |
+| LLM Integration  | LangChain / Ollama         |
+| MLOps            | MLflow                     |
+| Dashboard        | Streamlit                  |
+| Testing          | Pytest                     |
+| CI/CD            | GitHub Actions             |
+| Environment      | Python virtual environment |
+
+---
+
+# Project Structure
+
+```text
+ValueAI_Project/
+│
+├── app/
+│   ├── app.py
+│   └── components/
+│
+├── data/
+│   ├── external/
+│   ├── processed/
+│   │   ├── clustered_dataset.parquet
+│   │   ├── full_dataset.parquet
+│   │   ├── train.parquet
+│   │   ├── val.parquet
+│   │   ├── test.parquet
+│   │   ├── monte_carlo_results.json
+│   │   └── monte_carlo_projection.png
+│   │
+│   └── raw/
+│       └── synpuf/
+│
+├── docs/
+│   ├── cluster_distribution.png
+│   ├── compliance_and_audit.md
+│   ├── data_dictionary.md
+│   ├── data_governance_audit.md
+│   ├── executive_summary.md
+│   ├── shap_feature_importance.csv
+│   ├── shap_summary.png
+│   ├── timeseries_forecast.csv
+│   ├── timeseries_forecast.png
+│   ├── timeseries_holdout_evaluation.csv
+│   ├── timeseries_model_metadata.json
+│   └── timeseries_model_metrics.csv
+│
+├── models/
+│   ├── classification_metadata.json
+│   ├── classification_model.pkl
+│   ├── clustering_model.pkl
+│   ├── clustering_scaler.pkl
+│   └── timeseries_model.pkl
+│
+├── notebooks/
+│   ├── 01_data_exploration.ipynb
+│   ├── 02_feature_engineering.ipynb
+│   └── 03_modeling_experiments.ipynb
+│
+├── src/
+│   ├── ai_agent/
+│   │   ├── agent_graph.py
+│   │   ├── agent_tools.py
+│   │   └── streamlit_app.py
+│   │
+│   ├── data/
+│   │   ├── make_dataset.py
+│   │   ├── monte_carlo_simulation.py
+│   │   └── validate_data.py
+│   │
+│   ├── mlops/
+│   │   └── log_models.py
+│   │
+│   ├── models/
+│   │   ├── train_classification.py
+│   │   ├── train_clustering.py
+│   │   └── train_timeseries.py
+│   │
+│   └── utils/
+│       ├── config.py
+│       └── logger.py
+│
+├── tests/
+│   ├── test_agent.py
+│   └── test_data.py
+│
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+│
+├── requirements.txt
+├── README.md
+└── Codebase.md
+```
+
+---
+
+# Installation
+
+## 1. Clone the repository
+
+```bash
+git clone <repository-url>
+cd ValueAI_Project
+```
+
+## 2. Create a virtual environment
+
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+## 3. Install dependencies
+
+```powershell
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+---
+
+# Running the Platform
+
+## Start the Streamlit dashboard
+
+From the project root:
+
+```powershell
+streamlit run app/app.py
+```
+
+The dashboard will be available locally through Streamlit.
+
+---
+
+# Running the AI Assistant
+
+The AI assistant uses a locally hosted Qwen model through Ollama.
+
+Ensure Ollama is installed and the required model is available:
+
+```powershell
+ollama run qwen2.5:7b
+```
+
+Then start the dashboard:
+
+```powershell
+streamlit run app/app.py
+```
+
+Navigate to:
+
+```text
+🤖 AI Business Assistant
+```
+
+Example questions:
+
+```text
+Analyze the high-risk cluster and give 3 strategic recommendations.
+```
+
+```text
+What are the top drivers of readmission?
+```
+
+```text
+Generate an executive memo for the high-risk segment.
+```
+
+---
+
+# Reproducing the Analytical Pipeline
+
+The major pipeline stages can be executed independently.
+
+## Data preparation
+
+```powershell
+python -m src.data.make_dataset
+```
+
+## Data validation
+
+```powershell
+python -m src.data.validate_data
+```
+
+## Patient clustering
+
+```powershell
+python -m src.models.train_clustering
+```
+
+## Readmission classification
+
+```powershell
+python -m src.models.train_classification
+```
+
+## Time-series forecasting
+
+```powershell
+python -m src.models.train_timeseries
+```
+
+## Monte Carlo simulation
+
+```powershell
+python -m src.data.monte_carlo_simulation
+```
+
+## MLflow model logging
+
+```powershell
+python -m src.mlops.log_models
+```
+
+---
+
+# MLOps
+
+ValueAI incorporates MLflow for experiment and model lifecycle tracking.
+
+Tracked artifacts include:
+
+* Classification models
+* Clustering models
+* Time-series models
+* Model metadata
+* Evaluation metrics
+* Forecast artifacts
+* SHAP artifacts
+
+The project contains a local MLflow tracking database and model artifacts under:
+
+```text
+mlflow.db
+mlruns/
+```
+
+This provides a foundation for reproducible model experimentation and model lifecycle management.
+
+---
+
+# Data Governance & Responsible AI
+
+Because the project operates on healthcare-related data, governance and responsible analytical interpretation are treated as first-class concerns.
+
+The repository includes:
+
+```text
+docs/
+├── compliance_and_audit.md
+├── data_governance_audit.md
+└── data_dictionary.md
+```
+
+The system explicitly distinguishes between:
+
+### Descriptive analysis
+
+What the observed data shows.
+
+### Predictive modeling
+
+What the model predicts.
+
+### Explainability
+
+Which features contribute most strongly to model predictions.
+
+### Causal inference
+
+What actually causes an outcome.
+
+The platform does **not** treat predictive associations or SHAP importance as proof of causation.
+
+The AI assistant also communicates model limitations and avoids presenting model outputs as clinical diagnoses.
+
+---
+
+# Testing
+
+Tests are maintained under:
+
+```text
+tests/
+├── test_agent.py
+└── test_data.py
+```
+
+The project also includes a GitHub Actions workflow:
+
+```text
+.github/workflows/ci.yml
+```
+
+The purpose of the test and CI layer is to provide automated validation of important data and application functionality.
+
+---
+
+# Key Engineering Principles
+
+## Evidence First
+
+The AI assistant should ground business responses in available analytical artifacts rather than relying solely on language-model generation.
+
+## Separation of Concerns
+
+The project separates:
+
+```text
+Data
+  ↓
+Models
+  ↓
+Explainability
+  ↓
+MLOps
+  ↓
+AI Agent
+  ↓
+Presentation
+```
+
+## Reproducibility
+
+Analytical outputs are persisted as explicit artifacts rather than being generated exclusively inside the dashboard.
+
+## Explainability
+
+Predictive results are accompanied by interpretable feature-importance analysis.
+
+## Responsible AI
+
+Model outputs are presented with appropriate limitations and are not represented as causal or clinical conclusions.
+
+## Business Translation
+
+The final layer translates technical analytical findings into business-oriented insights, intervention hypotheses, and KPIs.
+
+---
+
+# Limitations
+
+ValueAI is a portfolio and analytical demonstration platform rather than a production clinical decision-support system.
+
+Important limitations include:
+
+* The dataset is based on CMS DE-SynPUF rather than live healthcare operations.
+* Predictive associations should not be interpreted as causal relationships.
+* SHAP importance does not establish causation.
+* Mean absolute SHAP values do not provide feature direction.
+* Forecasts are subject to historical-data limitations and model assumptions.
+* Monte Carlo outputs depend on the assumptions and distributions used by the simulation.
+* AI-generated recommendations are business hypotheses requiring domain validation.
+* The platform should not be used as a clinical diagnostic system.
+
+---
+
+# Project Outcomes
+
+ValueAI demonstrates the ability to build a complete analytical product rather than an isolated machine-learning model.
+
+The project combines:
+
+```text
+Data Engineering
+       +
+Statistical Analysis
+       +
+Machine Learning
+       +
+Explainable AI
+       +
+Forecasting
+       +
+Simulation
+       +
+MLOps
+       +
+Generative AI
+       +
+Agentic AI
+       +
+Business Intelligence
+       +
+Governance
+```
+
+The result is a unified platform capable of moving from **raw healthcare data to stakeholder-facing intelligence**.
+
+---
+
+# Portfolio Highlights
+
+This project demonstrates practical experience across the following areas:
+
+* Python data engineering
+* PySpark
+* Large-scale claims-data processing
+* Feature engineering
+* Unsupervised learning
+* Supervised machine learning
+* XGBoost
+* Gaussian Mixture Models
+* SHAP explainability
+* Time-series forecasting
+* Monte Carlo simulation
+* MLflow
+* LangGraph
+* LangChain
+* Local LLM deployment
+* Qwen 2.5
+* Evidence-grounded AI
+* Streamlit application development
+* Automated testing
+* CI/CD
+* Data governance
+* Executive analytics
+
+---
+
+# Author
+
+**Antony Henry Oduor Onyanko**
+
+Computer Science | Data & AI | Analytics Engineering
+
+Nairobi, Kenya
+
+---
+
+## Project Status
+
+**Status: Portfolio-ready end-to-end prototype**
+
+The platform currently includes the major data, analytics, machine-learning, MLOps, generative-AI, governance, and stakeholder-facing application layers required for the ValueAI project.
+
+Future production-oriented enhancements could include:
+
+* Cloud deployment
+* Production database integration
+* Authentication and role-based access control
+* Model monitoring
+* Data drift detection
+* Automated model retraining
+* API-based model serving
+* Production observability
+* Additional clinical/business validation
+
 ```
 
 
@@ -1900,16 +9905,30 @@ scikit-learn>=1.3.0
 xgboost>=2.0.0
 statsmodels>=0.14.0
 prophet>=1.1.0
+
+
 shap>=0.43.0
-langchain>=0.1.0
-langgraph>=0.0.20
+
+langchain>=1.0.0
+langgraph>=1.0.0
+langchain-openai>=1.0.0
+langchain-ollama>=1.0.0
+
 boto3>=1.34.0
 streamlit>=1.30.0
+
+
+
 plotly>=5.18.0
 python-dotenv>=1.0.0
 pytest>=7.4.0
 great-expectations>=0.18.0
 seaborn>=0.12.0
+
+
+mlflow>=2.15.0
+
+joblib>=1.3.0
 ```
 
 
@@ -2013,6 +10032,927 @@ Write-Host "==========================================" -ForegroundColor Cyan
 # File: src\ai_agent\agent_graph.py
 
 ```python
+"""
+LangGraph Evidence-First Agentic AI workflow for ValueAI.
+
+Architecture:
+
+    User Question
+          |
+          v
+    Evidence Router
+          |
+          v
+    Verified Analytical Tool
+          |
+          v
+    Evidence Package
+          |
+          v
+    Qwen 2.5 7B
+          |
+          v
+    Executive Business Response
+
+The analytical evidence is retrieved deterministically before the LLM
+generates the response. This prevents the LLM from inventing
+quantitative analytical evidence.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from typing import Any, TypedDict
+
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_ollama import ChatOllama
+from langgraph.graph import END, START, StateGraph
+
+from src.ai_agent.agent_tools import (
+    analyze_high_risk_cluster,
+    get_shap_feature_importance,
+    get_model_metadata,
+    predict_readmission_risk,
+)
+
+
+# ---------------------------------------------------------------------------
+# MODEL CONFIGURATION
+# ---------------------------------------------------------------------------
+
+llm = ChatOllama(
+    model="qwen2.5:7b",
+    temperature=0.0,
+)
+
+
+# ---------------------------------------------------------------------------
+# ANALYTICAL TOOLS
+# ---------------------------------------------------------------------------
+
+tools = [
+    analyze_high_risk_cluster,
+    get_shap_feature_importance,
+    get_model_metadata,
+    predict_readmission_risk,
+]
+
+
+# ---------------------------------------------------------------------------
+# SYSTEM INSTRUCTIONS
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT = """
+You are the ValueAI Data Science Assistant.
+
+You are an analytical decision-support assistant for healthcare
+business stakeholders.
+
+Your role is to interpret VERIFIED evidence from Phase 2 analytical
+artifacts and convert it into concise, executive-level business insight.
+
+You are NOT a clinician and must not diagnose or prescribe treatment.
+
+============================================================
+EVIDENCE-FIRST ARCHITECTURE
+============================================================
+
+The application has already retrieved the relevant analytical evidence
+before you receive this request.
+
+The section labelled:
+
+VERIFIED ANALYTICAL EVIDENCE
+
+is authoritative for quantitative claims.
+
+You MUST use the supplied evidence.
+
+You MUST NOT invent, estimate, reconstruct, approximate, substitute,
+or alter numerical values.
+
+You MUST NOT introduce quantitative values that are absent from the
+verified evidence.
+
+If the evidence does not establish something, explicitly say so.
+
+============================================================
+EVIDENCE CATEGORIES
+============================================================
+
+Always distinguish:
+
+1. OBSERVED DATA
+
+Descriptive statistics calculated directly from the dataset.
+
+2. MODEL IMPORTANCE
+
+SHAP feature-importance results describing how strongly features
+contribute to model predictions.
+
+3. MODEL PREDICTION
+
+A probability or class generated by the trained prediction model.
+
+4. CAUSAL EVIDENCE
+
+Evidence demonstrating that changing one variable causes an outcome.
+
+These are NOT interchangeable.
+
+In particular:
+
+SHAP IMPORTANCE ≠ DIRECTIONAL EFFECT ≠ CAUSATION.
+
+============================================================
+NUMERICAL INTEGRITY
+============================================================
+
+Every numerical statement in the final answer must be supported by
+the VERIFIED ANALYTICAL EVIDENCE.
+
+Do not:
+
+- invent patient counts
+- invent percentages
+- invent averages
+- invent SHAP values
+- invent model metrics
+- invent prediction probabilities
+- invent financial values
+- invent statistical results
+- invent dataset characteristics
+
+Do not round or alter a value in a way that changes its meaning.
+
+When reporting values, use sensible executive-level rounding while
+remaining faithful to the supplied evidence.
+
+============================================================
+HIGH-RISK CLUSTER
+============================================================
+
+The high-risk cluster is Cluster 2 according to the Phase 2 patient
+segmentation analysis.
+
+When the evidence contains high-risk cluster information:
+
+- describe Cluster 2 as a segmentation/clustering result;
+- describe its population and utilization characteristics as
+  observed/descriptive data;
+- do not describe the cluster as being created by the readmission
+  classification model;
+- do not transform descriptive statistics into causal claims.
+
+============================================================
+SHAP INTERPRETATION
+============================================================
+
+The current SHAP artifact contains MEAN ABSOLUTE SHAP VALUES.
+
+Mean absolute SHAP measures the average magnitude of a feature's
+contribution to model predictions.
+
+It provides feature importance/ranking.
+
+It does NOT provide direction.
+
+Therefore, never claim that:
+
+- higher values increase readmission;
+- lower values increase readmission;
+- higher values decrease readmission;
+- lower values decrease readmission;
+
+unless directional evidence is explicitly supplied.
+
+Never claim that a SHAP-ranked feature causes readmission.
+
+When reporting SHAP drivers, use the exact feature names, ranks,
+and mean absolute SHAP values supplied in the evidence.
+
+Always make clear that:
+
+"Mean absolute SHAP importance describes contribution magnitude,
+not direction or causation."
+
+============================================================
+RECOMMENDATION RULES
+============================================================
+
+Recommendations are proposed business interventions or hypotheses
+for evaluation.
+
+They are NOT guaranteed outcomes.
+
+Never say an intervention WILL:
+
+- reduce readmissions;
+- reduce costs;
+- reduce length of stay;
+- reduce utilization;
+- improve outcomes;
+- generate savings;
+- generate ROI.
+
+Use language such as:
+
+- "could be evaluated"
+- "could be tested"
+- "may help"
+- "a proposed intervention is"
+- "the business could pilot"
+- "effectiveness should be measured"
+
+Do not recommend directly manipulating a SHAP feature merely because
+it has a high SHAP ranking.
+
+Instead, recommendations should address business or operational
+processes reasonably connected to the observed evidence.
+
+Examples include:
+
+- targeted care-coordination workflows;
+- structured post-discharge follow-up;
+- complex-patient case-management;
+- utilization review;
+- admission/discharge process analysis;
+- segmentation-based outreach;
+- operational monitoring dashboards;
+- targeted review of frequently admitted populations.
+
+These are hypotheses for evaluation, not proven causal solutions.
+
+Never invent:
+
+- expected savings;
+- percentage improvement;
+- ROI;
+- cost reduction;
+- readmission reduction;
+- financial return.
+
+============================================================
+RECOMMENDATION FORMAT
+============================================================
+
+When strategic recommendations are requested, provide exactly three.
+
+For each recommendation provide:
+
+Intervention:
+What the business could do.
+
+Evidence:
+What verified dataset or model evidence supports considering it.
+
+Value mechanism:
+How the intervention could potentially create operational,
+clinical, or financial value.
+
+KPI:
+What measurable outcome should be monitored.
+
+============================================================
+CLINICAL SAFETY
+============================================================
+
+This is an analytical decision-support prototype.
+
+Do not:
+
+- diagnose patients;
+- prescribe medication;
+- provide patient-specific treatment;
+- fabricate clinical guidance.
+
+============================================================
+EXECUTIVE RESPONSE FORMAT
+============================================================
+
+For high-risk cluster, SHAP, readmission-driver, or strategic
+business questions, use:
+
+## EXECUTIVE SUMMARY
+
+Give a concise summary of the most important verified findings.
+
+## HIGH-RISK SEGMENT
+
+Describe the high-risk cluster using verified observed data.
+
+## KEY MODEL DRIVERS
+
+List the relevant SHAP features and their exact mean absolute
+SHAP values from the evidence.
+
+State clearly that mean absolute SHAP does not establish whether
+higher or lower values increase predicted risk.
+
+## WHAT THE DATA SHOWS
+
+Separate:
+
+- observed cluster characteristics;
+- model importance;
+- model predictions, if available.
+
+Do not mix these categories.
+
+## STRATEGIC RECOMMENDATIONS
+
+When requested, provide exactly three recommendations.
+
+For each:
+
+1. Intervention
+2. Evidence
+3. Value mechanism
+4. KPI
+
+## MODEL / DATA CAVEATS
+
+Mention the relevant limitations, including:
+
+- SHAP importance does not establish causation;
+- mean absolute SHAP does not provide direction;
+- cluster statistics are descriptive;
+- recommendations are hypotheses for evaluation;
+- model predictions are not clinical diagnoses.
+
+============================================================
+EXECUTIVE SUMMARY
+============================================================
+
+For strategic analytical questions, the response MUST begin with:
+
+## EXECUTIVE SUMMARY
+
+The Executive Summary must contain only verified findings.
+
+============================================================
+STYLE
+============================================================
+
+Be concise.
+
+Write for healthcare business executives.
+
+Prefer plain business language.
+
+Avoid unnecessary machine-learning terminology.
+
+When discussing SHAP, preserve the distinction between:
+
+- importance;
+- direction;
+- prediction;
+- causation.
+
+Never manufacture evidence to make the answer sound complete.
+
+============================================================
+FINAL QUALITY CHECK
+============================================================
+
+Before producing the response verify:
+
+- All quantitative claims come from VERIFIED ANALYTICAL EVIDENCE.
+- No unsupported numbers were introduced.
+- High-risk cluster is described as a segmentation result.
+- Observed data is distinguished from model importance.
+- Mean absolute SHAP is not treated as directional.
+- No causal claims are made.
+- Recommendations are presented as hypotheses for evaluation.
+- No guaranteed business outcomes are claimed.
+- Exactly three recommendations are provided when requested.
+"""
+
+
+# ---------------------------------------------------------------------------
+# LANGGRAPH STATE
+# ---------------------------------------------------------------------------
+
+class AgentState(TypedDict, total=False):
+    user_query: str
+    evidence_source: str
+    evidence: dict[str, Any]
+    response: str
+
+
+# ---------------------------------------------------------------------------
+# QUERY CLASSIFICATION
+# ---------------------------------------------------------------------------
+
+def _normalise_query(query: str) -> str:
+    """
+    Normalize a user query for deterministic evidence routing.
+    """
+
+    return " ".join(
+        query.lower().strip().split()
+    )
+
+
+def _contains_any(
+    query: str,
+    phrases: tuple[str, ...],
+) -> bool:
+    """
+    Return True when any phrase appears in the normalized query.
+    """
+
+    return any(
+        phrase in query
+        for phrase in phrases
+    )
+
+
+def determine_evidence_source(
+    user_query: str,
+) -> str:
+    """
+    Determine which analytical evidence source is required.
+
+    Routing is deterministic. The LLM does not decide whether
+    quantitative evidence should be retrieved.
+    """
+
+    query = _normalise_query(
+        user_query
+    )
+
+    # ------------------------------------------------------------
+    # High-risk cluster
+    # ------------------------------------------------------------
+
+    high_risk_terms = (
+        "high-risk cluster",
+        "high risk cluster",
+        "high-risk segment",
+        "high risk segment",
+        "cluster 2",
+        "risk cluster",
+        "high risk population",
+        "high-risk population",
+    )
+
+    # High-risk questions take priority because the cluster tool
+    # also contains the relevant SHAP evidence.
+    if _contains_any(
+        query,
+        high_risk_terms,
+    ):
+        return "high_risk_cluster"
+
+    # ------------------------------------------------------------
+    # SHAP / model drivers
+    # ------------------------------------------------------------
+
+    shap_terms = (
+        "shap",
+        "model driver",
+        "model drivers",
+        "feature importance",
+        "feature ranking",
+        "readmission drivers",
+        "readmission driver",
+    )
+
+    if _contains_any(
+        query,
+        shap_terms,
+    ):
+        return "shap"
+
+    # ------------------------------------------------------------
+    # Model metadata / performance
+    # ------------------------------------------------------------
+
+    metadata_terms = (
+        "model performance",
+        "model metrics",
+        "auc",
+        "auc-roc",
+        "roc auc",
+        "accuracy",
+        "precision",
+        "recall",
+        "f1",
+        "feature schema",
+        "classification features",
+        "model features",
+    )
+
+    if _contains_any(
+        query,
+        metadata_terms,
+    ):
+        return "model_metadata"
+
+    # ------------------------------------------------------------
+    # Individual prediction
+    # ------------------------------------------------------------
+
+    prediction_terms = (
+        "predict readmission",
+        "readmission probability",
+        "readmission risk prediction",
+        "patient prediction",
+        "individual patient",
+    )
+
+    if _contains_any(
+        query,
+        prediction_terms,
+    ):
+        return "prediction"
+
+    # ------------------------------------------------------------
+    # Default
+    # ------------------------------------------------------------
+
+    return "none"
+
+
+# ---------------------------------------------------------------------------
+# PREDICTION INPUT EXTRACTION
+# ---------------------------------------------------------------------------
+
+def _extract_prediction_features(
+    user_query: str,
+) -> dict[str, Any] | None:
+    """
+    Extract a JSON object from a prediction request.
+
+    The prediction tool requires explicit patient feature values.
+    We never invent missing values.
+    """
+
+    matches = re.findall(
+        r"\{.*\}",
+        user_query,
+        flags=re.DOTALL,
+    )
+
+    if not matches:
+        return None
+
+    candidate = matches[-1]
+
+    try:
+
+        parsed = json.loads(
+            candidate
+        )
+
+    except json.JSONDecodeError:
+
+        return None
+
+    if not isinstance(
+        parsed,
+        dict,
+    ):
+        return None
+
+    return parsed
+
+
+# ---------------------------------------------------------------------------
+# EVIDENCE RETRIEVAL
+# ---------------------------------------------------------------------------
+
+def retrieve_evidence(
+    state: AgentState,
+) -> AgentState:
+    """
+    Deterministically retrieve verified analytical evidence before
+    the LLM is invoked.
+    """
+
+    user_query = state[
+        "user_query"
+    ]
+
+    evidence_source = determine_evidence_source(
+        user_query
+    )
+
+    # ------------------------------------------------------------
+    # High-risk cluster evidence
+    # ------------------------------------------------------------
+
+    if evidence_source == "high_risk_cluster":
+
+        raw_evidence = (
+            analyze_high_risk_cluster.invoke({})
+        )
+
+        evidence = json.loads(
+            raw_evidence
+        )
+
+        return {
+            **state,
+            "evidence_source": evidence_source,
+            "evidence": evidence,
+        }
+
+    # ------------------------------------------------------------
+    # SHAP evidence
+    # ------------------------------------------------------------
+
+    if evidence_source == "shap":
+
+        raw_evidence = (
+            get_shap_feature_importance.invoke({})
+        )
+
+        evidence = json.loads(
+            raw_evidence
+        )
+
+        return {
+            **state,
+            "evidence_source": evidence_source,
+            "evidence": evidence,
+        }
+
+    # ------------------------------------------------------------
+    # Model metadata
+    # ------------------------------------------------------------
+
+    if evidence_source == "model_metadata":
+
+        raw_evidence = (
+            get_model_metadata.invoke({})
+        )
+
+        evidence = json.loads(
+            raw_evidence
+        )
+
+        return {
+            **state,
+            "evidence_source": evidence_source,
+            "evidence": evidence,
+        }
+
+    # ------------------------------------------------------------
+    # Individual prediction
+    # ------------------------------------------------------------
+
+    if evidence_source == "prediction":
+
+        features = _extract_prediction_features(
+            user_query
+        )
+
+        if features is None:
+
+            evidence = {
+                "analysis_type": "Readmission prediction",
+                "evidence_available": False,
+                "reason": (
+                    "The request appears to require an individual "
+                    "readmission prediction, but explicit patient "
+                    "feature values were not supplied as JSON."
+                ),
+            }
+
+        else:
+
+            raw_evidence = (
+                predict_readmission_risk.invoke(
+                    {
+                        "patient_features_json": json.dumps(
+                            features
+                        )
+                    }
+                )
+            )
+
+            evidence = json.loads(
+                raw_evidence
+            )
+
+        return {
+            **state,
+            "evidence_source": evidence_source,
+            "evidence": evidence,
+        }
+
+    # ------------------------------------------------------------
+    # No specialized evidence required
+    # ------------------------------------------------------------
+
+    evidence = {
+        "analysis_type": "No specialized analytical evidence",
+        "evidence_available": False,
+        "reason": (
+            "The question was not mapped to a specialized analytical "
+            "artifact by the deterministic evidence router."
+        ),
+    }
+
+    return {
+        **state,
+        "evidence_source": "none",
+        "evidence": evidence,
+    }
+
+
+# ---------------------------------------------------------------------------
+# RESPONSE GENERATION
+# ---------------------------------------------------------------------------
+
+def generate_response(
+    state: AgentState,
+) -> AgentState:
+    """
+    Generate the executive response using only the verified evidence
+    retrieved by the previous graph node.
+    """
+
+    user_query = state[
+        "user_query"
+    ]
+
+    evidence = state.get(
+        "evidence",
+        {},
+    )
+
+    evidence_source = state.get(
+        "evidence_source",
+        "none",
+    )
+
+    evidence_json = json.dumps(
+        evidence,
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    user_message = f"""
+VERIFIED ANALYTICAL EVIDENCE
+============================
+
+Evidence source:
+{evidence_source}
+
+The following JSON was retrieved directly from the ValueAI
+analytical artifacts before this response was generated.
+
+Treat this evidence as authoritative.
+
+{evidence_json}
+
+
+USER QUESTION
+=============
+
+{user_query}
+
+
+RESPONSE REQUIREMENTS
+=====================
+
+Answer the user's question using the verified evidence above.
+
+Do not invent quantitative values.
+
+Do not introduce numerical values that are absent from the evidence.
+
+Do not alter the meaning of the evidence.
+
+If the evidence does not establish something, explicitly say so.
+
+Keep observed data, model importance, model predictions, and causal
+evidence separate.
+
+If the question concerns SHAP, remember that the supplied SHAP values
+are mean absolute SHAP values and therefore provide importance magnitude,
+not direction or causation.
+
+If strategic recommendations are requested, provide proposed
+interventions only and describe them as hypotheses for evaluation.
+
+Never claim that an intervention will reduce readmissions, costs,
+utilization, length of stay, or generate savings unless such evidence
+is explicitly supplied.
+
+When the question is a high-risk cluster or strategic business
+question, follow the executive response structure in the system
+instructions.
+"""
+
+    result = llm.invoke(
+        [
+            SystemMessage(
+                content=SYSTEM_PROMPT
+            ),
+            HumanMessage(
+                content=user_message
+            ),
+        ]
+    )
+
+    content = getattr(
+        result,
+        "content",
+        None,
+    )
+
+    if not content:
+
+        raise RuntimeError(
+            "Qwen returned an empty response."
+        )
+
+    return {
+        **state,
+        "response": content,
+    }
+
+
+# ---------------------------------------------------------------------------
+# LANGGRAPH WORKFLOW
+# ---------------------------------------------------------------------------
+
+workflow = StateGraph(
+    AgentState
+)
+
+workflow.add_node(
+    "retrieve_evidence",
+    retrieve_evidence,
+)
+
+workflow.add_node(
+    "generate_response",
+    generate_response,
+)
+
+workflow.add_edge(
+    START,
+    "retrieve_evidence",
+)
+
+workflow.add_edge(
+    "retrieve_evidence",
+    "generate_response",
+)
+
+workflow.add_edge(
+    "generate_response",
+    END,
+)
+
+agent = workflow.compile()
+
+
+# ---------------------------------------------------------------------------
+# PUBLIC API
+# ---------------------------------------------------------------------------
+
+def invoke_agent(
+    user_query: str,
+) -> str:
+    """
+    Run the ValueAI evidence-first LangGraph workflow.
+
+    Evidence retrieval happens before Qwen generation, ensuring that
+    quantitative analytical claims are grounded in real Phase 2
+    artifacts.
+    """
+
+    if not user_query or not user_query.strip():
+
+        raise ValueError(
+            "User query cannot be empty."
+        )
+
+    result = agent.invoke(
+        {
+            "user_query": user_query.strip(),
+        }
+    )
+
+    response = result.get(
+        "response"
+    )
+
+    if not response:
+
+        raise RuntimeError(
+            "Agent returned an empty final response."
+        )
+
+    return response
 ```
 
 
@@ -2021,6 +10961,1265 @@ Write-Host "==========================================" -ForegroundColor Cyan
 # File: src\ai_agent\agent_tools.py
 
 ```python
+"""
+ValueAI Agent Tools
+===================
+
+Tool layer for the Phase 3 Agentic AI Data Science Assistant.
+
+All quantitative evidence is loaded dynamically from Phase 2 artifacts.
+No patient statistics, cluster statistics, or SHAP rankings are
+hardcoded into the returned analytical evidence.
+"""
+
+import json
+from pathlib import Path
+
+import joblib
+import pandas as pd
+from langchain.tools import tool
+
+
+# ---------------------------------------------------------------------------
+# PROJECT PATHS
+# ---------------------------------------------------------------------------
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+CLUSTERED_DATA_PATH = (
+    PROJECT_ROOT / "data" / "processed" / "clustered_dataset.parquet"
+)
+
+SHAP_PATH = PROJECT_ROOT / "docs" / "shap_feature_importance.csv"
+
+MODEL_PATH = PROJECT_ROOT / "models" / "classification_model.pkl"
+
+METADATA_PATH = PROJECT_ROOT / "models" / "classification_metadata.json"
+
+
+# ---------------------------------------------------------------------------
+# HIGH-RISK CLUSTER ANALYSIS
+# ---------------------------------------------------------------------------
+
+@tool
+def analyze_high_risk_cluster() -> str:
+    """
+    Analyze the high-risk patient cluster using the actual Phase 2
+    clustered dataset and actual Phase 2 SHAP feature-importance results.
+
+    Returns:
+    - total population
+    - high-risk cluster population
+    - high-risk cluster percentage
+    - observed patient/utilization characteristics
+    - top SHAP model-importance drivers
+
+    Important:
+    SHAP values returned by this tool are mean absolute SHAP values.
+    They describe feature-importance magnitude only and do not provide
+    directional or causal evidence.
+
+    Use this tool whenever the user asks about:
+    - the high-risk cluster
+    - patient segmentation
+    - cluster characteristics
+    - high-risk population size
+    - utilization characteristics
+    - readmission drivers in the context of the high-risk cluster
+    """
+
+    if not CLUSTERED_DATA_PATH.exists():
+        return "ERROR: clustered_dataset.parquet was not found."
+
+    if not SHAP_PATH.exists():
+        return "ERROR: shap_feature_importance.csv was not found."
+
+    try:
+        # ---------------------------------------------------------------
+        # LOAD CLUSTERED DATA
+        # ---------------------------------------------------------------
+
+        df = pd.read_parquet(CLUSTERED_DATA_PATH)
+
+        if "RISK_CLUSTER" not in df.columns:
+            return (
+                "ERROR: RISK_CLUSTER column is missing from clustered dataset."
+            )
+
+        total_population = len(df)
+
+        if total_population == 0:
+            return "ERROR: clustered dataset contains no records."
+
+        # The Phase 2 project definition identifies Cluster 2 as the
+        # high-risk cluster.
+        high_risk_cluster_id = 2
+
+        high_risk = df[
+            df["RISK_CLUSTER"] == high_risk_cluster_id
+        ].copy()
+
+        if high_risk.empty:
+            return (
+                "ERROR: High-risk cluster 2 contains no records. "
+                "Inspect the Phase 2 clustering output before continuing."
+            )
+
+        population_size = len(high_risk)
+
+        population_percentage = (
+            population_size / total_population
+        ) * 100
+
+        # ---------------------------------------------------------------
+        # OBSERVED CLUSTER PROFILE
+        # ---------------------------------------------------------------
+
+        metrics = {
+            "average_age": "AGE",
+            "average_admissions": "TOTAL_ADMISSIONS",
+            "average_admission_cost": "AVG_ADMISSION_COST",
+            "average_diagnoses": "UNIQUE_DIAGNOSES_COUNT",
+            "average_length_of_stay": "AVG_LENGTH_OF_STAY",
+            "average_inpatient_claims": "INPATIENT_CLAIM_COUNT",
+            "average_outpatient_claims": "OUTPATIENT_CLAIM_COUNT",
+            "average_drug_claims": "DRUG_CLAIM_COUNT",
+        }
+
+        profile = {}
+
+        for label, column in metrics.items():
+
+            if column not in high_risk.columns:
+                profile[label] = None
+                continue
+
+            numeric_values = pd.to_numeric(
+                high_risk[column],
+                errors="coerce",
+            )
+
+            value = numeric_values.mean()
+
+            if pd.notna(value):
+                profile[label] = float(value)
+            else:
+                profile[label] = None
+
+        # ---------------------------------------------------------------
+        # LOAD ACTUAL SHAP RANKINGS
+        # ---------------------------------------------------------------
+
+        shap_df = pd.read_csv(SHAP_PATH)
+
+        required_shap_columns = {
+            "feature",
+            "mean_abs_shap_rank",
+            "mean_abs_shap",
+        }
+
+        missing_columns = (
+            required_shap_columns - set(shap_df.columns)
+        )
+
+        if missing_columns:
+            return (
+                "ERROR: SHAP file is missing required columns: "
+                + ", ".join(sorted(missing_columns))
+            )
+
+        # Validate numerical columns before using them.
+        shap_df["mean_abs_shap_rank"] = pd.to_numeric(
+            shap_df["mean_abs_shap_rank"],
+            errors="coerce",
+        )
+
+        shap_df["mean_abs_shap"] = pd.to_numeric(
+            shap_df["mean_abs_shap"],
+            errors="coerce",
+        )
+
+        shap_df = shap_df.dropna(
+            subset=[
+                "mean_abs_shap_rank",
+                "mean_abs_shap",
+            ]
+        )
+
+        shap_df = shap_df.sort_values(
+            "mean_abs_shap_rank"
+        )
+
+        # Return enough rankings for the agent to understand the
+        # complete ordering, while explicitly identifying the top three.
+        top_shap = shap_df.head(10).copy()
+
+        shap_drivers = []
+
+        for _, row in top_shap.iterrows():
+
+            shap_drivers.append(
+                {
+                    "rank": int(row["mean_abs_shap_rank"]),
+                    "feature": str(row["feature"]),
+                    "mean_abs_shap": float(row["mean_abs_shap"]),
+                }
+            )
+
+        # Explicit top-three evidence.
+        top_three = shap_drivers[:3]
+
+        # ---------------------------------------------------------------
+        # STRUCTURED EVIDENCE
+        # ---------------------------------------------------------------
+
+        evidence = {
+            "analysis_type": "High-risk cluster evidence",
+
+            "cluster_definition": (
+                "The high-risk cluster is Cluster 2 as defined by "
+                "the Phase 2 patient segmentation analysis."
+            ),
+
+            "population": {
+                "total_dataset_records": total_population,
+                "high_risk_population": population_size,
+                "high_risk_percentage": round(
+                    population_percentage,
+                    2,
+                ),
+            },
+
+            "clinical_utilization_profile": profile,
+
+            "shap_analysis": {
+                "source": "Phase 2 SHAP feature-importance artifact",
+                "value_type": "mean absolute SHAP",
+                "top_three": top_three,
+                "top_ten": shap_drivers,
+                "interpretation": (
+                    "Mean absolute SHAP values measure the average "
+                    "magnitude of a feature's contribution to the "
+                    "model's predictions. They do not indicate whether "
+                    "higher or lower feature values increase predicted "
+                    "risk, and they do not establish causation."
+                ),
+                "direction_available": False,
+                "causal_evidence_available": False,
+            },
+
+            "evidence_separation": {
+                "observed_data": (
+                    "Cluster population and cluster profile metrics "
+                    "are descriptive statistics calculated from the "
+                    "clustered dataset."
+                ),
+                "model_importance": (
+                    "SHAP rankings describe feature contribution "
+                    "magnitude within the readmission model."
+                ),
+                "causal_evidence": (
+                    "No causal evidence is provided by this tool."
+                ),
+            },
+
+            "recommendation_guidance": (
+                "Business recommendations may use observed cluster "
+                "characteristics as evidence for potential interventions. "
+                "SHAP importance may identify areas worthy of further "
+                "investigation, but SHAP importance alone must not be "
+                "used to claim that changing a feature will reduce "
+                "readmission, cost, or utilization."
+            ),
+        }
+
+        return json.dumps(
+            evidence,
+            indent=2,
+        )
+
+    except Exception as exc:
+        return f"ERROR analyzing high-risk cluster: {exc}"
+
+
+# ---------------------------------------------------------------------------
+# SHAP FEATURE IMPORTANCE
+# ---------------------------------------------------------------------------
+
+@tool
+def get_shap_feature_importance(top_n: int = 10) -> str:
+    """
+    Return the actual numerical SHAP feature-importance rankings
+    generated by the Phase 2 XGBoost model.
+
+    The artifact contains mean absolute SHAP values.
+
+    Use this when the user asks:
+    - which variables drive readmission predictions
+    - top model drivers
+    - SHAP rankings
+    - feature importance
+
+    Important:
+    These values provide magnitude/ranking only.
+    They do not establish direction or causation.
+    """
+
+    if not SHAP_PATH.exists():
+        return "ERROR: shap_feature_importance.csv was not found."
+
+    try:
+        top_n = max(
+            1,
+            min(
+                int(top_n),
+                44,
+            ),
+        )
+
+        shap_df = pd.read_csv(SHAP_PATH)
+
+        required_columns = {
+            "feature",
+            "mean_abs_shap_rank",
+            "mean_abs_shap",
+        }
+
+        missing_columns = (
+            required_columns - set(shap_df.columns)
+        )
+
+        if missing_columns:
+            return (
+                "ERROR: SHAP file is missing required columns: "
+                + ", ".join(sorted(missing_columns))
+            )
+
+        shap_df["mean_abs_shap_rank"] = pd.to_numeric(
+            shap_df["mean_abs_shap_rank"],
+            errors="coerce",
+        )
+
+        shap_df["mean_abs_shap"] = pd.to_numeric(
+            shap_df["mean_abs_shap"],
+            errors="coerce",
+        )
+
+        shap_df = shap_df.dropna(
+            subset=[
+                "mean_abs_shap_rank",
+                "mean_abs_shap",
+            ]
+        )
+
+        shap_df = shap_df.sort_values(
+            "mean_abs_shap_rank"
+        ).head(top_n)
+
+        results = []
+
+        for _, row in shap_df.iterrows():
+
+            results.append(
+                {
+                    "rank": int(row["mean_abs_shap_rank"]),
+                    "feature": str(row["feature"]),
+                    "mean_abs_shap": float(row["mean_abs_shap"]),
+                }
+            )
+
+        return json.dumps(
+            {
+                "source": "Phase 2 SHAP analysis",
+
+                "value_type": "mean absolute SHAP",
+
+                "features": results,
+
+                "interpretation": (
+                    "Higher mean absolute SHAP values indicate greater "
+                    "average contribution magnitude to the model's "
+                    "predictions. These values provide feature "
+                    "importance/ranking only. They do not establish "
+                    "whether higher or lower feature values increase "
+                    "predicted risk and do not provide causal evidence."
+                ),
+
+                "direction_available": False,
+
+                "causal_evidence_available": False,
+            },
+            indent=2,
+        )
+
+    except Exception as exc:
+        return f"ERROR reading SHAP importance: {exc}"
+
+
+# ---------------------------------------------------------------------------
+# MODEL METADATA
+# ---------------------------------------------------------------------------
+
+@tool
+def get_model_metadata() -> str:
+    """
+    Return metadata describing the trained Phase 2 readmission model,
+    including its target, feature schema, evaluation metrics, and
+    SHAP sample size.
+
+    Use this when the user asks about:
+    - model performance
+    - model target
+    - model features
+    - training/evaluation information
+    - model schema
+    """
+
+    if not METADATA_PATH.exists():
+        return "ERROR: classification_metadata.json was not found."
+
+    try:
+        metadata = json.loads(
+            METADATA_PATH.read_text(
+                encoding="utf-8"
+            )
+        )
+
+        return json.dumps(
+            metadata,
+            indent=2,
+        )
+
+    except Exception as exc:
+        return f"ERROR reading model metadata: {exc}"
+
+
+# ---------------------------------------------------------------------------
+# INDIVIDUAL READMISSION PREDICTION
+# ---------------------------------------------------------------------------
+
+@tool
+def predict_readmission_risk(
+    patient_features_json: str,
+) -> str:
+    """
+    Predict 30-day readmission probability using the trained Phase 2
+    XGBoost model.
+
+    Input must be JSON containing the model's expected feature names.
+
+    The tool validates the supplied schema and does not silently invent
+    missing clinical values.
+
+    This tool should only be used when the required patient feature
+    values are actually supplied by the user.
+    """
+
+    if not MODEL_PATH.exists():
+        return "ERROR: classification_model.pkl was not found."
+
+    try:
+        model = joblib.load(MODEL_PATH)
+
+        data = json.loads(
+            patient_features_json
+        )
+
+        if not isinstance(data, dict):
+            return (
+                "ERROR: Input must be a JSON object of "
+                "feature names and values."
+            )
+
+        if not hasattr(model, "feature_names_in_"):
+            return (
+                "ERROR: Trained model does not expose "
+                "feature_names_in_. Prediction schema cannot "
+                "be validated safely."
+            )
+
+        expected_features = list(
+            model.feature_names_in_
+        )
+
+        supplied_features = set(
+            data.keys()
+        )
+
+        expected_feature_set = set(
+            expected_features
+        )
+
+        missing_features = sorted(
+            expected_feature_set - supplied_features
+        )
+
+        unexpected_features = sorted(
+            supplied_features - expected_feature_set
+        )
+
+        if missing_features:
+            return json.dumps(
+                {
+                    "status": "validation_error",
+                    "message": (
+                        "Prediction requires all model features. "
+                        "No missing features were automatically filled."
+                    ),
+                    "missing_features": missing_features,
+                },
+                indent=2,
+            )
+
+        if unexpected_features:
+            return json.dumps(
+                {
+                    "status": "validation_error",
+                    "message": (
+                        "Input contains features not used by "
+                        "the trained model."
+                    ),
+                    "unexpected_features": unexpected_features,
+                },
+                indent=2,
+            )
+
+        input_df = pd.DataFrame(
+            [
+                [
+                    data[feature]
+                    for feature in expected_features
+                ]
+            ],
+            columns=expected_features,
+        )
+
+        prediction_probability = float(
+            model.predict_proba(input_df)[0][1]
+        )
+
+        prediction = int(
+            model.predict(input_df)[0]
+        )
+
+        return json.dumps(
+            {
+                "status": "success",
+
+                "predicted_class": prediction,
+
+                "predicted_30_day_readmission_probability": round(
+                    prediction_probability,
+                    6,
+                ),
+
+                "predicted_30_day_readmission_percentage": round(
+                    prediction_probability * 100,
+                    2,
+                ),
+
+                "model": "XGBoost classification model",
+
+                "target": "IS_30DAY_READMISSION",
+
+                "interpretation_note": (
+                    "This is a model prediction for the supplied "
+                    "feature values. It is not a diagnosis and does "
+                    "not establish causation."
+                ),
+            },
+            indent=2,
+        )
+
+    except json.JSONDecodeError:
+        return (
+            "ERROR: patient_features_json is not valid JSON."
+        )
+
+    except Exception as exc:
+        return f"ERROR making readmission prediction: {exc}"
+
+
+# ---------------------------------------------------------------------------
+# TOOL COLLECTION
+# ---------------------------------------------------------------------------
+
+TOOLS = [
+    analyze_high_risk_cluster,
+    get_shap_feature_importance,
+    get_model_metadata,
+    predict_readmission_risk,
+]
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: src\ai_agent\streamlit_app.py
+
+```python
+"""
+ValueAI Healthcare Value Intelligence Assistant
+Phase 3 - GenAI & Agentic AI
+
+Enterprise-style Streamlit interface for the LangGraph
+data science assistant.
+"""
+
+from pathlib import Path
+import hashlib
+import json
+import sys
+
+import pandas as pd
+import streamlit as st
+
+from src.ai_agent.agent_graph import invoke_agent
+from src.ai_agent.agent_tools import analyze_high_risk_cluster
+import src.ai_agent.agent_graph as agent_graph_module
+import src.ai_agent.agent_tools as agent_tools_module
+
+
+# ============================================================
+# PROJECT PATHS
+# ============================================================
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+MODEL_METADATA_PATH = (
+    PROJECT_ROOT / "models" / "classification_metadata.json"
+)
+
+MODEL_PATH = (
+    PROJECT_ROOT / "models" / "classification_model.pkl"
+)
+
+CLUSTER_DATA_PATH = (
+    PROJECT_ROOT / "data" / "processed" / "clustered_dataset.parquet"
+)
+
+SHAP_PATH = (
+    PROJECT_ROOT / "docs" / "shap_feature_importance.csv"
+)
+
+TIME_SERIES_PATH = (
+    PROJECT_ROOT / "models" / "timeseries_model.pkl"
+)
+
+MONTE_CARLO_PATH = (
+    PROJECT_ROOT / "data" / "processed" / "monte_carlo_results.json"
+)
+
+
+# ============================================================
+# AGENT DIAGNOSTICS
+# ============================================================
+
+def file_sha256(path: Path) -> str:
+    """
+    Return SHA-256 hash for a file.
+
+    Used temporarily to prove exactly which source files
+    Streamlit has loaded.
+    """
+
+    if not path.exists():
+        return "FILE NOT FOUND"
+
+    return hashlib.sha256(
+        path.read_bytes()
+    ).hexdigest()
+
+
+AGENT_GRAPH_PATH = Path(
+    agent_graph_module.__file__
+).resolve()
+
+AGENT_TOOLS_PATH = Path(
+    agent_tools_module.__file__
+).resolve()
+
+
+# ============================================================
+# PAGE CONFIGURATION
+# ============================================================
+
+st.set_page_config(
+    page_title="ValueAI | Healthcare Value Intelligence",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+
+# ============================================================
+# LIGHT UI STYLING
+# ============================================================
+
+st.markdown(
+    """
+    <style>
+
+    .main {
+        padding-top: 1rem;
+    }
+
+    div[data-testid="stMetric"] {
+        padding: 0.25rem 0;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# ============================================================
+# LOAD MODEL METADATA
+# ============================================================
+
+@st.cache_data
+def load_model_metadata():
+
+    if not MODEL_METADATA_PATH.exists():
+        return {}
+
+    try:
+
+        with open(
+            MODEL_METADATA_PATH,
+            "r",
+            encoding="utf-8",
+        ) as file:
+
+            return json.load(file)
+
+    except Exception:
+
+        return {}
+
+
+# ============================================================
+# LOAD DATASET RECORD COUNT
+# ============================================================
+
+@st.cache_data
+def load_dataset_record_count():
+
+    if not CLUSTER_DATA_PATH.exists():
+        return None
+
+    try:
+
+        df = pd.read_parquet(
+            CLUSTER_DATA_PATH,
+            columns=["RISK_CLUSTER"],
+        )
+
+        return len(df)
+
+    except Exception:
+
+        return None
+
+
+# ============================================================
+# LOAD CLUSTER COUNT
+# ============================================================
+
+@st.cache_data
+def load_cluster_count():
+
+    if not CLUSTER_DATA_PATH.exists():
+        return None
+
+    try:
+
+        df = pd.read_parquet(
+            CLUSTER_DATA_PATH,
+            columns=["RISK_CLUSTER"],
+        )
+
+        return int(
+            df["RISK_CLUSTER"].nunique()
+        )
+
+    except Exception:
+
+        return None
+
+
+# ============================================================
+# INITIAL DATA LOAD
+# ============================================================
+
+metadata = load_model_metadata()
+
+record_count = load_dataset_record_count()
+
+cluster_count = load_cluster_count()
+
+
+# ============================================================
+# SESSION STATE
+# ============================================================
+
+default_prompt = (
+    "Analyze the high-risk cluster. "
+    "What are the top 3 drivers of readmission based on the SHAP values, "
+    "and generate 3 strategic, value-based recommendations for the business?"
+)
+
+
+if "business_question" not in st.session_state:
+
+    st.session_state["business_question"] = default_prompt
+
+
+# ============================================================
+# SIDEBAR
+# ============================================================
+
+with st.sidebar:
+
+    st.markdown("## VALUEAI")
+
+    st.caption("Healthcare Value Intelligence")
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # MODEL STATUS
+    # --------------------------------------------------------
+
+    st.markdown("### MODEL STATUS")
+
+    status_items = [
+        (
+            "Clustering Model",
+            CLUSTER_DATA_PATH.exists(),
+        ),
+        (
+            "XGBoost Readmission Model",
+            MODEL_PATH.exists(),
+        ),
+        (
+            "SHAP Explainability",
+            SHAP_PATH.exists(),
+        ),
+        (
+            "Time-Series Forecast",
+            TIME_SERIES_PATH.exists(),
+        ),
+        (
+            "Monte Carlo Simulation",
+            MONTE_CARLO_PATH.exists(),
+        ),
+    ]
+
+    for label, available in status_items:
+
+        if available:
+
+            st.markdown(
+                f"✓ **{label}**"
+            )
+
+        else:
+
+            st.markdown(
+                f"⚠ **{label}**"
+            )
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # DATASET
+    # --------------------------------------------------------
+
+    st.markdown("### DATASET")
+
+    st.metric(
+        "Records",
+        f"{record_count:,}"
+        if record_count is not None
+        else "N/A",
+    )
+
+    st.metric(
+        "Classification Features",
+        metadata.get(
+            "n_features",
+            "N/A",
+        ),
+    )
+
+    st.metric(
+        "Clusters",
+        cluster_count
+        if cluster_count is not None
+        else "N/A",
+    )
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # MODEL PERFORMANCE
+    # --------------------------------------------------------
+
+    st.markdown("### READMISSION MODEL")
+
+    auc = metadata.get(
+        "test_auc_roc"
+    )
+
+    accuracy = metadata.get(
+        "test_accuracy"
+    )
+
+    if auc is not None:
+
+        st.metric(
+            "Test AUC-ROC",
+            f"{auc:.4f}",
+        )
+
+    if accuracy is not None:
+
+        st.metric(
+            "Test Accuracy",
+            f"{accuracy:.4f}",
+        )
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # AI ENGINE
+    # --------------------------------------------------------
+
+    st.markdown("### AI ENGINE")
+
+    st.write("**Local LLM**")
+
+    st.code(
+        "Qwen 2.5 7B",
+        language="text",
+    )
+
+    st.write("**Agent Framework**")
+
+    st.code(
+        "LangGraph",
+        language="text",
+    )
+
+    st.write("**Inference**")
+
+    st.code(
+        "Local XGBoost",
+        language="text",
+    )
+
+
+# ============================================================
+# MAIN HEADER
+# ============================================================
+
+st.title("VALUEAI")
+
+st.caption(
+    "Healthcare Value Intelligence Assistant"
+)
+
+st.divider()
+
+
+# ============================================================
+# TEMPORARY DEVELOPER DIAGNOSTICS
+# ============================================================
+
+with st.expander(
+    "Developer Diagnostics",
+    expanded=False,
+):
+
+    st.markdown(
+        "### Runtime"
+    )
+
+    st.write(
+        "Python executable:",
+        sys.executable,
+    )
+
+    st.write(
+        "Python version:",
+        sys.version,
+    )
+
+    st.write(
+        "Project root:",
+        str(PROJECT_ROOT),
+    )
+
+    st.markdown(
+        "### Imported Modules"
+    )
+
+    st.write(
+        "Agent graph loaded from:",
+        str(AGENT_GRAPH_PATH),
+    )
+
+    st.write(
+        "Agent tools loaded from:",
+        str(AGENT_TOOLS_PATH),
+    )
+
+    st.write(
+        "agent_graph.py SHA-256:",
+        file_sha256(AGENT_GRAPH_PATH),
+    )
+
+    st.write(
+        "agent_tools.py SHA-256:",
+        file_sha256(AGENT_TOOLS_PATH),
+    )
+
+    st.markdown(
+        "### Analytical Artifacts"
+    )
+
+    st.write(
+        "Clustered dataset:",
+        str(CLUSTER_DATA_PATH),
+    )
+
+    st.write(
+        "Clustered dataset exists:",
+        CLUSTER_DATA_PATH.exists(),
+    )
+
+    st.write(
+        "SHAP artifact:",
+        str(SHAP_PATH),
+    )
+
+    st.write(
+        "SHAP artifact exists:",
+        SHAP_PATH.exists(),
+    )
+
+    st.write(
+        "Classification model:",
+        str(MODEL_PATH),
+    )
+
+    st.write(
+        "Classification model exists:",
+        MODEL_PATH.exists(),
+    )
+
+    st.markdown(
+        "### Direct Analytical Tool Test"
+    )
+
+    st.caption(
+        "This bypasses LangGraph and Qwen and directly executes "
+        "analyze_high_risk_cluster()."
+    )
+
+    if st.button(
+        "Test Analytical Tool Directly",
+        key="diagnostic_tool_test",
+    ):
+
+        try:
+
+            diagnostic_result = (
+                analyze_high_risk_cluster.invoke({})
+            )
+
+            st.success(
+                "Analytical tool executed successfully."
+            )
+
+            st.code(
+                diagnostic_result,
+                language="json",
+            )
+
+        except Exception as exc:
+
+            st.error(
+                "Direct analytical tool execution failed."
+            )
+
+            st.exception(exc)
+
+
+# ============================================================
+# BUSINESS QUESTION
+# ============================================================
+
+st.subheader(
+    "Ask the Data Science Assistant"
+)
+
+st.caption(
+    "Ask questions about patient segmentation, readmission risk, "
+    "model drivers, utilization patterns, and business value."
+)
+
+
+# ============================================================
+# QUICK ANALYSIS OPTIONS
+# ============================================================
+
+st.markdown(
+    "### Quick Analysis"
+)
+
+quick_col1, quick_col2, quick_col3 = st.columns(3)
+
+
+with quick_col1:
+
+    if st.button(
+        "High-Risk Cluster",
+        use_container_width=True,
+    ):
+
+        st.session_state["business_question"] = (
+            "Analyze the high-risk cluster. "
+            "Describe its population and utilization profile, "
+            "identify the top 3 model drivers based on mean absolute "
+            "SHAP importance, and propose 3 evidence-grounded "
+            "business interventions."
+        )
+
+        st.rerun()
+
+
+with quick_col2:
+
+    if st.button(
+        "Model Drivers",
+        use_container_width=True,
+    ):
+
+        st.session_state["business_question"] = (
+            "What are the top 10 drivers of readmission according to "
+            "the Phase 2 SHAP analysis? Explain what mean absolute SHAP "
+            "importance tells us and clearly distinguish model "
+            "importance from causation."
+        )
+
+        st.rerun()
+
+
+with quick_col3:
+
+    if st.button(
+        "Business Memo",
+        use_container_width=True,
+    ):
+
+        st.session_state["business_question"] = (
+            "Generate an executive business memo for the high-risk "
+            "cluster using the available analytical evidence. "
+            "Include the population profile, top model drivers, "
+            "what the data shows, 3 proposed strategic interventions, "
+            "value mechanisms, KPIs, and model/data caveats."
+        )
+
+        st.rerun()
+
+
+# ============================================================
+# BUSINESS QUESTION INPUT
+# ============================================================
+
+prompt = st.text_area(
+    "Business question",
+    key="business_question",
+    height=120,
+    label_visibility="collapsed",
+)
+
+
+# ============================================================
+# RUN ANALYSIS
+# ============================================================
+
+st.markdown("")
+
+analyze_button = st.button(
+    "Run Analysis",
+    type="primary",
+    use_container_width=True,
+)
+
+
+if analyze_button:
+
+    if not prompt.strip():
+
+        st.warning(
+            "Please enter a business question."
+        )
+
+        st.stop()
+
+    with st.spinner(
+        "Analyzing Phase 2 evidence and generating executive insights..."
+    ):
+
+        try:
+
+            response = invoke_agent(
+                prompt.strip()
+            )
+
+        except Exception as exc:
+
+            st.error(
+                "The analysis could not be completed."
+            )
+
+            st.exception(exc)
+
+            st.stop()
+
+    st.session_state[
+        "analysis_response"
+    ] = response
+
+
+# ============================================================
+# DISPLAY EXECUTIVE MEMO
+# ============================================================
+
+if "analysis_response" in st.session_state:
+
+    st.divider()
+
+    st.subheader(
+        "EXECUTIVE MEMO"
+    )
+
+    st.caption(
+        "Generated from the ValueAI analytical tools and local "
+        "Qwen 2.5 7B reasoning layer."
+    )
+
+    response = st.session_state[
+        "analysis_response"
+    ]
+
+    with st.container(border=True):
+
+        st.markdown(response)
 ```
 
 
@@ -3457,6 +13656,937 @@ if __name__ == "__main__":
 
 <div style='page-break-after: always;'></div>
 
+# File: src\mlops\log_models.py
+
+```python
+"""
+ValueAI MLOps Model Logging
+===========================
+
+Logs trained ValueAI models and their evaluation artifacts to MLflow.
+
+Models covered:
+- GMM clustering
+- XGBoost classification
+- ARIMA time-series forecasting
+
+Purpose:
+- Demonstrate reproducible model tracking
+- Capture model parameters and evaluation metrics
+- Register model artifacts for downstream deployment
+- Provide an auditable bridge between model development and operational use
+
+Usage:
+    python -m src.mlops.log_models
+
+MLflow tracking:
+- Run metadata is stored in a local SQLite database: mlflow.db
+- Model and evaluation artifacts are stored locally under: mlruns/
+
+This module does not require a cloud MLflow server.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import joblib
+import mlflow
+import mlflow.sklearn
+import mlflow.statsmodels
+
+from src.utils.logger import get_logger
+
+
+# ---------------------------------------------------------------------------
+# Project paths
+# ---------------------------------------------------------------------------
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+MODELS_DIR = PROJECT_ROOT / "models"
+DOCS_DIR = PROJECT_ROOT / "docs"
+MLRUNS_DIR = PROJECT_ROOT / "mlruns"
+LOG_DIR = PROJECT_ROOT / "logs"
+
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
+DOCS_DIR.mkdir(parents=True, exist_ok=True)
+MLRUNS_DIR.mkdir(parents=True, exist_ok=True)
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+LOGGER = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# MLflow configuration
+# ---------------------------------------------------------------------------
+
+EXPERIMENT_NAME = "ValueAI"
+
+# MLflow 3.x uses a database-backed tracking store.
+MLFLOW_DB = PROJECT_ROOT / "mlflow.db"
+
+MLFLOW_TRACKING_URI = f"sqlite:///{MLFLOW_DB.as_posix()}"
+
+# Model/evaluation artifacts remain inside the project.
+MLFLOW_ARTIFACT_LOCATION = MLRUNS_DIR.as_uri()
+
+
+# ---------------------------------------------------------------------------
+# General helpers
+# ---------------------------------------------------------------------------
+
+def load_json(path: Path) -> dict[str, Any]:
+    """Load a JSON file if it exists."""
+
+    if not path.exists():
+        LOGGER.warning("JSON file not found: %s", path)
+        return {}
+
+    with path.open("r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+def load_serialized_model(path: Path) -> Any:
+    """
+    Load a serialized Python model.
+
+    Joblib is attempted first because the ValueAI model artifacts are
+    serialized using joblib-compatible formats.
+
+    Standard pickle is retained as a compatibility fallback.
+    """
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Serialized model not found: {path}"
+        )
+
+    LOGGER.info(
+        "Loading serialized model: %s",
+        path,
+    )
+
+    # -----------------------------------------------------------------------
+    # Primary loader: joblib
+    # -----------------------------------------------------------------------
+
+    try:
+        model = joblib.load(path)
+
+        LOGGER.info(
+            "Successfully loaded model using joblib: %s",
+            path.name,
+        )
+
+        return model
+
+    except Exception as joblib_error:
+
+        LOGGER.warning(
+            "Joblib could not load %s: %s",
+            path.name,
+            joblib_error,
+        )
+
+    # -----------------------------------------------------------------------
+    # Fallback loader: standard pickle
+    # -----------------------------------------------------------------------
+
+    try:
+
+        import pickle
+
+        with path.open("rb") as file:
+            model = pickle.load(file)
+
+        LOGGER.info(
+            "Successfully loaded model using standard pickle: %s",
+            path.name,
+        )
+
+        return model
+
+    except Exception as pickle_error:
+
+        raise RuntimeError(
+            "\n"
+            f"Unable to deserialize model artifact:\n"
+            f"  {path}\n\n"
+            "The file could not be loaded using either joblib "
+            "or standard pickle.\n\n"
+            f"Joblib error: {joblib_error}\n"
+            f"Pickle error: {pickle_error}"
+        ) from pickle_error
+
+
+def log_existing_artifact(path: Path) -> None:
+    """Log a file to MLflow when it exists."""
+
+    if path.exists():
+
+        mlflow.log_artifact(
+            str(path)
+        )
+
+        LOGGER.info(
+            "Logged artifact: %s",
+            path,
+        )
+
+    else:
+
+        LOGGER.warning(
+            "Artifact not found: %s",
+            path,
+        )
+
+
+def get_experiment_id() -> str:
+    """
+    Return the ValueAI MLflow experiment ID.
+
+    Creates the experiment when it does not already exist.
+    """
+
+    experiment = mlflow.get_experiment_by_name(
+        EXPERIMENT_NAME
+    )
+
+    if experiment is None:
+
+        experiment_id = mlflow.create_experiment(
+            name=EXPERIMENT_NAME,
+            artifact_location=MLFLOW_ARTIFACT_LOCATION,
+        )
+
+        LOGGER.info(
+            "Created MLflow experiment: %s",
+            EXPERIMENT_NAME,
+        )
+
+        return experiment_id
+
+    LOGGER.info(
+        "Using existing MLflow experiment: %s",
+        EXPERIMENT_NAME,
+    )
+
+    return experiment.experiment_id
+
+
+# ---------------------------------------------------------------------------
+# Clustering
+# ---------------------------------------------------------------------------
+
+def log_clustering_model() -> str:
+    """
+    Log the ValueAI GMM clustering model.
+
+    Expected artifacts:
+        models/clustering_model.pkl
+        models/clustering_scaler.pkl
+        docs/cluster_distribution.png
+    """
+
+    model_path = (
+        MODELS_DIR / "clustering_model.pkl"
+    )
+
+    scaler_path = (
+        MODELS_DIR / "clustering_scaler.pkl"
+    )
+
+    if not model_path.exists():
+
+        raise FileNotFoundError(
+            f"Clustering model not found: {model_path}"
+        )
+
+    if not scaler_path.exists():
+
+        raise FileNotFoundError(
+            f"Clustering scaler not found: {scaler_path}"
+        )
+
+    LOGGER.info(
+        "Logging clustering model..."
+    )
+
+    # Load before creating the MLflow run.
+    model = load_serialized_model(
+        model_path
+    )
+
+    scaler = load_serialized_model(
+        scaler_path
+    )
+
+    experiment_id = get_experiment_id()
+
+    with mlflow.start_run(
+        experiment_id=experiment_id,
+        run_name="gmm_clustering",
+    ) as run:
+
+        # ---------------------------------------------------------------
+        # Model parameters
+        # ---------------------------------------------------------------
+
+        if hasattr(model, "n_components"):
+
+            mlflow.log_param(
+                "n_components",
+                model.n_components,
+            )
+
+        if hasattr(model, "covariance_type"):
+
+            mlflow.log_param(
+                "covariance_type",
+                model.covariance_type,
+            )
+
+        if hasattr(model, "random_state"):
+
+            mlflow.log_param(
+                "random_state",
+                model.random_state,
+            )
+
+        # ---------------------------------------------------------------
+        # Evaluation metric
+        # ---------------------------------------------------------------
+
+        mlflow.log_metric(
+            "silhouette_score",
+            0.3542,
+        )
+
+        # ---------------------------------------------------------------
+        # Model artifacts
+        # ---------------------------------------------------------------
+
+        try:
+
+            mlflow.sklearn.log_model(
+                model,
+                name="gmm_clustering_model",
+            )
+
+            LOGGER.info(
+                "Logged GMM model using MLflow sklearn flavor."
+            )
+
+        except Exception as exc:
+
+            LOGGER.warning(
+                "MLflow sklearn GMM logging failed: %s",
+                exc,
+            )
+
+            mlflow.log_artifact(
+                str(model_path),
+                artifact_path="raw_models",
+            )
+
+            LOGGER.info(
+                "Logged raw GMM model as fallback artifact."
+            )
+
+        # Scaler is a standard sklearn object.
+        try:
+
+            mlflow.sklearn.log_model(
+                scaler,
+                name="clustering_scaler",
+            )
+
+            LOGGER.info(
+                "Logged clustering scaler."
+            )
+
+        except Exception as exc:
+
+            LOGGER.warning(
+                "MLflow scaler logging failed: %s",
+                exc,
+            )
+
+            mlflow.log_artifact(
+                str(scaler_path),
+                artifact_path="raw_models",
+            )
+
+        # ---------------------------------------------------------------
+        # Evaluation artifacts
+        # ---------------------------------------------------------------
+
+        log_existing_artifact(
+            DOCS_DIR / "cluster_distribution.png"
+        )
+
+        # ---------------------------------------------------------------
+        # Run tags
+        # ---------------------------------------------------------------
+
+        mlflow.set_tag(
+            "model_type",
+            "Gaussian Mixture Model",
+        )
+
+        mlflow.set_tag(
+            "task",
+            "patient_segmentation",
+        )
+
+        mlflow.set_tag(
+            "data_type",
+            "synthetic_CMS_DE_SynPUF",
+        )
+
+        mlflow.set_tag(
+            "phase",
+            "Phase_2_modeling",
+        )
+
+        mlflow.set_tag(
+            "serialization",
+            "joblib",
+        )
+
+        LOGGER.info(
+            "Clustering run completed: %s",
+            run.info.run_id,
+        )
+
+        return run.info.run_id
+
+
+# ---------------------------------------------------------------------------
+# Classification
+# ---------------------------------------------------------------------------
+
+def log_classification_model() -> str:
+    """
+    Log the ValueAI XGBoost classification model.
+
+    Expected artifacts:
+        models/classification_model.pkl
+        models/classification_metadata.json
+        docs/shap_summary.png
+        docs/shap_feature_importance.csv
+    """
+
+    model_path = (
+        MODELS_DIR / "classification_model.pkl"
+    )
+
+    metadata_path = (
+        MODELS_DIR / "classification_metadata.json"
+    )
+
+    if not model_path.exists():
+
+        raise FileNotFoundError(
+            f"Classification model not found: {model_path}"
+        )
+
+    LOGGER.info(
+        "Logging classification model..."
+    )
+
+    # Load before creating the MLflow run.
+    model = load_serialized_model(
+        model_path
+    )
+
+    metadata = load_json(
+        metadata_path
+    )
+
+    experiment_id = get_experiment_id()
+
+    with mlflow.start_run(
+        experiment_id=experiment_id,
+        run_name="xgboost_classification",
+    ) as run:
+
+        # ---------------------------------------------------------------
+        # Model parameters
+        # ---------------------------------------------------------------
+
+        if hasattr(model, "n_estimators"):
+
+            mlflow.log_param(
+                "n_estimators",
+                model.n_estimators,
+            )
+
+        if hasattr(model, "max_depth"):
+
+            mlflow.log_param(
+                "max_depth",
+                model.max_depth,
+            )
+
+        if hasattr(model, "learning_rate"):
+
+            mlflow.log_param(
+                "learning_rate",
+                model.learning_rate,
+            )
+
+        if hasattr(model, "subsample"):
+
+            mlflow.log_param(
+                "subsample",
+                model.subsample,
+            )
+
+        # ---------------------------------------------------------------
+        # Evaluation metrics
+        # ---------------------------------------------------------------
+
+        mlflow.log_metric(
+            "roc_auc",
+            0.9535,
+        )
+
+        mlflow.log_metric(
+            "accuracy",
+            0.8777,
+        )
+
+        # ---------------------------------------------------------------
+        # Model metadata
+        # ---------------------------------------------------------------
+
+        for key, value in metadata.items():
+
+            if isinstance(
+                value,
+                (str, int, float, bool),
+            ):
+
+                try:
+
+                    mlflow.log_param(
+                        f"metadata_{key}",
+                        value,
+                    )
+
+                except Exception:
+
+                    LOGGER.warning(
+                        "Could not log metadata parameter: %s",
+                        key,
+                    )
+
+        # ---------------------------------------------------------------
+        # XGBoost model logging
+        # ---------------------------------------------------------------
+
+        try:
+
+            # XGBoost models are explicitly trusted here because this
+            # is the locally trained ValueAI model being logged.
+            mlflow.sklearn.log_model(
+                model,
+                name="xgboost_classification_model",
+                skops_trusted_types=[
+                    "xgboost.core.Booster",
+                    "xgboost.sklearn.XGBClassifier",
+                ],
+            )
+
+            LOGGER.info(
+                "Logged XGBoost model using MLflow sklearn flavor."
+            )
+
+        except Exception as exc:
+
+            LOGGER.warning(
+                "MLflow sklearn XGBoost logging failed: %s",
+                exc,
+            )
+
+            # Always preserve the original trained model.
+            mlflow.log_artifact(
+                str(model_path),
+                artifact_path="raw_models",
+            )
+
+            LOGGER.info(
+                "Logged raw XGBoost Joblib artifact as fallback."
+            )
+
+        # ---------------------------------------------------------------
+        # Explainability artifacts
+        # ---------------------------------------------------------------
+
+        log_existing_artifact(
+            DOCS_DIR / "shap_summary.png"
+        )
+
+        log_existing_artifact(
+            DOCS_DIR / "shap_feature_importance.csv"
+        )
+
+        # ---------------------------------------------------------------
+        # Run tags
+        # ---------------------------------------------------------------
+
+        mlflow.set_tag(
+            "model_type",
+            "XGBoost",
+        )
+
+        mlflow.set_tag(
+            "task",
+            "readmission_risk_classification",
+        )
+
+        mlflow.set_tag(
+            "evaluation",
+            "holdout_test_set",
+        )
+
+        mlflow.set_tag(
+            "explainability",
+            "SHAP",
+        )
+
+        mlflow.set_tag(
+            "data_type",
+            "synthetic_CMS_DE_SynPUF",
+        )
+
+        mlflow.set_tag(
+            "phase",
+            "Phase_2_modeling",
+        )
+
+        mlflow.set_tag(
+            "serialization",
+            "joblib",
+        )
+
+        LOGGER.info(
+            "Classification run completed: %s",
+            run.info.run_id,
+        )
+
+        return run.info.run_id
+
+
+# ---------------------------------------------------------------------------
+# Time-series forecasting
+# ---------------------------------------------------------------------------
+
+def log_timeseries_model() -> str:
+    """
+    Log the ValueAI ARIMA forecasting model.
+
+    Expected artifacts:
+        models/timeseries_model.pkl
+        docs/timeseries_forecast.csv
+        docs/timeseries_forecast.png
+        docs/timeseries_holdout_evaluation.csv
+        docs/timeseries_model_metadata.json
+        docs/timeseries_model_metrics.csv
+    """
+
+    model_path = (
+        MODELS_DIR / "timeseries_model.pkl"
+    )
+
+    metadata_path = (
+        DOCS_DIR / "timeseries_model_metadata.json"
+    )
+
+    if not model_path.exists():
+
+        raise FileNotFoundError(
+            f"Time-series model not found: {model_path}"
+        )
+
+    LOGGER.info(
+        "Logging time-series model..."
+    )
+
+    model = load_serialized_model(
+        model_path
+    )
+
+    metadata = load_json(
+        metadata_path
+    )
+
+    experiment_id = get_experiment_id()
+
+    with mlflow.start_run(
+        experiment_id=experiment_id,
+        run_name="arima_forecasting",
+    ) as run:
+
+        # ---------------------------------------------------------------
+        # Model parameters
+        # ---------------------------------------------------------------
+
+        mlflow.log_param(
+            "model_type",
+            "ARIMA",
+        )
+
+        mlflow.log_param(
+            "order",
+            "(1, 1, 1)",
+        )
+
+        # ---------------------------------------------------------------
+        # Evaluation metric
+        # ---------------------------------------------------------------
+
+        mlflow.log_metric(
+            "rmse_improvement_vs_naive",
+            14.9,
+        )
+
+        # ---------------------------------------------------------------
+        # Additional metadata
+        # ---------------------------------------------------------------
+
+        for key, value in metadata.items():
+
+            if isinstance(
+                value,
+                (str, int, float, bool),
+            ):
+
+                try:
+
+                    mlflow.log_param(
+                        f"metadata_{key}",
+                        value,
+                    )
+
+                except Exception:
+
+                    LOGGER.warning(
+                        "Could not log time-series metadata: %s",
+                        key,
+                    )
+
+        # ---------------------------------------------------------------
+        # Statsmodels model logging
+        # ---------------------------------------------------------------
+
+        try:
+
+            mlflow.statsmodels.log_model(
+                model,
+                name="arima_timeseries_model",
+            )
+
+            LOGGER.info(
+                "Logged ARIMA model using MLflow statsmodels flavor."
+            )
+
+        except Exception as exc:
+
+            LOGGER.warning(
+                "Statsmodels MLflow logging failed: %s",
+                exc,
+            )
+
+            mlflow.log_artifact(
+                str(model_path),
+                artifact_path="raw_models",
+            )
+
+            LOGGER.info(
+                "Logged raw ARIMA model artifact as fallback."
+            )
+
+        # ---------------------------------------------------------------
+        # Forecast and evaluation artifacts
+        # ---------------------------------------------------------------
+
+        log_existing_artifact(
+            DOCS_DIR / "timeseries_forecast.csv"
+        )
+
+        log_existing_artifact(
+            DOCS_DIR / "timeseries_forecast.png"
+        )
+
+        log_existing_artifact(
+            DOCS_DIR / "timeseries_holdout_evaluation.csv"
+        )
+
+        log_existing_artifact(
+            DOCS_DIR / "timeseries_model_metadata.json"
+        )
+
+        log_existing_artifact(
+            DOCS_DIR / "timeseries_model_metrics.csv"
+        )
+
+        # ---------------------------------------------------------------
+        # Run tags
+        # ---------------------------------------------------------------
+
+        mlflow.set_tag(
+            "task",
+            "time_series_forecasting",
+        )
+
+        mlflow.set_tag(
+            "evaluation",
+            "holdout_with_naive_baseline",
+        )
+
+        mlflow.set_tag(
+            "data_type",
+            "synthetic_CMS_DE_SynPUF",
+        )
+
+        mlflow.set_tag(
+            "phase",
+            "Phase_2_modeling",
+        )
+
+        mlflow.set_tag(
+            "serialization",
+            "joblib",
+        )
+
+        LOGGER.info(
+            "Time-series run completed: %s",
+            run.info.run_id,
+        )
+
+        return run.info.run_id
+
+
+# ---------------------------------------------------------------------------
+# Main execution
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    """Run the complete ValueAI MLflow logging process."""
+
+    LOGGER.info("=" * 70)
+
+    LOGGER.info(
+        "ValueAI MLOps Model Logging"
+    )
+
+    LOGGER.info("=" * 70)
+
+    # -----------------------------------------------------------------------
+    # Configure MLflow
+    # -----------------------------------------------------------------------
+
+    mlflow.set_tracking_uri(
+        MLFLOW_TRACKING_URI
+    )
+
+    LOGGER.info(
+        "MLflow tracking URI: %s",
+        MLFLOW_TRACKING_URI,
+    )
+
+    LOGGER.info(
+        "MLflow artifact location: %s",
+        MLFLOW_ARTIFACT_LOCATION,
+    )
+
+    # -----------------------------------------------------------------------
+    # Create/reuse experiment
+    # -----------------------------------------------------------------------
+
+    experiment_id = get_experiment_id()
+
+    mlflow.set_experiment(
+        EXPERIMENT_NAME
+    )
+
+    LOGGER.info(
+        "Experiment ID: %s",
+        experiment_id,
+    )
+
+    # -----------------------------------------------------------------------
+    # Log models independently
+    # -----------------------------------------------------------------------
+
+    run_ids: dict[str, str] = {}
+
+    run_ids["clustering"] = (
+        log_clustering_model()
+    )
+
+    run_ids["classification"] = (
+        log_classification_model()
+    )
+
+    run_ids["timeseries"] = (
+        log_timeseries_model()
+    )
+
+    # -----------------------------------------------------------------------
+    # Save run summary
+    # -----------------------------------------------------------------------
+
+    run_summary_path = (
+        DOCS_DIR / "mlflow_run_summary.json"
+    )
+
+    with run_summary_path.open(
+        "w",
+        encoding="utf-8",
+    ) as file:
+
+        json.dump(
+            {
+                "experiment": EXPERIMENT_NAME,
+                "tracking_uri": MLFLOW_TRACKING_URI,
+                "artifact_location": MLFLOW_ARTIFACT_LOCATION,
+                "runs": run_ids,
+            },
+            file,
+            indent=2,
+        )
+
+    LOGGER.info(
+        "Run summary saved to: %s",
+        run_summary_path,
+    )
+
+    # -----------------------------------------------------------------------
+    # Completion
+    # -----------------------------------------------------------------------
+
+    LOGGER.info("=" * 70)
+
+    LOGGER.info(
+        "MLflow model logging completed successfully"
+    )
+
+    LOGGER.info("=" * 70)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+
+<div style='page-break-after: always;'></div>
+
 # File: src\models\__init__.py
 
 ```python
@@ -3470,8 +14600,16 @@ if __name__ == "__main__":
 ```python
 """
 Classification Model for 30-Day Readmission Prediction.
-Matches JD: "predictive statistical models, decision trees, classification"
+
+Matches JD:
+"predictive statistical models, decision trees, classification"
+
+Outputs:
+- XGBoost classification model
+- SHAP summary plot
+- Machine-readable SHAP feature importance CSV
 """
+
 import sys
 import logging
 import joblib
@@ -3479,37 +14617,57 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import shap
+
 from pathlib import Path
-from sklearn.metrics import roc_auc_score, accuracy_score, classification_report
+from sklearn.metrics import (
+    roc_auc_score,
+    accuracy_score,
+    classification_report
+)
+
 import xgboost as xgb
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.utils.logger import get_logger
+
+
 logger = get_logger(__name__)
+
 
 def run_classification():
     logger.info("Starting Classification Model Training...")
-    
+
+    # ------------------------------------------------------------------
     # 1. Load Data
+    # ------------------------------------------------------------------
+
     data_path = PROJECT_ROOT / "data" / "processed"
+
     train_df = pd.read_parquet(data_path / "train.parquet")
     val_df = pd.read_parquet(data_path / "val.parquet")
     test_df = pd.read_parquet(data_path / "test.parquet")
-    
-    # 2. Define Features and Target
+
+    # ------------------------------------------------------------------
+    # 2. Define Target and Excluded Columns
+    # ------------------------------------------------------------------
+
     target = "IS_30DAY_READMISSION"
+
     exclude_cols = [
         "DESYNPUF_ID",
         "IS_30DAY_READMISSION",
         "BENE_BIRTH_DT",
         "BENE_DEATH_DT",
-        "RISK_CLUSTER"
+        "RISK_CLUSTER",
     ]
 
-    # Remove records where the readmission outcome is unknown.
-    # None/NaN means the outcome cannot be used as a classification label.
+    # ------------------------------------------------------------------
+    # 3. Remove Records With Unknown Target
+    # ------------------------------------------------------------------
+
     train_df = train_df.dropna(subset=[target]).copy()
     val_df = val_df.dropna(subset=[target]).copy()
     test_df = test_df.dropna(subset=[target]).copy()
@@ -3520,67 +14678,117 @@ def run_classification():
         f"Test: {len(test_df):,}"
     )
 
-    # Convert boolean readmission target to binary 0/1.
-    # True = readmitted, False = not readmitted.
+    # ------------------------------------------------------------------
+    # 4. Encode Target
+    # ------------------------------------------------------------------
+
     def encode_target(series):
-        return series.map({
+        encoded = series.map({
             True: 1,
             False: 0,
             "True": 1,
             "False": 0,
             1: 1,
-            0: 0
-        }).astype(int)
+            0: 0,
+        })
+
+        if encoded.isna().any():
+            invalid_values = series[encoded.isna()].unique()
+            raise ValueError(
+                f"Unexpected values found in {target}: "
+                f"{invalid_values}"
+            )
+
+        return encoded.astype(int)
 
     train_df[target] = encode_target(train_df[target])
     val_df[target] = encode_target(val_df[target])
     test_df[target] = encode_target(test_df[target])
 
-    features = [
-        col for col in train_df.columns
-        if col not in exclude_cols
-        and train_df[col].dtype in [
-            "int64",
-            "float64",
-            "bool",
-            "int32",
-            "float32"
-        ]
+    # ------------------------------------------------------------------
+    # 5. Select Numeric Features
+    # ------------------------------------------------------------------
+
+    numeric_dtypes = [
+        "int64",
+        "float64",
+        "bool",
+        "int32",
+        "float32",
+        "int16",
+        "float16",
     ]
+
+    features = [
+        col
+        for col in train_df.columns
+        if (
+            col not in exclude_cols
+            and train_df[col].dtype in numeric_dtypes
+        )
+    ]
+
+    if not features:
+        raise ValueError("No numeric classification features were found.")
 
     logger.info(f"Classification features: {len(features)}")
 
-    # Handle boolean feature columns for XGBoost compatibility
+    # ------------------------------------------------------------------
+    # 6. Normalize Boolean Features
+    # ------------------------------------------------------------------
+
     for col in features:
         if train_df[col].dtype == "bool":
             train_df[col] = train_df[col].astype(int)
             val_df[col] = val_df[col].astype(int)
             test_df[col] = test_df[col].astype(int)
 
-    # Fill missing values in FEATURES only.
+    # ------------------------------------------------------------------
+    # 7. Handle Missing Feature Values
+    #
+    # IMPORTANT:
+    # Target values were already handled separately.
+    # Only model features are imputed here.
+    # ------------------------------------------------------------------
+
     train_df[features] = train_df[features].fillna(0)
     val_df[features] = val_df[features].fillna(0)
     test_df[features] = test_df[features].fillna(0)
 
-    X_train, y_train = train_df[features], train_df[target]
-    X_val, y_val = val_df[features], val_df[target]
-    X_test, y_test = test_df[features], test_df[target]
+    X_train = train_df[features]
+    y_train = train_df[target]
+
+    X_val = val_df[features]
+    y_val = val_df[target]
+
+    X_test = test_df[features]
+    y_test = test_df[target]
+
+    # ------------------------------------------------------------------
+    # 8. Log Target Distribution
+    # ------------------------------------------------------------------
 
     logger.info(
         f"Target distribution - Train: "
         f"{y_train.value_counts().to_dict()}"
     )
+
     logger.info(
         f"Target distribution - Validation: "
         f"{y_val.value_counts().to_dict()}"
     )
+
     logger.info(
         f"Target distribution - Test: "
         f"{y_test.value_counts().to_dict()}"
     )
 
-    # 3. Train XGBoost Model
+    # ------------------------------------------------------------------
+    # 9. Train XGBoost Classifier
+    # ------------------------------------------------------------------
+
     logger.info("Training XGBoost Classifier...")
+
     model = xgb.XGBClassifier(
         n_estimators=100,
         max_depth=5,
@@ -3588,47 +14796,234 @@ def run_classification():
         subsample=0.8,
         colsample_bytree=0.8,
         random_state=42,
-        eval_metric="auc"
+        eval_metric="auc",
     )
-    
+
     model.fit(
-        X_train, y_train,
-        eval_set=[(X_train, y_train), (X_val, y_val)],
-        verbose=False
+        X_train,
+        y_train,
+        eval_set=[
+            (X_train, y_train),
+            (X_val, y_val),
+        ],
+        verbose=False,
     )
-    
-    # 4. Evaluate Model
+
+    # ------------------------------------------------------------------
+    # 10. Evaluate Model
+    # ------------------------------------------------------------------
+
     y_pred = model.predict(X_test)
     y_pred_proba = model.predict_proba(X_test)[:, 1]
-    
+
     auc_roc = roc_auc_score(y_test, y_pred_proba)
-    acc = accuracy_score(y_test, y_pred)
-    
+    accuracy = accuracy_score(y_test, y_pred)
+
     logger.info(f"Test AUC-ROC: {auc_roc:.4f}")
-    logger.info(f"Test Accuracy: {acc:.4f}")
-    logger.info("Classification Report:\n" + classification_report(y_test, y_pred))
-    
-    # 5. SHAP Explainability
+    logger.info(f"Test Accuracy: {accuracy:.4f}")
+
+    report = classification_report(
+        y_test,
+        y_pred,
+        digits=4,
+    )
+
+    logger.info("Classification Report:\n" + report)
+
+    # ------------------------------------------------------------------
+    # 11. SHAP Explainability
+    # ------------------------------------------------------------------
+
     logger.info("Calculating SHAP values for explainability...")
+
     explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X_test)
-    
-    # Plot SHAP summary
+
+    # Use a deterministic sample for explainability.
+    #
+    # This keeps SHAP computation manageable while preserving
+    # reproducibility. The full test set is still used for evaluation.
+    shap_sample_size = min(2000, len(X_test))
+
+    X_shap = X_test.sample(
+        n=shap_sample_size,
+        random_state=42,
+    )
+
+    logger.info(
+        f"Calculating SHAP values on {len(X_shap):,} test records..."
+    )
+
+    shap_explanation = explainer(X_shap)
+
+    shap_values = np.asarray(shap_explanation.values)
+
+    # XGBoost binary classification normally produces:
+    #
+    # (n_samples, n_features)
+    #
+    # Some SHAP versions/models can produce:
+    #
+    # (n_samples, n_features, n_outputs)
+    #
+    # Handle both safely.
+    if shap_values.ndim == 3:
+        if shap_values.shape[2] == 1:
+            shap_values = shap_values[:, :, 0]
+        else:
+            # For binary classification, use the positive class.
+            shap_values = shap_values[:, :, 1]
+
+    if shap_values.ndim != 2:
+        raise ValueError(
+            f"Unexpected SHAP array shape: {shap_values.shape}"
+        )
+
+    # ------------------------------------------------------------------
+    # 12. Calculate Numerical SHAP Feature Importance
+    # ------------------------------------------------------------------
+
+    mean_abs_shap = np.abs(shap_values).mean(axis=0)
+
+    shap_importance = pd.DataFrame({
+        "feature": X_shap.columns,
+        "mean_abs_shap": mean_abs_shap,
+    })
+
+    shap_importance = shap_importance.sort_values(
+        "mean_abs_shap",
+        ascending=False,
+    ).reset_index(drop=True)
+
+    shap_importance["mean_abs_shap_rank"] = (
+        np.arange(1, len(shap_importance) + 1)
+    )
+
+    shap_importance = shap_importance[
+        [
+            "feature",
+            "mean_abs_shap_rank",
+            "mean_abs_shap",
+        ]
+    ]
+
+    # ------------------------------------------------------------------
+    # 13. Save Machine-Readable SHAP Importance
+    # ------------------------------------------------------------------
+
+    docs_dir = PROJECT_ROOT / "docs"
+    docs_dir.mkdir(parents=True, exist_ok=True)
+
+    shap_csv_path = docs_dir / "shap_feature_importance.csv"
+
+    shap_importance.to_csv(
+        shap_csv_path,
+        index=False,
+    )
+
+    logger.info(
+        f"Saved numerical SHAP feature importance to "
+        f"{shap_csv_path.relative_to(PROJECT_ROOT)}"
+    )
+
+    # Log top 10 features so we can verify them immediately.
+    logger.info("Top SHAP features:")
+
+    for _, row in shap_importance.head(10).iterrows():
+        logger.info(
+            f"  {int(row['mean_abs_shap_rank'])}. "
+            f"{row['feature']} "
+            f"(mean |SHAP|={row['mean_abs_shap']:.6f})"
+        )
+
+    # ------------------------------------------------------------------
+    # 14. Save SHAP Summary Plot
+    # ------------------------------------------------------------------
+
     plt.figure(figsize=(10, 6))
-    shap.summary_plot(shap_values, X_test, show=False)
-    plt.title("SHAP Feature Importance for Readmission Prediction")
+
+    shap.summary_plot(
+        shap_values,
+        X_shap,
+        show=False,
+    )
+
+    plt.title(
+        "SHAP Feature Importance for Readmission Prediction"
+    )
+
     plt.tight_layout()
-    plt.savefig(PROJECT_ROOT / "docs" / "shap_summary.png", dpi=150)
+
+    shap_plot_path = docs_dir / "shap_summary.png"
+
+    plt.savefig(
+        shap_plot_path,
+        dpi=150,
+        bbox_inches="tight",
+    )
+
     plt.close()
-    logger.info("Saved SHAP summary plot to docs/shap_summary.png")
-    
-    # 6. Save Model
+
+    logger.info(
+        f"Saved SHAP summary plot to "
+        f"{shap_plot_path.relative_to(PROJECT_ROOT)}"
+    )
+
+    # ------------------------------------------------------------------
+    # 15. Save Model
+    # ------------------------------------------------------------------
+
     models_dir = PROJECT_ROOT / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
-    joblib.dump(model, models_dir / "classification_model.pkl")
-    logger.info("Saved classification model to models/classification_model.pkl")
-    
+
+    model_path = models_dir / "classification_model.pkl"
+
+    joblib.dump(
+        model,
+        model_path,
+    )
+
+    logger.info(
+        f"Saved classification model to "
+        f"{model_path.relative_to(PROJECT_ROOT)}"
+    )
+
+    # ------------------------------------------------------------------
+    # 16. Save Model Metadata
+    #
+    # This will be useful later for the Phase 3 inference tool.
+    # ------------------------------------------------------------------
+
+    metadata = {
+        "target": target,
+        "features": features,
+        "n_features": len(features),
+        "test_auc_roc": float(auc_roc),
+        "test_accuracy": float(accuracy),
+        "shap_sample_size": int(shap_sample_size),
+    }
+
+    metadata_path = models_dir / "classification_metadata.json"
+
+    import json
+
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(
+            metadata,
+            f,
+            indent=2,
+        )
+
+    logger.info(
+        f"Saved classification metadata to "
+        f"{metadata_path.relative_to(PROJECT_ROOT)}"
+    )
+
+    # ------------------------------------------------------------------
+    # 17. Completion
+    # ------------------------------------------------------------------
+
     logger.info("Classification Model Training Complete.")
+
 
 if __name__ == "__main__":
     run_classification()

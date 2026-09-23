@@ -1,0 +1,10 @@
+{
+  "experiment": "ValueAI",
+  "tracking_uri": "sqlite:///C:/Data/ValueAI_Project/mlflow.db",
+  "artifact_location": "file:///C:/Data/ValueAI_Project/mlruns",
+  "runs": {
+    "clustering": "9306991c4a004ec2abe99c13ddbb2621",
+    "classification": "400afad306b044288d1c52f43a9cbc9e",
+    "timeseries": "083e11b2b5c04747a519be6e5a946c70"
+  }
+}

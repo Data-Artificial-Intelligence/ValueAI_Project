@@ -1,0 +1,22 @@
+{
+  "model_type": "ARIMA",
+  "order": [
+    1,
+    1,
+    1
+  ],
+  "historical_start": "2008-01-01",
+  "historical_end": "2010-12-01",
+  "historical_observations": 36,
+  "holdout_months": 6,
+  "forecast_horizon_months": 12,
+  "naive_rmse": 6327247.040082546,
+  "naive_mae": 5409680.0,
+  "naive_mape_percent": 138.33737733035917,
+  "arima_rmse": 5382314.0647497885,
+  "arima_mae": 4487614.259303573,
+  "arima_mape_percent": 117.68687238056526,
+  "arima_rmse_improvement_vs_naive_percent": 14.934346159501773,
+  "forecast_total": -4414162.18412317,
+  "forecast_average_monthly": -367846.8486769308
+}

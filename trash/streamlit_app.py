@@ -1,73 +1,21 @@
 """
 ValueAI Healthcare Value Intelligence Assistant
-Phase 6 - Multi-Provider GenAI Interface
+Phase 3 - GenAI & Agentic AI
 
-Enterprise-style Streamlit interface for the ValueAI
+Enterprise-style Streamlit interface for the LangGraph
 data science assistant.
-
-Architecture:
-
-    Streamlit
-        |
-        v
-    src.ai_agent.provider
-        |
-        +-------------------------+
-        |                         |
-        v                         v
-      local                   sagemaker
-        |                         |
-        v                         v
-    agent_graph.py        sagemaker_agent.py
-      FROZEN                    NEW
-
-IMPORTANT:
-    agent_graph.py is intentionally NOT modified by this
-    application.
-
-    Provider routing is handled exclusively through:
-        src.ai_agent.provider.invoke_agent()
 """
-
-from __future__ import annotations
 
 from pathlib import Path
 import hashlib
 import json
 import sys
 
-
-# ============================================================
-# PROJECT ROOT / IMPORT PATH
-# ============================================================
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-
-# ============================================================
-# THIRD-PARTY IMPORTS
-# ============================================================
-
 import pandas as pd
 import streamlit as st
 
-
-# ============================================================
-# APPLICATION IMPORTS
-# ============================================================
-
+from src.ai_agent.agent_graph import invoke_agent
 from src.ai_agent.agent_tools import analyze_high_risk_cluster
-from src.ai_agent.provider import (
-    LOCAL_PROVIDER,
-    SAGEMAKER_PROVIDER,
-    get_active_provider,
-    invoke_agent,
-)
-from src.utils.config import get_ai_provider
-
 import src.ai_agent.agent_graph as agent_graph_module
 import src.ai_agent.agent_tools as agent_tools_module
 
@@ -75,6 +23,8 @@ import src.ai_agent.agent_tools as agent_tools_module
 # ============================================================
 # PROJECT PATHS
 # ============================================================
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 MODEL_METADATA_PATH = (
     PROJECT_ROOT / "models" / "classification_metadata.json"
@@ -85,29 +35,19 @@ MODEL_PATH = (
 )
 
 CLUSTER_DATA_PATH = (
-    PROJECT_ROOT
-    / "data"
-    / "processed"
-    / "clustered_dataset.parquet"
+    PROJECT_ROOT / "data" / "processed" / "clustered_dataset.parquet"
 )
 
 SHAP_PATH = (
-    PROJECT_ROOT
-    / "docs"
-    / "shap_feature_importance.csv"
+    PROJECT_ROOT / "docs" / "shap_feature_importance.csv"
 )
 
 TIME_SERIES_PATH = (
-    PROJECT_ROOT
-    / "models"
-    / "timeseries_model.pkl"
+    PROJECT_ROOT / "models" / "timeseries_model.pkl"
 )
 
 MONTE_CARLO_PATH = (
-    PROJECT_ROOT
-    / "data"
-    / "processed"
-    / "monte_carlo_results.json"
+    PROJECT_ROOT / "data" / "processed" / "monte_carlo_results.json"
 )
 
 
@@ -119,8 +59,8 @@ def file_sha256(path: Path) -> str:
     """
     Return SHA-256 hash for a file.
 
-    Used to prove exactly which source files Streamlit
-    has loaded.
+    Used temporarily to prove exactly which source files
+    Streamlit has loaded.
     """
 
     if not path.exists():
@@ -179,18 +119,13 @@ st.markdown(
 # ============================================================
 
 @st.cache_data
-def load_model_metadata() -> dict:
-    """
-    Load classification model metadata.
-
-    Returns an empty dictionary when the artifact does not
-    exist or cannot be parsed.
-    """
+def load_model_metadata():
 
     if not MODEL_METADATA_PATH.exists():
         return {}
 
     try:
+
         with open(
             MODEL_METADATA_PATH,
             "r",
@@ -200,6 +135,7 @@ def load_model_metadata() -> dict:
             return json.load(file)
 
     except Exception:
+
         return {}
 
 
@@ -208,15 +144,13 @@ def load_model_metadata() -> dict:
 # ============================================================
 
 @st.cache_data
-def load_dataset_record_count() -> int | None:
-    """
-    Return the number of records in the clustered dataset.
-    """
+def load_dataset_record_count():
 
     if not CLUSTER_DATA_PATH.exists():
         return None
 
     try:
+
         df = pd.read_parquet(
             CLUSTER_DATA_PATH,
             columns=["RISK_CLUSTER"],
@@ -225,6 +159,7 @@ def load_dataset_record_count() -> int | None:
         return len(df)
 
     except Exception:
+
         return None
 
 
@@ -233,15 +168,13 @@ def load_dataset_record_count() -> int | None:
 # ============================================================
 
 @st.cache_data
-def load_cluster_count() -> int | None:
-    """
-    Return the number of unique risk clusters.
-    """
+def load_cluster_count():
 
     if not CLUSTER_DATA_PATH.exists():
         return None
 
     try:
+
         df = pd.read_parquet(
             CLUSTER_DATA_PATH,
             columns=["RISK_CLUSTER"],
@@ -252,6 +185,7 @@ def load_cluster_count() -> int | None:
         )
 
     except Exception:
+
         return None
 
 
@@ -272,29 +206,14 @@ cluster_count = load_cluster_count()
 
 default_prompt = (
     "Analyze the high-risk cluster. "
-    "What are the top 3 drivers of readmission based on the "
-    "SHAP values, and generate 3 strategic, value-based "
-    "recommendations for the business?"
+    "What are the top 3 drivers of readmission based on the SHAP values, "
+    "and generate 3 strategic, value-based recommendations for the business?"
 )
 
 
 if "business_question" not in st.session_state:
 
     st.session_state["business_question"] = default_prompt
-
-
-# ============================================================
-# PROVIDER CONFIGURATION
-# ============================================================
-
-configured_provider = get_ai_provider()
-
-
-if "selected_ai_provider" not in st.session_state:
-
-    st.session_state["selected_ai_provider"] = (
-        configured_provider
-    )
 
 
 # ============================================================
@@ -305,81 +224,7 @@ with st.sidebar:
 
     st.markdown("## VALUEAI")
 
-    st.caption(
-        "Healthcare Value Intelligence"
-    )
-
-    st.divider()
-
-    # --------------------------------------------------------
-    # AI INFERENCE PROVIDER
-    # --------------------------------------------------------
-
-    st.markdown("### AI INFERENCE PROVIDER")
-
-    provider_options = {
-        "Local (Ollama / Qwen)": LOCAL_PROVIDER,
-        "AWS SageMaker": SAGEMAKER_PROVIDER,
-    }
-
-    provider_labels = list(
-        provider_options.keys()
-    )
-
-    current_provider = (
-        st.session_state["selected_ai_provider"]
-    )
-
-    current_provider_label = next(
-        (
-            label
-            for label, value in provider_options.items()
-            if value == current_provider
-        ),
-        provider_labels[0],
-    )
-
-    selected_provider_label = st.radio(
-        "Inference provider",
-        options=provider_labels,
-        index=provider_labels.index(
-            current_provider_label
-        ),
-        key="ai_provider_selector",
-    )
-
-    selected_provider = provider_options[
-        selected_provider_label
-    ]
-
-    st.session_state[
-        "selected_ai_provider"
-    ] = selected_provider
-
-    st.caption(
-        f"Configured default: `{configured_provider}`"
-    )
-
-    if selected_provider == LOCAL_PROVIDER:
-
-        st.success(
-            "Local inference selected"
-        )
-
-        st.caption(
-            "Ollama / Qwen 2.5 7B"
-        )
-
-    elif selected_provider == SAGEMAKER_PROVIDER:
-
-        st.info(
-            "AWS SageMaker selected"
-        )
-
-        st.caption(
-            "Inference will be routed through "
-            "the SageMaker provider."
-        )
+    st.caption("Healthcare Value Intelligence")
 
     st.divider()
 
@@ -436,11 +281,9 @@ with st.sidebar:
 
     st.metric(
         "Records",
-        (
-            f"{record_count:,}"
-            if record_count is not None
-            else "N/A"
-        ),
+        f"{record_count:,}"
+        if record_count is not None
+        else "N/A",
     )
 
     st.metric(
@@ -453,11 +296,9 @@ with st.sidebar:
 
     st.metric(
         "Clusters",
-        (
-            cluster_count
-            if cluster_count is not None
-            else "N/A"
-        ),
+        cluster_count
+        if cluster_count is not None
+        else "N/A",
     )
 
     st.divider()
@@ -498,56 +339,24 @@ with st.sidebar:
 
     st.markdown("### AI ENGINE")
 
-    if selected_provider == LOCAL_PROVIDER:
+    st.write("**Local LLM**")
 
-        st.write("**Provider**")
-
-        st.code(
-            "Local",
-            language="text",
-        )
-
-        st.write("**LLM**")
-
-        st.code(
-            "Qwen 2.5 7B",
-            language="text",
-        )
-
-        st.write("**Runtime**")
-
-        st.code(
-            "Ollama",
-            language="text",
-        )
-
-    else:
-
-        st.write("**Provider**")
-
-        st.code(
-            "AWS SageMaker",
-            language="text",
-        )
-
-        st.write("**Model Runtime**")
-
-        st.code(
-            "SageMaker Endpoint",
-            language="text",
-        )
+    st.code(
+        "Qwen 2.5 7B",
+        language="text",
+    )
 
     st.write("**Agent Framework**")
 
     st.code(
-        "LangGraph / ValueAI Provider",
+        "LangGraph",
         language="text",
     )
 
-    st.write("**Analytical Engine**")
+    st.write("**Inference**")
 
     st.code(
-        "Local XGBoost / GMM / Time-Series",
+        "Local XGBoost",
         language="text",
     )
 
@@ -563,27 +372,6 @@ st.caption(
 )
 
 st.divider()
-
-
-# ============================================================
-# ACTIVE PROVIDER STATUS
-# ============================================================
-
-active_provider = get_active_provider(
-    st.session_state["selected_ai_provider"]
-)
-
-provider_display_name = {
-    LOCAL_PROVIDER: "Local (Ollama / Qwen)",
-    SAGEMAKER_PROVIDER: "AWS SageMaker",
-}.get(
-    active_provider,
-    active_provider,
-)
-
-st.info(
-    f"AI inference provider: **{provider_display_name}**"
-)
 
 
 # ============================================================
@@ -612,25 +400,6 @@ with st.expander(
     st.write(
         "Project root:",
         str(PROJECT_ROOT),
-    )
-
-    st.markdown(
-        "### Provider"
-    )
-
-    st.write(
-        "Configured provider:",
-        configured_provider,
-    )
-
-    st.write(
-        "Selected provider:",
-        selected_provider,
-    )
-
-    st.write(
-        "Resolved provider:",
-        active_provider,
     )
 
     st.markdown(
@@ -696,7 +465,7 @@ with st.expander(
     )
 
     st.caption(
-        "This bypasses the AI provider and directly executes "
+        "This bypasses LangGraph and Qwen and directly executes "
         "analyze_high_risk_cluster()."
     )
 
@@ -764,9 +533,9 @@ with quick_col1:
         st.session_state["business_question"] = (
             "Analyze the high-risk cluster. "
             "Describe its population and utilization profile, "
-            "identify the top 3 model drivers based on mean "
-            "absolute SHAP importance, and propose 3 "
-            "evidence-grounded business interventions."
+            "identify the top 3 model drivers based on mean absolute "
+            "SHAP importance, and propose 3 evidence-grounded "
+            "business interventions."
         )
 
         st.rerun()
@@ -780,10 +549,10 @@ with quick_col2:
     ):
 
         st.session_state["business_question"] = (
-            "What are the top 10 drivers of readmission according "
-            "to the Phase 2 SHAP analysis? Explain what mean "
-            "absolute SHAP importance tells us and clearly "
-            "distinguish model importance from causation."
+            "What are the top 10 drivers of readmission according to "
+            "the Phase 2 SHAP analysis? Explain what mean absolute SHAP "
+            "importance tells us and clearly distinguish model "
+            "importance from causation."
         )
 
         st.rerun()
@@ -797,12 +566,11 @@ with quick_col3:
     ):
 
         st.session_state["business_question"] = (
-            "Generate an executive business memo for the "
-            "high-risk cluster using the available analytical "
-            "evidence. Include the population profile, top "
-            "model drivers, what the data shows, 3 proposed "
-            "strategic interventions, value mechanisms, KPIs, "
-            "and model/data caveats."
+            "Generate an executive business memo for the high-risk "
+            "cluster using the available analytical evidence. "
+            "Include the population profile, top model drivers, "
+            "what the data shows, 3 proposed strategic interventions, "
+            "value mechanisms, KPIs, and model/data caveats."
         )
 
         st.rerun()
@@ -844,37 +612,20 @@ if analyze_button:
         st.stop()
 
     with st.spinner(
-        "Analyzing Phase 2 evidence and generating "
-        "executive insights..."
+        "Analyzing Phase 2 evidence and generating executive insights..."
     ):
 
         try:
 
             response = invoke_agent(
-                prompt.strip(),
-                provider=selected_provider,
+                prompt.strip()
             )
 
         except Exception as exc:
 
-            if selected_provider == SAGEMAKER_PROVIDER:
-
-                st.error(
-                    "The AWS SageMaker analysis could not "
-                    "be completed."
-                )
-
-                st.caption(
-                    "No fallback to the Local/Ollama provider "
-                    "was performed."
-                )
-
-            else:
-
-                st.error(
-                    "The Local AI analysis could not "
-                    "be completed."
-                )
+            st.error(
+                "The analysis could not be completed."
+            )
 
             st.exception(exc)
 
@@ -883,10 +634,6 @@ if analyze_button:
     st.session_state[
         "analysis_response"
     ] = response
-
-    st.session_state[
-        "analysis_provider"
-    ] = selected_provider
 
 
 # ============================================================
@@ -901,28 +648,15 @@ if "analysis_response" in st.session_state:
         "EXECUTIVE MEMO"
     )
 
-    response_provider = st.session_state.get(
-        "analysis_provider",
-        selected_provider,
-    )
-
-    response_provider_name = {
-        LOCAL_PROVIDER: "Local (Ollama / Qwen)",
-        SAGEMAKER_PROVIDER: "AWS SageMaker",
-    }.get(
-        response_provider,
-        response_provider,
-    )
-
     st.caption(
-        "Generated from the ValueAI analytical tools using "
-        f"the **{response_provider_name}** inference provider."
+        "Generated from the ValueAI analytical tools and local "
+        "Qwen 2.5 7B reasoning layer."
     )
+
+    response = st.session_state[
+        "analysis_response"
+    ]
 
     with st.container(border=True):
 
-        st.markdown(
-            st.session_state[
-                "analysis_response"
-            ]
-        )
+        st.markdown(response)

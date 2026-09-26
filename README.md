@@ -969,3 +969,233 @@ Future production-oriented enhancements could include:
 * API-based model serving
 * Production observability
 * Additional clinical/business validation
+
+
+
+# Deployment complete evidence 
+
+
+(.venv) PS C:\Data\ValueAI_Project> python scripts/deploy_sagemaker.py `
+>>   --role-arn "arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole" `
+>>   --endpoint-name "valueai-qwen25-7b" `
+>>   --instance-type "ml.g6e.xlarge" `
+>>   --config-name "generate_lowest_cost" `
+>>   --model-version "1.42.0"
+C:\Data\ValueAI_Project\scripts\deploy_sagemaker.py:43: SyntaxWarning: invalid escape sequence '\:'
+  arn\:aws\:iam::932453198323\:role/ValueAI-SageMaker-ExecutionRole
+========================================================================
+VALUEAI — PHASE 15 SAGEMAKER DEPLOYMENT
+========================================================================
+
+[CONFIG]
+Region:         us-east-1
+Model ID:       huggingface-llm-qwen2-5-7b-instruct
+Model version:  1.42.0
+Endpoint:       valueai-qwen25-7b
+Instance type:  ml.g6e.xlarge
+Config:         generate_lowest_cost
+Role ARN:       arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole
+
+[AWS CREDENTIALS]
+Account:        932453198323
+Caller ARN:     arn:aws:iam::932453198323:user/ValueAI-Project-User
+
+[IAM ROLE]
+Role name:      ValueAI-SageMaker-ExecutionRole
+Role ARN:       arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole
+
+[JUMPSTART MODEL]
+Default instance: ml.g6e.2xlarge
+Supported default instances: ml.g4dn.12xlarge, ml.g5.12xlarge, ml.g6.12xlarge, ml.g6e.2xlarge, ml.g6e.4xlarge, ml.g6e.xlarge
+
+[ENDPOINT]
+Endpoint does not currently exist.
+
+[VALIDATION]
+Validating the requested JumpStart deployment configuration...
+[09/25/26 08:14:12] INFO     Found credentials in shared credentials file: ~/.aws/credentials                                                          credentials.py:1392
+sagemaker.config INFO - Not applying SDK defaults from location: C:\ProgramData\sagemaker\sagemaker\config.yaml
+sagemaker.config INFO - Not applying SDK defaults from location: C:\Users\DAYLIFF\AppData\Local\sagemaker\sagemaker\config.yaml
+
+Creating temporary ModelBuilder for deployment-configuration validation...
+[09/25/26 08:14:18] INFO     Found credentials in shared credentials file: ~/.aws/credentials                                                          credentials.py:1392
+                    INFO     SageMaker Python SDK will collect telemetry to help us better understand our user's needs, diagnose issues, and      telemetry_logging.py:325
+                             deliver additional features.
+                             To opt out of telemetry, please disable via TelemetryOptOut parameter in SDK defaults config. For more information,
+                             refer to
+                             https://sagemaker.readthedocs.io/en/stable/overview.html#configuring-and-using-defaults-with-the-sagemaker-python-sd
+                             k.
+                    DEBUG    Auto-detecting optimal instance type for model...                                                                  model_builder_utils.py:342
+Using model 'huggingface-llm-qwen2-5-7b-instruct' with wildcard version identifier '*'. You can pin to version '1.42.0' for more stable results. Note that models may have different input/output signatures after a major version upgrade.
+[09/25/26 08:14:22] WARNING  Using model 'huggingface-llm-qwen2-5-7b-instruct' with wildcard version identifier '*'. You can pin to version '1.42.0' for more cache.py:624
+                             stable results. Note that models may have different input/output signatures after a major version upgrade.
+                    DEBUG    JumpStart Model ID detected.                                                                                      model_builder_utils.py:2922
+                    DEBUG    Using default CPU instance type: ml.m5.large                                                                       model_builder_utils.py:376
+[09/25/26 08:14:29] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:14:32] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g5.xlarge
+                    WARNING  Overriding instance type to ml.g5.xlarge                                                                                         utils.py:241
+[09/25/26 08:14:36] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:14:39] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:14:42] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.16xlarge
+                    WARNING  Overriding instance type to ml.g6e.16xlarge                                                                                      utils.py:241
+[09/25/26 08:14:46] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g5.xlarge
+                    WARNING  Overriding instance type to ml.g5.xlarge                                                                                         utils.py:241
+[09/25/26 08:14:49] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:14:52] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6.xlarge
+                    WARNING  Overriding instance type to ml.g6.xlarge                                                                                         utils.py:241
+[09/25/26 08:14:56] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:14:59] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.12xlarge
+                    WARNING  Overriding instance type to ml.g6e.12xlarge                                                                                      utils.py:241
+[09/25/26 08:15:02] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:06] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:09] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:12] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:15:15] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:19] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:22] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:26] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:15:30] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:34] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+                    WARNING  Instance rate metrics will be omitted. Reason: User: arn:aws:iam::932453198323:user/ValueAI-Project-User is not   model_builder_utils.py:2783
+                             authorized to perform: pricing:GetProducts because no identity-based policy allows the pricing:GetProducts action
+Deployment configuration accepted by SageMaker ModelBuilder.
+Resolved instance type: ml.g6e.xlarge
+
+Deployment configuration validation completed.
+
+[DEPLOYMENT]
+Starting SageMaker deployment.
+Endpoint creation can take several minutes.
+
+[JUMPSTART CONFIG]
+Model ID:       huggingface-llm-qwen2-5-7b-instruct
+Model version:  1.42.0
+Config name:    generate_lowest_cost
+Instance type:  ml.g6e.xlarge
+Execution role: arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole
+
+Creating SageMaker ModelBuilder...
+                    INFO     Found credentials in shared credentials file: ~/.aws/credentials                                                          credentials.py:1392
+[09/25/26 08:15:35] DEBUG    Auto-detecting optimal instance type for model...                                                                  model_builder_utils.py:342
+Using model 'huggingface-llm-qwen2-5-7b-instruct' with wildcard version identifier '*'. You can pin to version '1.42.0' for more stable results. Note that models may have different input/output signatures after a major version upgrade.
+[09/25/26 08:15:39] WARNING  Using model 'huggingface-llm-qwen2-5-7b-instruct' with wildcard version identifier '*'. You can pin to version '1.42.0' for more cache.py:624
+                             stable results. Note that models may have different input/output signatures after a major version upgrade.
+                    DEBUG    JumpStart Model ID detected.                                                                                      model_builder_utils.py:2922
+                    DEBUG    Using default CPU instance type: ml.m5.large                                                                       model_builder_utils.py:376
+
+[DEPLOYMENT CONFIGURATION]
+Selecting the requested published JumpStart deployment configuration...
+[09/25/26 08:15:45] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:49] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g5.xlarge
+                    WARNING  Overriding instance type to ml.g5.xlarge                                                                                         utils.py:241
+[09/25/26 08:15:52] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:15:56] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:59] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.16xlarge
+                    WARNING  Overriding instance type to ml.g6e.16xlarge                                                                                      utils.py:241
+[09/25/26 08:16:02] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g5.xlarge
+[09/25/26 08:16:03] WARNING  Overriding instance type to ml.g5.xlarge                                                                                         utils.py:241
+[09/25/26 08:16:07] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:16:11] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6.xlarge
+                    WARNING  Overriding instance type to ml.g6.xlarge                                                                                         utils.py:241
+[09/25/26 08:16:14] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:16:17] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.12xlarge
+                    WARNING  Overriding instance type to ml.g6e.12xlarge                                                                                      utils.py:241
+[09/25/26 08:16:21] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:16:24] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:16:28] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:16:31] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:16:35] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:16:38] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:16:42] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:16:45] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:16:48] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:16:52] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+                    WARNING  Instance rate metrics will be omitted. Reason: User: arn:aws:iam::932453198323:user/ValueAI-Project-User is not   model_builder_utils.py:2783
+                             authorized to perform: pricing:GetProducts because no identity-based policy allows the pricing:GetProducts action
+Deployment configuration selected.
+Resolved instance type: ml.g6e.xlarge
+
+[BUILD]
+Building SageMaker model resource...
+[09/25/26 08:16:57] INFO     Created S3 bucket: sagemaker-us-east-1-932453198323                                                                     session_helper.py:815
+[09/25/26 08:16:58] DEBUG    Either inference spec or model is provided. ModelBuilder is not handling MLflow model input                       model_builder_utils.py:1381
+                    DEBUG    Building for JumpStart model ID...                                                                                      model_builder.py:3579
+[09/25/26 08:17:01] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:17:02] INFO     Cannot simulate policies for 'arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole' (access denied);       iam_role_resolver.py:422
+                             permission verdict unknown.
+                    WARNING  Could not verify permissions for role 'arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole' (caller lacks iam_role_resolver.py:657
+                             iam:SimulatePrincipalPolicy). Proceeding with it. If the operation later fails with an access-denied error, ensure
+                             the role has the required permissions for 'serving' (see IamRoleResolver().get_required_actions('serving')) or
+                             create a dedicated role via IamRoleResolver().create_execution_role(role_type='serving').
+[09/25/26 08:17:03] INFO     Cannot simulate policies for 'arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole' (access denied);       iam_role_resolver.py:422
+                             permission verdict unknown.
+[09/25/26 08:17:04] WARNING  Could not verify permissions for role 'arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole' (caller lacks iam_role_resolver.py:657
+                             iam:SimulatePrincipalPolicy). Proceeding with it. If the operation later fails with an access-denied error, ensure
+                             the role has the required permissions for 'serving' (see IamRoleResolver().get_required_actions('serving')) or
+                             create a dedicated role via IamRoleResolver().create_execution_role(role_type='serving').
+                    INFO     Creating model with name: model-bd9f1c4d                                                                               session_helper.py:1922
+[09/25/26 08:17:06] DEBUG    No boto3 session provided. Creating a new session.                                                                               utils.py:357
+                    DEBUG    No config provided. Using default config.                                                                                        utils.py:365
+                    INFO     Found credentials in shared credentials file: ~/.aws/credentials                                                          credentials.py:1392
+[09/25/26 08:17:07] INFO     ✅ Model has been created: 'model-bd9f1c4d' using server DJL_SERVING in SAGEMAKER_ENDPOINT mode (ARN:                   model_builder.py:4489
+                             arn:aws:sagemaker:us-east-1:932453198323:model/model-bd9f1c4d)
+SageMaker model resource built successfully.
+
+[DEPLOY]
+Creating endpoint: valueai-qwen25-7b
+[09/25/26 08:17:08] INFO     Creating endpoint-config with name valueai-qwen25-7b                                                                   session_helper.py:1093
+[09/25/26 08:17:09] INFO     Creating endpoint with name valueai-qwen25-7b                                                                          session_helper.py:1125
+╭──────────────────────────────────────────────────────────────────────────── Wait Log Panel ────────────────────────────────────────────────────────────────────────────╮
+│ [  ==] Waiting for Endpoint... 0:00:01                                                                                                                                 │
+│ ⠏ Current status: Creating                                                                                                                                             │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[09/25/26 08:17:10] WARNING  Failed to enable live logging: An error occurred (AccessDeniedException) when calling the FilterLogEvents operation:   session_helper.py:2844
+╭──────────────────────────────────────────────────────────────────────────── Wait Log Panel ────────────────────────────────────────────────────────────────────────────╮
+│ [==  ] Waiting for Endpoint... 0:09:09                                                                                                                                 │
+│ ⠇ Current status: InService                                                                                                                                            │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[09/25/26 08:26:19] INFO     ✅ Deployment successful: Endpoint 'valueai-qwen25-7b' using DJL_SERVING in SAGEMAKER_ENDPOINT mode (ARN:               model_builder.py:3770
+                             arn:aws:sagemaker:us-east-1:932453198323:endpoint/valueai-qwen25-7b)
+
+[DEPLOYMENT COMPLETE]
+Endpoint: valueai-qwen25-7b
+The endpoint is now being managed by SageMaker.
+
+[NEXT]
+Run:
+python scripts/test_sagemaker.py
+Do not change VALUEAI_AI_PROVIDER to sagemaker until the endpoint smoke test passes.
+========================================================================

@@ -18,6 +18,30 @@ This project builds a scalable cloud pipeline that segments users, predicts futu
 
 
 
+<<<<<<< HEAD
+=======
+## 📊 Dashboard Screenshots
+
+### Executive Dashboard
+![Executive Dashboard](presentation/executive_dashboard.png)
+
+### Intelligence Platform Developer Dashboard
+![Operational View](presentation/intelligence_platform_developer_dashboard.png)
+
+### Sagemaker Deployments
+![Customer Insights](presentation/sagemaker_deployments.png)
+
+### Sagemaker Quotas
+![Excel Report](presentation/sagemaker_quotas.png)
+
+##  Video Presentation
+[Watch the 35-minute project presentation](presentation/project_presentation.mp4)
+
+
+
+
+
+>>>>>>> da8b5106f7742c3646904003639fadb8d057377a
 
 ## Remove all contents created by download_synpuf_data.ps1 off the synpuf directory safely
 Remove-Item -Path ".\data\raw\synpuf\*" -Recurse -Force -ErrorAction SilentlyContinue

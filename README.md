@@ -17,9 +17,6 @@ This project builds a scalable cloud pipeline that segments users, predicts futu
 4. `streamlit run app/app.py`
 
 
-
-<<<<<<< HEAD
-=======
 ## 📊 Dashboard Screenshots
 
 ### Executive Dashboard

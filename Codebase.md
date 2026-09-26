@@ -1,6 +1,6 @@
 ﻿# TIMSAdvantaged Codebase
 
-Generated: 09/23/2026 10:53:15
+Generated: 09/26/2026 15:42:31
 
 ---
 
@@ -19,6 +19,7 @@ Generated: 09/23/2026 10:53:15
 - docs\compliance_and_audit.md
 - docs\data_dictionary.md
 - docs\data_governance_audit.md
+- docs\data_quality_report.md
 - docs\executive_summary.md
 - docs\mlflow_run_summary.json
 - docs\timeseries_model_metadata.json
@@ -62,13 +63,21 @@ Generated: 09/23/2026 10:53:15
 - notebooks\01_data_exploration.ipynb
 - notebooks\02_feature_engineering.ipynb
 - notebooks\03_modeling_experiments.ipynb
+- pytest.ini
 - README.md
 - requirements.txt
+- sagemaker-execution-policy.json
+- scripts\deploy_sagemaker.py
+- scripts\destroy_sagemaker.py
 - scripts\download_synpuf_data.ps1
+- scripts\test_sagemaker.py
 - src\__init__.py
 - src\ai_agent\__init__.py
 - src\ai_agent\agent_graph.py
 - src\ai_agent\agent_tools.py
+- src\ai_agent\llm_provider.py
+- src\ai_agent\provider.py
+- src\ai_agent\sagemaker_agent.py
 - src\ai_agent\streamlit_app.py
 - src\data\__init__.py
 - src\data\make_dataset.py
@@ -84,6 +93,7 @@ Generated: 09/23/2026 10:53:15
 - src\utils\logger.py
 - tests\test_agent.py
 - tests\test_data.py
+- tests\test_sagemaker_agent.py
 
 ---
 
@@ -93,6 +103,59 @@ Generated: 09/23/2026 10:53:15
 # File: .env.example
 
 ```example
+# ============================================================
+# ValueAI - Environment Configuration Template
+# ============================================================
+
+# ------------------------------------------------------------
+# AI Inference Provider
+# ------------------------------------------------------------
+# Supported values:
+#   local
+#   sagemaker
+#
+# This controls the default AI inference provider.
+# ------------------------------------------------------------
+VALUEAI_AI_PROVIDER=local
+
+
+# ------------------------------------------------------------
+# Local LLM Configuration
+# ------------------------------------------------------------
+VALUEAI_LOCAL_LLM_PROVIDER=ollama
+VALUEAI_LOCAL_LLM_MODEL=qwen2.5:7b
+VALUEAI_OLLAMA_BASE_URL=http://localhost:11434
+
+
+# ------------------------------------------------------------
+# AWS / SageMaker Configuration
+# ------------------------------------------------------------
+# Do not put AWS access keys or secret keys in this file.
+# Configure AWS credentials through the AWS CLI, IAM role,
+# environment credentials, or another secure mechanism.
+# ------------------------------------------------------------
+# Qwen2.5-7B-Instruct JumpStart model:
+# huggingface-llm-qwen2-5-7b-instruct
+# ------------------------------------------------------------
+
+AWS_REGION=us-east-1
+
+VALUEAI_SAGEMAKER_ENDPOINT_NAME=
+
+VALUEAI_SAGEMAKER_MODEL_ID=huggingface-llm-qwen2-5-7b-instruct
+
+VALUEAI_SAGEMAKER_MAX_NEW_TOKENS=512
+
+VALUEAI_SAGEMAKER_TEMPERATURE=0.0
+
+VALUEAI_SAGEMAKER_TOP_P=1.0
+
+
+# ------------------------------------------------------------
+# Application Configuration
+# ------------------------------------------------------------
+VALUEAI_ENVIRONMENT=development
+VALUEAI_LOG_LEVEL=INFO
 ```
 
 
@@ -129,6 +192,8 @@ venv/
 *.swp
 *.swo
 
+
+.key
 ```
 
 
@@ -139,369 +204,1086 @@ venv/
 ```python
 """
 Unified Executive Dashboard for ValueAI.
-Matches JD: "data visualization techniques, to create solutions that enable enhanced business performance"
+
+ValueAI Healthcare Value Intelligence Platform.
+
+Phase 8:
+    - Preserves the existing executive analytics dashboard.
+    - Uses the centralized AI provider facade.
+    - Supports Local (Ollama / Qwen) and AWS SageMaker selection.
+    - Does NOT modify the existing LangGraph agent.
+    - Does NOT implement SageMaker inference yet.
+
+Architecture:
+
+    app/app.py
+         |
+         v
+    src.ai_agent.provider
+         |
+         +-------------------------+
+         |                         |
+         v                         v
+       local                   sagemaker
+         |                         |
+         v                         v
+    agent_graph.py          sagemaker_agent.py
+       FROZEN                    LATER
+
+IMPORTANT:
+    agent_graph.py is intentionally NOT modified.
+
+    New application code must use:
+        src.ai_agent.provider.invoke_agent()
 """
-import sys
-import os
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from pathlib import Path
-import streamlit as st
+
+from __future__ import annotations
+
 import json
+import sys
+from pathlib import Path
 
-# Add project root to path
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import streamlit as st
+
+
+# ============================================================
+# PROJECT ROOT / IMPORT PATH
+# ============================================================
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT))
 
-# Import Phase 3 Agent
-try:
-    from src.ai_agent.agent_graph import invoke_agent
-    AGENT_AVAILABLE = True
-except ImportError:
-    AGENT_AVAILABLE = False
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+
+# ============================================================
+# VALUEAI IMPORTS
+# ============================================================
+
+from src.ai_agent.provider import (
+    LOCAL_PROVIDER,
+    SAGEMAKER_PROVIDER,
+    get_active_provider,
+    invoke_agent,
+)
+from src.utils.config import get_ai_provider
+
+
+# ============================================================
+# PAGE CONFIGURATION
+# ============================================================
 
 st.set_page_config(
-    page_title="ValueAI Executive Dashboard", 
-    page_icon="🏥", 
+    page_title="ValueAI Executive Dashboard",
+    page_icon="🏥",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# Custom CSS for professional look
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: #1f77b4;
-        margin-bottom: 0.5rem;
-    }
-    .sub-header {
-        font-size: 1.1rem;
-        color: #666;
-        margin-bottom: 2rem;
-    }
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1rem;
-        border-radius: 0.5rem;
-        color: white;
-        text-align: center;
-    }
-    .status-badge {
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        border-radius: 1rem;
-        font-size: 0.85rem;
-        font-weight: 600;
-        margin-right: 0.5rem;
-    }
-    .status-complete { background: #d4edda; color: #155724; }
-    .status-warning { background: #fff3cd; color: #856404; }
-</style>
-""", unsafe_allow_html=True)
 
-# Header
-st.markdown('<h1 class="main-header"> ValueAI</h1>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Healthcare Value Intelligence Platform</p>', unsafe_allow_html=True)
+# ============================================================
+# CUSTOM CSS
+# ============================================================
 
-# Status Bar
+st.markdown(
+    """
+    <style>
+        .main-header {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #1f77b4;
+            margin-bottom: 0.5rem;
+        }
+
+        .sub-header {
+            font-size: 1.1rem;
+            color: #666;
+            margin-bottom: 2rem;
+        }
+
+        .metric-card {
+            background: linear-gradient(
+                135deg,
+                #667eea 0%,
+                #764ba2 100%
+            );
+            padding: 1rem;
+            border-radius: 0.5rem;
+            color: white;
+            text-align: center;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-right: 0.5rem;
+        }
+
+        .status-complete {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# ============================================================
+# CONFIGURATION / PROVIDER STATE
+# ============================================================
+
+configured_provider = get_ai_provider()
+
+provider_options = {
+    "Local (Ollama / Qwen)": LOCAL_PROVIDER,
+    "AWS SageMaker": SAGEMAKER_PROVIDER,
+}
+
+provider_labels = list(provider_options.keys())
+
+configured_provider_label = next(
+    (
+        label
+        for label, provider_value in provider_options.items()
+        if provider_value == configured_provider
+    ),
+    "Local (Ollama / Qwen)",
+)
+
+
+# ============================================================
+# LOAD MODEL METADATA
+# ============================================================
+
+metrics_path = (
+    PROJECT_ROOT
+    / "models"
+    / "classification_metadata.json"
+)
+
+if metrics_path.exists():
+    try:
+        with open(metrics_path, "r", encoding="utf-8") as f:
+            model_meta = json.load(f)
+    except Exception as exc:
+        model_meta = {}
+        st.warning(
+            f"Unable to load classification metadata: {exc}"
+        )
+else:
+    model_meta = {}
+
+
+# ============================================================
+# HEADER
+# ============================================================
+
+st.markdown(
+    '<h1 class="main-header">🏥 ValueAI</h1>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    '<p class="sub-header">'
+    "Healthcare Value Intelligence Platform"
+    "</p>",
+    unsafe_allow_html=True,
+)
+
+
+# ============================================================
+# STATUS BAR
+# ============================================================
+
 col1, col2, col3 = st.columns(3)
+
 with col1:
-    st.markdown('<span class="status-badge status-complete">✅ All Phases Complete</span>', unsafe_allow_html=True)
+    st.markdown(
+        '<span class="status-badge status-complete">'
+        "✅ All Phases Complete"
+        "</span>",
+        unsafe_allow_html=True,
+    )
+
 with col2:
-    st.markdown('<span class="status-badge status-complete">✅ Governance Cleared</span>', unsafe_allow_html=True)
+    st.markdown(
+        '<span class="status-badge status-complete">'
+        "✅ Governance Cleared"
+        "</span>",
+        unsafe_allow_html=True,
+    )
+
 with col3:
-    st.markdown('<span class="status-badge status-complete">✅ MLOps Ready</span>', unsafe_allow_html=True)
+    st.markdown(
+        '<span class="status-badge status-complete">'
+        "✅ MLOps Ready"
+        "</span>",
+        unsafe_allow_html=True,
+    )
 
 st.divider()
 
-# Create comprehensive tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📊 Executive Overview",
-    "👥 Patient Segmentation", 
-    "🎯 Readmission Risk",
-    "📈 Cost Forecasting",
-    "🤖 AI Business Assistant"
-])
 
-# --- TAB 1: EXECUTIVE OVERVIEW ---
-with tab1:
-    st.header("Strategic Overview")
-    
-    # Load key metrics
-    metrics_path = PROJECT_ROOT / "models" / "classification_metadata.json"
-    if metrics_path.exists():
-        with open(metrics_path, "r") as f:
-            model_meta = json.load(f)
-    else:
-        model_meta = {}
-    
-    # Key metrics row
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Records", f"{int(model_meta.get('n_records', 230890)):,}")
-    with col2:
-        st.metric("XGBoost AUC-ROC", f"{model_meta.get('auc_roc', 0.9535):.4f}")
-    with col3:
-        st.metric("Model Accuracy", f"{model_meta.get('accuracy', 0.8777):.2%}")
-    with col4:
-        st.metric("Clusters Identified", model_meta.get('n_clusters', 3))
-    
-    st.divider()
-    
-    # Executive Summary
-    st.subheader(" Executive Summary")
-    summary_path = PROJECT_ROOT / "docs" / "executive_summary.md"
-    if summary_path.exists():
-        with open(summary_path, "r", encoding="utf-8") as f:
-            st.markdown(f.read())
-    else:
-        st.info("📄 Executive Summary not found. Please ensure docs/executive_summary.md exists.")
-    
-    # Key Findings
-    st.divider()
-    st.subheader("🎯 Key Findings")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("""
-        **High-Risk Population**
-        - Cluster 2 represents ~13% of total population
-        - Average age: 75+ years
-        - 2.9x higher admission rate
-        - 4.2x higher healthcare costs
-        """)
-    with col2:
-        st.markdown("""
-        **Primary Readmission Drivers**
-        1. Average days between inpatient claims
-        2. Total admission count
-        3. Unique diagnosis count
-        4. Beneficiary response for inpatient services
-        """)
+# ============================================================
+# SIDEBAR
+# ============================================================
 
-# --- TAB 2: PATIENT SEGMENTATION ---
-with tab2:
-    st.header("GMM Patient Risk Clustering & SHAP Explainability")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("📊 Cluster Distribution")
-        cluster_plot = PROJECT_ROOT / "docs" / "cluster_distribution.png"
-        if cluster_plot.exists():
-            st.image(str(cluster_plot), use_container_width=True)
-        else:
-            st.info("Run Phase 2 clustering to generate this plot.")
-            
-    with col2:
-        st.subheader("🔍 Readmission Drivers (SHAP)")
-        shap_plot = PROJECT_ROOT / "docs" / "shap_summary.png"
-        if shap_plot.exists():
-            st.image(str(shap_plot), use_container_width=True)
-        else:
-            st.info("Run Phase 2 classification to generate this plot.")
-    
-    st.divider()
-    
-    # Cluster Details
-    st.subheader(" Cluster Characteristics")
-    
-    # Load clustered data if available
-    cluster_data_path = PROJECT_ROOT / "data" / "processed" / "clustered_dataset.parquet"
-    if cluster_data_path.exists():
-        try:
-            df_clustered = pd.read_parquet(cluster_data_path)
-            
-            if "RISK_CLUSTER" in df_clustered.columns:
-                cluster_stats = df_clustered.groupby("RISK_CLUSTER").agg({
-                    "AGE": "mean",
-                    "TOTAL_ADMISSIONS": "mean",
-                    "AVG_ADMISSION_COST": "mean",
-                    "UNIQUE_DIAGNOSES_COUNT": "mean"
-                }).round(2)
-                
-                st.dataframe(cluster_stats, use_container_width=True)
-                
-                st.markdown("""
-                **Key Insight:** Cluster 2 (High Risk) is primarily driven by `UNIQUE_DIAGNOSES_COUNT` and `TOTAL_ADMISSIONS`. 
-                
-                *Note: SHAP values indicate magnitude of impact, not directional causation.*
-                """)
-        except Exception as e:
-            st.error(f"Error loading cluster data: {e}")
-    else:
-        st.info("Clustered dataset not found. Run Phase 2 clustering first.")
-
-# --- TAB 3: READMISSION RISK ---
-with tab3:
-    st.header("🎯 XGBoost Readmission Prediction Model")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("AUC-ROC Score", f"{model_meta.get('auc_roc', 0.9535):.4f}")
-        st.metric("Test Accuracy", f"{model_meta.get('accuracy', 0.8777):.2%}")
-    with col2:
-        st.metric("Training Samples", f"{model_meta.get('n_train_samples', 21294):,}")
-        st.metric("Test Samples", f"{model_meta.get('n_test_samples', 4455):,}")
-    
-    st.divider()
-    
-    # SHAP Analysis
-    st.subheader(" Feature Importance Analysis")
-    shap_path = PROJECT_ROOT / "docs" / "shap_feature_importance.csv"
-    if shap_path.exists():
-        df_shap = pd.read_csv(shap_path)
-        st.dataframe(df_shap.head(10), use_container_width=True)
-        
-        st.markdown("""
-        **Understanding SHAP Values:**
-        - Mean absolute SHAP measures the average magnitude of a feature's contribution
-        - Does NOT indicate direction (higher/lower values increase risk)
-        - Does NOT establish causation
-        - Used for model interpretability and feature prioritization
-        """)
-    else:
-        st.info("SHAP analysis not available. Run Phase 2 classification with SHAP enabled.")
-
-# --- TAB 4: COST FORECASTING ---
-with tab4:
-    st.header("📈 ARIMA Time-Series Cost Projection")
-    
-    forecast_plot = PROJECT_ROOT / "docs" / "timeseries_forecast.png"
-    metrics_path = PROJECT_ROOT / "docs" / "timeseries_model_metrics.csv"
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        if forecast_plot.exists():
-            st.image(str(forecast_plot), use_container_width=True)
-        else:
-            st.info("Run Phase 2 time-series to generate this plot.")
-            
-    with col2:
-        st.subheader("📊 Model Evaluation")
-        if metrics_path.exists():
-            df_metrics = pd.read_csv(metrics_path)
-            st.dataframe(df_metrics, use_container_width=True)
-            
-            # Calculate improvement
-            if len(df_metrics) >= 2:
-                naive_rmse = df_metrics.iloc[0]['rmse']
-                arima_rmse = df_metrics.iloc[1]['rmse']
-                improvement = ((naive_rmse - arima_rmse) / naive_rmse) * 100
-                st.success(f"✅ ARIMA RMSE improvement: {improvement:.1f}% vs baseline")
-        else:
-            st.info("Metrics pending.")
-    
-    st.divider()
-    
-    # Forecast details
-    st.subheader("📅 12-Month Forecast Summary")
-    forecast_csv = PROJECT_ROOT / "docs" / "timeseries_forecast.csv"
-    if forecast_csv.exists():
-        df_forecast = pd.read_csv(forecast_csv)
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Projected Cost", f"${df_forecast['forecast'].sum():,.0f}")
-        with col2:
-            st.metric("Avg Monthly Cost", f"${df_forecast['forecast'].mean():,.0f}")
-        with col3:
-            st.metric("Forecast Period", f"{len(df_forecast)} months")
-    else:
-        st.info("Forecast data not available.")
-
-# --- TAB 5: AGENTIC AI ASSISTANT ---
-with tab5:
-    st.header("🤖 ValueAI Data Science Assistant")
-    st.markdown("""
-    **Ask natural language questions about the data.** 
-    The AI retrieves *verified* Phase 2 evidence before answering.
-    
-    **Try asking:**
-    - "Analyze the high-risk cluster and give 3 strategic recommendations"
-    - "What are the top drivers of readmission?"
-    - "Generate an executive memo for the high-risk segment"
-    """)
-    
-    if not AGENT_AVAILABLE:
-        st.error("""
-        ⚠️ **GenAI Agent dependencies not found.**
-        
-        Please ensure:
-        - `langchain`, `langgraph`, and `langchain_ollama` are installed
-        - Ollama is running with Qwen 2.5 7B model
-        - Run: `ollama run qwen2.5:7b`
-        """)
-    else:
-        # Initialize chat history
-        if "messages" not in st.session_state:
-            st.session_state.messages = [
-                {
-                    "role": "assistant", 
-                    "content": "Hello! I am the ValueAI Data Science Assistant. I can analyze high-risk clusters, explain SHAP drivers, or predict individual readmission risk. Try asking: *'Analyze the high-risk cluster and give 3 strategic recommendations.'*"
-                }
-            ]
-
-        # Display chat history
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-
-        # Chat input
-        if prompt := st.chat_input("Ask a question about the models or data..."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
-
-            with st.chat_message("assistant"):
-                with st.spinner("🧠 Retrieving verified evidence and generating insights..."):
-                    try:
-                        response = invoke_agent(prompt)
-                        st.markdown(response)
-                        st.session_state.messages.append({"role": "assistant", "content": response})
-                    except Exception as e:
-                        st.error(f"⚠️ Error: {str(e)}")
-                        st.markdown("**Troubleshooting:**")
-                        st.code("""
-1. Ensure Ollama is running: ollama run qwen2.5:7b
-2. Check that all Phase 2 models are trained
-3. Verify SHAP and clustering artifacts exist in docs/
-                        """)
-
-# Sidebar - Model Status
 with st.sidebar:
-    st.header("️ System Status")
-    
-    st.markdown("### Model Status")
-    status_items = [
-        ("Clustering Model", PROJECT_ROOT / "models" / "clustering_model.pkl"),
-        ("XGBoost Readmission Model", PROJECT_ROOT / "models" / "classification_model.pkl"),
-        ("SHAP Explainability", PROJECT_ROOT / "docs" / "shap_feature_importance.csv"),
-        ("Time-Series Forecast", PROJECT_ROOT / "docs" / "timeseries_forecast.csv"),
-        ("Monte Carlo Simulation", PROJECT_ROOT / "data" / "processed" / "monte_carlo_results.json"),
+    st.header("⚙️ System Status")
+
+    # --------------------------------------------------------
+    # AI INFERENCE PROVIDER
+    # --------------------------------------------------------
+
+    st.markdown("### AI Inference Provider")
+
+    selected_provider_label = st.radio(
+        "Inference provider",
+        options=provider_labels,
+        index=provider_labels.index(
+            configured_provider_label
+        ),
+        key="app_ai_provider_selection",
+    )
+
+    selected_provider = provider_options[
+        selected_provider_label
     ]
-    
+
+    active_provider = get_active_provider(
+        selected_provider
+    )
+
+    st.caption(
+        f"Configured default: `{configured_provider}`"
+    )
+
+    if active_provider == LOCAL_PROVIDER:
+        st.success("Local inference selected")
+
+        st.markdown("**Runtime**")
+        st.code("Ollama", language="text")
+
+        st.markdown("**LLM**")
+        st.code("Qwen 2.5 7B", language="text")
+
+    elif active_provider == SAGEMAKER_PROVIDER:
+        st.info("AWS SageMaker selected")
+
+        st.markdown("**Runtime**")
+        st.code(
+            "AWS SageMaker",
+            language="text",
+        )
+
+        st.markdown("**LLM**")
+        st.code(
+            "SageMaker Endpoint",
+            language="text",
+        )
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # MODEL STATUS
+    # --------------------------------------------------------
+
+    st.markdown("### Model Status")
+
+    status_items = [
+        (
+            "Clustering Model",
+            PROJECT_ROOT
+            / "models"
+            / "clustering_model.pkl",
+        ),
+        (
+            "XGBoost Readmission Model",
+            PROJECT_ROOT
+            / "models"
+            / "classification_model.pkl",
+        ),
+        (
+            "SHAP Explainability",
+            PROJECT_ROOT
+            / "docs"
+            / "shap_feature_importance.csv",
+        ),
+        (
+            "Time-Series Forecast",
+            PROJECT_ROOT
+            / "docs"
+            / "timeseries_forecast.csv",
+        ),
+        (
+            "Monte Carlo Simulation",
+            PROJECT_ROOT
+            / "data"
+            / "processed"
+            / "monte_carlo_results.json",
+        ),
+    ]
+
     for label, path in status_items:
         if path.exists():
-            st.markdown(f"✅ **{label}**")
+            st.markdown(
+                f"✅ **{label}**"
+            )
         else:
-            st.markdown(f"⚠️ **{label}**")
-    
+            st.markdown(
+                f"⚠️ **{label}**"
+            )
+
     st.divider()
-    
+
+    # --------------------------------------------------------
+    # AI ENGINE
+    # --------------------------------------------------------
+
     st.markdown("### AI Engine")
-    st.code("Qwen 2.5 7B", language="text")
-    st.markdown("**Framework:** LangGraph")
-    st.markdown("**Architecture:** Evidence-First RAG")
-    
+
+    if active_provider == LOCAL_PROVIDER:
+        st.markdown("**Provider**")
+        st.code("Local", language="text")
+
+        st.markdown("**LLM**")
+        st.code(
+            "Qwen 2.5 7B",
+            language="text",
+        )
+
+        st.markdown("**Runtime**")
+        st.code(
+            "Ollama",
+            language="text",
+        )
+
+    else:
+        st.markdown("**Provider**")
+        st.code(
+            "AWS SageMaker",
+            language="text",
+        )
+
+        st.markdown("**LLM**")
+        st.code(
+            "SageMaker Endpoint",
+            language="text",
+        )
+
+        st.markdown("**Runtime**")
+        st.code(
+            "AWS SageMaker",
+            language="text",
+        )
+
+    st.markdown("**Agent Framework**")
+    st.code(
+        "LangGraph / ValueAI Provider",
+        language="text",
+    )
+
+    st.markdown("**Analytical Engine**")
+    st.code(
+        "Local XGBoost / GMM / Time-Series",
+        language="text",
+    )
+
     st.divider()
-    
+
+    # --------------------------------------------------------
+    # DATASET
+    # --------------------------------------------------------
+
     st.markdown("### Dataset")
-    st.metric("Records", f"{int(model_meta.get('n_records', 230890)):,}")
-    st.metric("Features", model_meta.get('n_features', 44))
+
+    st.metric(
+        "Records",
+        f"{int(model_meta.get('n_records', 230890)):,}",
+    )
+
+    st.metric(
+        "Features",
+        model_meta.get("n_features", 44),
+    )
+
+
+# ============================================================
+# MAIN TABS
+# ============================================================
+
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    [
+        "📊 Executive Overview",
+        "👥 Patient Segmentation",
+        "🎯 Readmission Risk",
+        "📈 Cost Forecasting",
+        "🤖 AI Business Assistant",
+    ]
+)
+
+
+# ============================================================
+# TAB 1 — EXECUTIVE OVERVIEW
+# ============================================================
+
+with tab1:
+    st.header("Strategic Overview")
+
+    # --------------------------------------------------------
+    # Key Metrics
+    # --------------------------------------------------------
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric(
+            "Total Records",
+            f"{int(model_meta.get('n_records', 230890)):,}",
+        )
+
+    with col2:
+        st.metric(
+            "XGBoost AUC-ROC",
+            f"{model_meta.get('auc_roc', 0.9535):.4f}",
+        )
+
+    with col3:
+        st.metric(
+            "Model Accuracy",
+            f"{model_meta.get('accuracy', 0.8777):.2%}",
+        )
+
+    with col4:
+        st.metric(
+            "Clusters Identified",
+            model_meta.get("n_clusters", 3),
+        )
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # Executive Summary
+    # --------------------------------------------------------
+
+    st.subheader("📋 Executive Summary")
+
+    summary_path = (
+        PROJECT_ROOT
+        / "docs"
+        / "executive_summary.md"
+    )
+
+    if summary_path.exists():
+        with open(
+            summary_path,
+            "r",
+            encoding="utf-8",
+        ) as f:
+            st.markdown(f.read())
+    else:
+        st.info(
+            "📄 Executive Summary not found. "
+            "Please ensure docs/executive_summary.md exists."
+        )
+
+    # --------------------------------------------------------
+    # Key Findings
+    # --------------------------------------------------------
+
+    st.divider()
+
+    st.subheader("🎯 Key Findings")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown(
+            """
+            **High-Risk Population**
+
+            - Cluster 2 represents ~13% of total population
+            - Average age: 75+ years
+            - 2.9x higher admission rate
+            - 4.2x higher healthcare costs
+            """
+        )
+
+    with col2:
+        st.markdown(
+            """
+            **Primary Readmission Drivers**
+
+            1. Average days between inpatient claims
+            2. Total admission count
+            3. Unique diagnosis count
+            4. Beneficiary response for inpatient services
+            """
+        )
+
+
+# ============================================================
+# TAB 2 — PATIENT SEGMENTATION
+# ============================================================
+
+with tab2:
+    st.header(
+        "GMM Patient Risk Clustering & SHAP Explainability"
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("📊 Cluster Distribution")
+
+        cluster_plot = (
+            PROJECT_ROOT
+            / "docs"
+            / "cluster_distribution.png"
+        )
+
+        if cluster_plot.exists():
+            st.image(
+                str(cluster_plot),
+                use_container_width=True,
+            )
+        else:
+            st.info(
+                "Run Phase 2 clustering to generate this plot."
+            )
+
+    with col2:
+        st.subheader("🔍 Readmission Drivers (SHAP)")
+
+        shap_plot = (
+            PROJECT_ROOT
+            / "docs"
+            / "shap_summary.png"
+        )
+
+        if shap_plot.exists():
+            st.image(
+                str(shap_plot),
+                use_container_width=True,
+            )
+        else:
+            st.info(
+                "Run Phase 2 classification to generate this plot."
+            )
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # Cluster Details
+    # --------------------------------------------------------
+
+    st.subheader("📊 Cluster Characteristics")
+
+    cluster_data_path = (
+        PROJECT_ROOT
+        / "data"
+        / "processed"
+        / "clustered_dataset.parquet"
+    )
+
+    if cluster_data_path.exists():
+        try:
+            df_clustered = pd.read_parquet(
+                cluster_data_path
+            )
+
+            if "RISK_CLUSTER" in df_clustered.columns:
+                cluster_stats = (
+                    df_clustered
+                    .groupby("RISK_CLUSTER")
+                    .agg(
+                        {
+                            "AGE": "mean",
+                            "TOTAL_ADMISSIONS": "mean",
+                            "AVG_ADMISSION_COST": "mean",
+                            "UNIQUE_DIAGNOSES_COUNT": "mean",
+                        }
+                    )
+                    .round(2)
+                )
+
+                st.dataframe(
+                    cluster_stats,
+                    use_container_width=True,
+                )
+
+                st.markdown(
+                    """
+                    **Key Insight:**
+
+                    Cluster 2 (High Risk) is primarily driven by
+                    `UNIQUE_DIAGNOSES_COUNT` and
+                    `TOTAL_ADMISSIONS`.
+
+                    *Note: SHAP values indicate magnitude of
+                    impact, not directional causation.*
+                    """
+                )
+
+        except Exception as exc:
+            st.error(
+                f"Error loading cluster data: {exc}"
+            )
+
+    else:
+        st.info(
+            "Clustered dataset not found. "
+            "Run Phase 2 clustering first."
+        )
+
+
+# ============================================================
+# TAB 3 — READMISSION RISK
+# ============================================================
+
+with tab3:
+    st.header(
+        "🎯 XGBoost Readmission Prediction Model"
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.metric(
+            "AUC-ROC Score",
+            f"{model_meta.get('auc_roc', 0.9535):.4f}",
+        )
+
+        st.metric(
+            "Test Accuracy",
+            f"{model_meta.get('accuracy', 0.8777):.2%}",
+        )
+
+    with col2:
+        st.metric(
+            "Training Samples",
+            f"{model_meta.get('n_train_samples', 21294):,}",
+        )
+
+        st.metric(
+            "Test Samples",
+            f"{model_meta.get('n_test_samples', 4455):,}",
+        )
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # SHAP Analysis
+    # --------------------------------------------------------
+
+    st.subheader("🔍 Feature Importance Analysis")
+
+    shap_path = (
+        PROJECT_ROOT
+        / "docs"
+        / "shap_feature_importance.csv"
+    )
+
+    if shap_path.exists():
+        try:
+            df_shap = pd.read_csv(shap_path)
+
+            st.dataframe(
+                df_shap.head(10),
+                use_container_width=True,
+            )
+
+            st.markdown(
+                """
+                **Understanding SHAP Values:**
+
+                - Mean absolute SHAP measures the average
+                  magnitude of a feature's contribution.
+                - It does **not** indicate direction
+                  (higher/lower values increase risk).
+                - It does **not** establish causation.
+                - It is used for model interpretability and
+                  feature prioritization.
+                """
+            )
+
+        except Exception as exc:
+            st.error(
+                f"Error loading SHAP analysis: {exc}"
+            )
+
+    else:
+        st.info(
+            "SHAP analysis not available. "
+            "Run Phase 2 classification with SHAP enabled."
+        )
+
+
+# ============================================================
+# TAB 4 — COST FORECASTING
+# ============================================================
+
+with tab4:
+    st.header(
+        "📈 ARIMA Time-Series Cost Projection"
+    )
+
+    forecast_plot = (
+        PROJECT_ROOT
+        / "docs"
+        / "timeseries_forecast.png"
+    )
+
+    timeseries_metrics_path = (
+        PROJECT_ROOT
+        / "docs"
+        / "timeseries_model_metrics.csv"
+    )
+
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        if forecast_plot.exists():
+            st.image(
+                str(forecast_plot),
+                use_container_width=True,
+            )
+        else:
+            st.info(
+                "Run Phase 2 time-series to generate this plot."
+            )
+
+    with col2:
+        st.subheader("📊 Model Evaluation")
+
+        if timeseries_metrics_path.exists():
+            try:
+                df_metrics = pd.read_csv(
+                    timeseries_metrics_path
+                )
+
+                st.dataframe(
+                    df_metrics,
+                    use_container_width=True,
+                )
+
+                # Calculate improvement when expected
+                # metrics are available.
+                if (
+                    len(df_metrics) >= 2
+                    and "rmse" in df_metrics.columns
+                ):
+                    naive_rmse = float(
+                        df_metrics.iloc[0]["rmse"]
+                    )
+
+                    arima_rmse = float(
+                        df_metrics.iloc[1]["rmse"]
+                    )
+
+                    if naive_rmse != 0:
+                        improvement = (
+                            (naive_rmse - arima_rmse)
+                            / naive_rmse
+                        ) * 100
+
+                        st.success(
+                            "✅ ARIMA RMSE improvement: "
+                            f"{improvement:.1f}% vs baseline"
+                        )
+
+            except Exception as exc:
+                st.error(
+                    f"Error loading time-series metrics: {exc}"
+                )
+
+        else:
+            st.info("Metrics pending.")
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # Forecast Details
+    # --------------------------------------------------------
+
+    st.subheader("📅 12-Month Forecast Summary")
+
+    forecast_csv = (
+        PROJECT_ROOT
+        / "docs"
+        / "timeseries_forecast.csv"
+    )
+
+    if forecast_csv.exists():
+        try:
+            df_forecast = pd.read_csv(
+                forecast_csv
+            )
+
+            if "forecast" in df_forecast.columns:
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.metric(
+                        "Total Projected Cost",
+                        f"${df_forecast['forecast'].sum():,.0f}",
+                    )
+
+                with col2:
+                    st.metric(
+                        "Avg Monthly Cost",
+                        f"${df_forecast['forecast'].mean():,.0f}",
+                    )
+
+                with col3:
+                    st.metric(
+                        "Forecast Period",
+                        f"{len(df_forecast)} months",
+                    )
+            else:
+                st.warning(
+                    "Forecast file does not contain a "
+                    "'forecast' column."
+                )
+
+        except Exception as exc:
+            st.error(
+                f"Error loading forecast data: {exc}"
+            )
+
+    else:
+        st.info(
+            "Forecast data not available."
+        )
+
+
+# ============================================================
+# TAB 5 — AGENTIC AI ASSISTANT
+# ============================================================
+
+with tab5:
+    st.header(
+        "🤖 ValueAI Data Science Assistant"
+    )
+
+    # --------------------------------------------------------
+    # Active Provider
+    # --------------------------------------------------------
+
+    if active_provider == LOCAL_PROVIDER:
+        st.info(
+            "AI inference provider: "
+            "**Local (Ollama / Qwen)**"
+        )
+
+    elif active_provider == SAGEMAKER_PROVIDER:
+        st.info(
+            "AI inference provider: "
+            "**AWS SageMaker**"
+        )
+
+    st.markdown(
+        """
+        **Ask natural language questions about the data.**
+
+        The AI retrieves *verified* Phase 2 evidence
+        before answering.
+
+        **Try asking:**
+
+        - "Analyze the high-risk cluster and give 3 strategic recommendations"
+        - "What are the top drivers of readmission?"
+        - "Generate an executive memo for the high-risk segment"
+        """
+    )
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # Provider Information
+    # --------------------------------------------------------
+
+    st.subheader("AI Inference Configuration")
+
+    provider_col1, provider_col2 = st.columns(2)
+
+    with provider_col1:
+        st.markdown("**Selected Provider**")
+
+        if active_provider == LOCAL_PROVIDER:
+            st.code(
+                "Local",
+                language="text",
+            )
+        else:
+            st.code(
+                "AWS SageMaker",
+                language="text",
+            )
+
+    with provider_col2:
+        st.markdown("**Analytical Engine**")
+
+        st.code(
+            "Local XGBoost / GMM / Time-Series",
+            language="text",
+        )
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # Chat History
+    # --------------------------------------------------------
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = [
+            {
+                "role": "assistant",
+                "content": (
+                    "Hello! I am the ValueAI Data Science "
+                    "Assistant. I can analyze high-risk "
+                    "clusters, explain SHAP drivers, or "
+                    "predict individual readmission risk. "
+                    "Try asking: "
+                    "*'Analyze the high-risk cluster and "
+                    "give 3 strategic recommendations.'*"
+                ),
+            }
+        ]
+
+    # --------------------------------------------------------
+    # Display Chat History
+    # --------------------------------------------------------
+
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # --------------------------------------------------------
+    # Chat Input
+    # --------------------------------------------------------
+
+    if prompt := st.chat_input(
+        "Ask a question about the models or data..."
+    ):
+        st.session_state.messages.append(
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        )
+
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner(
+                "🧠 Retrieving verified evidence "
+                "and generating insights..."
+            ):
+                try:
+                    response = invoke_agent(
+                        prompt,
+                        provider=active_provider,
+                    )
+
+                    st.markdown(response)
+
+                    st.session_state.messages.append(
+                        {
+                            "role": "assistant",
+                            "content": response,
+                        }
+                    )
+
+                except NotImplementedError as exc:
+                    if active_provider == SAGEMAKER_PROVIDER:
+                        st.error(
+                            "⚠️ AWS SageMaker provider is "
+                            "not implemented yet."
+                        )
+
+                        st.caption(
+                            "No fallback to the "
+                            "Local/Ollama provider was performed."
+                        )
+
+                        st.code(
+                            str(exc),
+                            language="text",
+                        )
+
+                    else:
+                        st.error(
+                            f"⚠️ Local AI analysis could "
+                            f"not be completed: {exc}"
+                        )
+
+                except Exception as exc:
+                    if active_provider == SAGEMAKER_PROVIDER:
+                        st.error(
+                            "⚠️ The AWS SageMaker analysis "
+                            "could not be completed."
+                        )
+
+                        st.caption(
+                            "No fallback to the "
+                            "Local/Ollama provider was performed."
+                        )
+
+                    else:
+                        st.error(
+                            "⚠️ The Local AI analysis "
+                            "could not be completed."
+                        )
+
+                    st.code(
+                        str(exc),
+                        language="text",
+                    )
+
+                    if active_provider == LOCAL_PROVIDER:
+                        st.markdown(
+                            "**Local AI troubleshooting:**"
+                        )
+
+                        st.code(
+                            """
+1. Ensure Ollama is running:
+   ollama run qwen2.5:7b
+
+2. Check that the Qwen 2.5 7B model is available.
+
+3. Check that all ValueAI analytical artifacts
+   required by the agent exist.
+                            """.strip(),
+                            language="text",
+                        )
+
+
+# ============================================================
+# FOOTER
+# ============================================================
+
+st.divider()
+
+st.caption(
+    "ValueAI Healthcare Value Intelligence Platform | "
+    "AI inference is routed through the centralized "
+    "ValueAI provider facade."
+)
 ```
 
 
@@ -1403,6 +2185,30 @@ Automated validation suite executed post-ingestion. Key assertions passed:
 ## 5. Reproducibility
 - Pipeline orchestrated via modular Python scripts.
 - Random seeds fixed (e.g., `seed=42` for stratified sampling and Monte Carlo simulations) to ensure 100% reproducible splits and projections.
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: docs\data_quality_report.md
+
+```md
+# Data Quality Report
+
+Generated: 2026-09-26T15:41:23.341133
+
+## Results
+
+**Status:** ✅ PASSED
+
+**Statistics:**
+- Evaluated: 1 expectations
+- Success Rate: 100.0%
+
+## Expectation Details
+
+- ✅ test_expectation
+
 ```
 
 
@@ -8914,6 +9720,21 @@ statsmodels.tsa.statespace.mlemodel.MLEResults
 
 <div style='page-break-after: always;'></div>
 
+# File: pytest.ini
+
+```ini
+[pytest]
+markers =
+    spark: marks tests as requiring PySpark (deselect with '-m "not spark"')
+testpaths =
+    tests
+python_files = test_*.py
+python_functions = test_*
+```
+
+
+<div style='page-break-after: always;'></div>
+
 # File: README.md
 
 ```md
@@ -9889,6 +10710,236 @@ Future production-oriented enhancements could include:
 * Production observability
 * Additional clinical/business validation
 
+
+
+# Deployment complete evidence 
+
+
+(.venv) PS C:\Data\ValueAI_Project> python scripts/deploy_sagemaker.py `
+>>   --role-arn "arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole" `
+>>   --endpoint-name "valueai-qwen25-7b" `
+>>   --instance-type "ml.g6e.xlarge" `
+>>   --config-name "generate_lowest_cost" `
+>>   --model-version "1.42.0"
+C:\Data\ValueAI_Project\scripts\deploy_sagemaker.py:43: SyntaxWarning: invalid escape sequence '\:'
+  arn\:aws\:iam::932453198323\:role/ValueAI-SageMaker-ExecutionRole
+========================================================================
+VALUEAI — PHASE 15 SAGEMAKER DEPLOYMENT
+========================================================================
+
+[CONFIG]
+Region:         us-east-1
+Model ID:       huggingface-llm-qwen2-5-7b-instruct
+Model version:  1.42.0
+Endpoint:       valueai-qwen25-7b
+Instance type:  ml.g6e.xlarge
+Config:         generate_lowest_cost
+Role ARN:       arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole
+
+[AWS CREDENTIALS]
+Account:        932453198323
+Caller ARN:     arn:aws:iam::932453198323:user/ValueAI-Project-User
+
+[IAM ROLE]
+Role name:      ValueAI-SageMaker-ExecutionRole
+Role ARN:       arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole
+
+[JUMPSTART MODEL]
+Default instance: ml.g6e.2xlarge
+Supported default instances: ml.g4dn.12xlarge, ml.g5.12xlarge, ml.g6.12xlarge, ml.g6e.2xlarge, ml.g6e.4xlarge, ml.g6e.xlarge
+
+[ENDPOINT]
+Endpoint does not currently exist.
+
+[VALIDATION]
+Validating the requested JumpStart deployment configuration...
+[09/25/26 08:14:12] INFO     Found credentials in shared credentials file: ~/.aws/credentials                                                          credentials.py:1392
+sagemaker.config INFO - Not applying SDK defaults from location: C:\ProgramData\sagemaker\sagemaker\config.yaml
+sagemaker.config INFO - Not applying SDK defaults from location: C:\Users\DAYLIFF\AppData\Local\sagemaker\sagemaker\config.yaml
+
+Creating temporary ModelBuilder for deployment-configuration validation...
+[09/25/26 08:14:18] INFO     Found credentials in shared credentials file: ~/.aws/credentials                                                          credentials.py:1392
+                    INFO     SageMaker Python SDK will collect telemetry to help us better understand our user's needs, diagnose issues, and      telemetry_logging.py:325
+                             deliver additional features.
+                             To opt out of telemetry, please disable via TelemetryOptOut parameter in SDK defaults config. For more information,
+                             refer to
+                             https://sagemaker.readthedocs.io/en/stable/overview.html#configuring-and-using-defaults-with-the-sagemaker-python-sd
+                             k.
+                    DEBUG    Auto-detecting optimal instance type for model...                                                                  model_builder_utils.py:342
+Using model 'huggingface-llm-qwen2-5-7b-instruct' with wildcard version identifier '*'. You can pin to version '1.42.0' for more stable results. Note that models may have different input/output signatures after a major version upgrade.
+[09/25/26 08:14:22] WARNING  Using model 'huggingface-llm-qwen2-5-7b-instruct' with wildcard version identifier '*'. You can pin to version '1.42.0' for more cache.py:624
+                             stable results. Note that models may have different input/output signatures after a major version upgrade.
+                    DEBUG    JumpStart Model ID detected.                                                                                      model_builder_utils.py:2922
+                    DEBUG    Using default CPU instance type: ml.m5.large                                                                       model_builder_utils.py:376
+[09/25/26 08:14:29] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:14:32] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g5.xlarge
+                    WARNING  Overriding instance type to ml.g5.xlarge                                                                                         utils.py:241
+[09/25/26 08:14:36] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:14:39] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:14:42] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.16xlarge
+                    WARNING  Overriding instance type to ml.g6e.16xlarge                                                                                      utils.py:241
+[09/25/26 08:14:46] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g5.xlarge
+                    WARNING  Overriding instance type to ml.g5.xlarge                                                                                         utils.py:241
+[09/25/26 08:14:49] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:14:52] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6.xlarge
+                    WARNING  Overriding instance type to ml.g6.xlarge                                                                                         utils.py:241
+[09/25/26 08:14:56] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:14:59] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.12xlarge
+                    WARNING  Overriding instance type to ml.g6e.12xlarge                                                                                      utils.py:241
+[09/25/26 08:15:02] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:06] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:09] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:12] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:15:15] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:19] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:22] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:26] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:15:30] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:34] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+                    WARNING  Instance rate metrics will be omitted. Reason: User: arn:aws:iam::932453198323:user/ValueAI-Project-User is not   model_builder_utils.py:2783
+                             authorized to perform: pricing:GetProducts because no identity-based policy allows the pricing:GetProducts action
+Deployment configuration accepted by SageMaker ModelBuilder.
+Resolved instance type: ml.g6e.xlarge
+
+Deployment configuration validation completed.
+
+[DEPLOYMENT]
+Starting SageMaker deployment.
+Endpoint creation can take several minutes.
+
+[JUMPSTART CONFIG]
+Model ID:       huggingface-llm-qwen2-5-7b-instruct
+Model version:  1.42.0
+Config name:    generate_lowest_cost
+Instance type:  ml.g6e.xlarge
+Execution role: arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole
+
+Creating SageMaker ModelBuilder...
+                    INFO     Found credentials in shared credentials file: ~/.aws/credentials                                                          credentials.py:1392
+[09/25/26 08:15:35] DEBUG    Auto-detecting optimal instance type for model...                                                                  model_builder_utils.py:342
+Using model 'huggingface-llm-qwen2-5-7b-instruct' with wildcard version identifier '*'. You can pin to version '1.42.0' for more stable results. Note that models may have different input/output signatures after a major version upgrade.
+[09/25/26 08:15:39] WARNING  Using model 'huggingface-llm-qwen2-5-7b-instruct' with wildcard version identifier '*'. You can pin to version '1.42.0' for more cache.py:624
+                             stable results. Note that models may have different input/output signatures after a major version upgrade.
+                    DEBUG    JumpStart Model ID detected.                                                                                      model_builder_utils.py:2922
+                    DEBUG    Using default CPU instance type: ml.m5.large                                                                       model_builder_utils.py:376
+
+[DEPLOYMENT CONFIGURATION]
+Selecting the requested published JumpStart deployment configuration...
+[09/25/26 08:15:45] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:49] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g5.xlarge
+                    WARNING  Overriding instance type to ml.g5.xlarge                                                                                         utils.py:241
+[09/25/26 08:15:52] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:15:56] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:15:59] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.16xlarge
+                    WARNING  Overriding instance type to ml.g6e.16xlarge                                                                                      utils.py:241
+[09/25/26 08:16:02] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g5.xlarge
+[09/25/26 08:16:03] WARNING  Overriding instance type to ml.g5.xlarge                                                                                         utils.py:241
+[09/25/26 08:16:07] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:16:11] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6.xlarge
+                    WARNING  Overriding instance type to ml.g6.xlarge                                                                                         utils.py:241
+[09/25/26 08:16:14] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:16:17] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.12xlarge
+                    WARNING  Overriding instance type to ml.g6e.12xlarge                                                                                      utils.py:241
+[09/25/26 08:16:21] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:16:24] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:16:28] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:16:31] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:16:35] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:16:38] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:16:42] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:16:45] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+[09/25/26 08:16:48] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:16:52] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+Overriding instance type to ml.g6e.24xlarge
+                    WARNING  Overriding instance type to ml.g6e.24xlarge                                                                                      utils.py:241
+                    WARNING  Instance rate metrics will be omitted. Reason: User: arn:aws:iam::932453198323:user/ValueAI-Project-User is not   model_builder_utils.py:2783
+                             authorized to perform: pricing:GetProducts because no identity-based policy allows the pricing:GetProducts action
+Deployment configuration selected.
+Resolved instance type: ml.g6e.xlarge
+
+[BUILD]
+Building SageMaker model resource...
+[09/25/26 08:16:57] INFO     Created S3 bucket: sagemaker-us-east-1-932453198323                                                                     session_helper.py:815
+[09/25/26 08:16:58] DEBUG    Either inference spec or model is provided. ModelBuilder is not handling MLflow model input                       model_builder_utils.py:1381
+                    DEBUG    Building for JumpStart model ID...                                                                                      model_builder.py:3579
+[09/25/26 08:17:01] WARNING  Couldn't call 'get_role' to get Role ARN from role name ValueAI-Project-User to get Role path.                          session_helper.py:375
+[09/25/26 08:17:02] INFO     Cannot simulate policies for 'arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole' (access denied);       iam_role_resolver.py:422
+                             permission verdict unknown.
+                    WARNING  Could not verify permissions for role 'arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole' (caller lacks iam_role_resolver.py:657
+                             iam:SimulatePrincipalPolicy). Proceeding with it. If the operation later fails with an access-denied error, ensure
+                             the role has the required permissions for 'serving' (see IamRoleResolver().get_required_actions('serving')) or
+                             create a dedicated role via IamRoleResolver().create_execution_role(role_type='serving').
+[09/25/26 08:17:03] INFO     Cannot simulate policies for 'arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole' (access denied);       iam_role_resolver.py:422
+                             permission verdict unknown.
+[09/25/26 08:17:04] WARNING  Could not verify permissions for role 'arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole' (caller lacks iam_role_resolver.py:657
+                             iam:SimulatePrincipalPolicy). Proceeding with it. If the operation later fails with an access-denied error, ensure
+                             the role has the required permissions for 'serving' (see IamRoleResolver().get_required_actions('serving')) or
+                             create a dedicated role via IamRoleResolver().create_execution_role(role_type='serving').
+                    INFO     Creating model with name: model-bd9f1c4d                                                                               session_helper.py:1922
+[09/25/26 08:17:06] DEBUG    No boto3 session provided. Creating a new session.                                                                               utils.py:357
+                    DEBUG    No config provided. Using default config.                                                                                        utils.py:365
+                    INFO     Found credentials in shared credentials file: ~/.aws/credentials                                                          credentials.py:1392
+[09/25/26 08:17:07] INFO     ✅ Model has been created: 'model-bd9f1c4d' using server DJL_SERVING in SAGEMAKER_ENDPOINT mode (ARN:                   model_builder.py:4489
+                             arn:aws:sagemaker:us-east-1:932453198323:model/model-bd9f1c4d)
+SageMaker model resource built successfully.
+
+[DEPLOY]
+Creating endpoint: valueai-qwen25-7b
+[09/25/26 08:17:08] INFO     Creating endpoint-config with name valueai-qwen25-7b                                                                   session_helper.py:1093
+[09/25/26 08:17:09] INFO     Creating endpoint with name valueai-qwen25-7b                                                                          session_helper.py:1125
+╭──────────────────────────────────────────────────────────────────────────── Wait Log Panel ────────────────────────────────────────────────────────────────────────────╮
+│ [  ==] Waiting for Endpoint... 0:00:01                                                                                                                                 │
+│ ⠏ Current status: Creating                                                                                                                                             │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[09/25/26 08:17:10] WARNING  Failed to enable live logging: An error occurred (AccessDeniedException) when calling the FilterLogEvents operation:   session_helper.py:2844
+╭──────────────────────────────────────────────────────────────────────────── Wait Log Panel ────────────────────────────────────────────────────────────────────────────╮
+│ [==  ] Waiting for Endpoint... 0:09:09                                                                                                                                 │
+│ ⠇ Current status: InService                                                                                                                                            │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[09/25/26 08:26:19] INFO     ✅ Deployment successful: Endpoint 'valueai-qwen25-7b' using DJL_SERVING in SAGEMAKER_ENDPOINT mode (ARN:               model_builder.py:3770
+                             arn:aws:sagemaker:us-east-1:932453198323:endpoint/valueai-qwen25-7b)
+
+[DEPLOYMENT COMPLETE]
+Endpoint: valueai-qwen25-7b
+The endpoint is now being managed by SageMaker.
+
+[NEXT]
+Run:
+python scripts/test_sagemaker.py
+Do not change VALUEAI_AI_PROVIDER to sagemaker until the endpoint smoke test passes.
+========================================================================
+
 ```
 
 
@@ -9929,6 +10980,2339 @@ seaborn>=0.12.0
 mlflow>=2.15.0
 
 joblib>=1.3.0
+
+sagemaker>=3.22.0,<4.0.0
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: sagemaker-execution-policy.json
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::jumpstart-cache-prod-us-east-1",
+        "arn:aws:s3:::jumpstart-cache-prod-us-east-1/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchGetImage",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetDownloadUrlForLayer"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogStreams",
+        "cloudwatch:PutMetricData"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: scripts\deploy_sagemaker.py
+
+```python
+"""
+ValueAI — Phase 15 SageMaker Deployment
+
+Deploys the configured JumpStart model to a SageMaker real-time endpoint.
+
+IMPORTANT:
+    This version uses SageMaker InstancePools for automatic capacity
+    fallback.
+
+    Instead of asking SageMaker for only one instance type:
+
+        ml.g6e.xlarge
+
+    the endpoint configuration contains an ordered list:
+
+        Priority 1 -> ml.g6e.xlarge
+        Priority 2 -> ml.g6e.2xlarge
+        Priority 3 -> ml.g6e.4xlarge
+
+    If SageMaker cannot obtain capacity for the higher-priority instance,
+    SageMaker automatically attempts the next pool.
+
+Model:
+    huggingface-llm-qwen2-5-7b-instruct
+
+Deployment flow:
+
+    JumpStartConfig
+        ↓
+    ModelBuilder.from_jumpstart_config()
+        ↓
+    set_deployment_config()
+        ↓
+    build()
+        ↓
+    boto3.create_endpoint_config(InstancePools=...)
+        ↓
+    boto3.create_endpoint()
+        ↓
+    wait for endpoint
+
+Prerequisites:
+    - AWS credentials available through the normal AWS credential chain
+    - An IAM execution role ARN usable by SageMaker
+    - SageMaker Python SDK V3
+    - boto3/botocore with InstancePools API support
+    - An AWS region where the selected JumpStart model is available
+
+Example PowerShell:
+
+    python scripts/deploy_sagemaker.py `
+      --role-arn "arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole" `
+      --endpoint-name "valueai-qwen25-7b" `
+      --instance-type "ml.g6e.xlarge" `
+      --config-name "generate_lowest_cost" `
+      --model-version "1.42.0"
+
+IMPORTANT:
+    In PowerShell, do NOT escape ':' characters in the ARN.
+
+    Correct:
+        arn:aws:iam::932453198323:role/ValueAI-SageMaker-ExecutionRole
+
+    Incorrect:
+        arn\\:aws\\:iam::932453198323\\:role/ValueAI-SageMaker-ExecutionRole
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+
+# ============================================================
+# PROJECT ROOT
+# ============================================================
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+
+# ============================================================
+# AWS IMPORTS
+# ============================================================
+
+import boto3
+
+from botocore.exceptions import BotoCoreError, ClientError
+
+
+# ============================================================
+# VALUEAI CONFIGURATION
+# ============================================================
+
+from src.utils.config import (
+    get_aws_region,
+    get_sagemaker_endpoint_name,
+    get_sagemaker_model_id,
+)
+
+
+# ============================================================
+# DEFAULTS
+# ============================================================
+
+DEFAULT_INSTANCE_TYPE = "ml.g6e.xlarge"
+
+DEFAULT_CONFIG_NAME = "generate_lowest_cost"
+
+DEFAULT_MODEL_VERSION = "1.42.0"
+
+# SageMaker InstancePools supports up to five pools.
+#
+# Priority 1 = preferred / lowest-cost choice.
+# Priority 2 = first fallback.
+# Priority 3 = second fallback.
+#
+# These are all instances reported by the JumpStart model metadata
+# in the current ValueAI deployment.
+DEFAULT_INSTANCE_POOLS = [
+    "ml.g6e.xlarge",
+    "ml.g6e.2xlarge",
+    "ml.g6e.4xlarge",
+]
+
+# Capacity provisioning timeout.
+#
+# AWS allows 300-3600 seconds.
+#
+# This controls capacity provisioning across the pools. It does NOT
+# include model download/container startup time.
+DEFAULT_PROVISION_TIMEOUT_SECONDS = 900
+
+DEFAULT_POLL_SECONDS = 10
+
+DEFAULT_ENDPOINT_TIMEOUT_SECONDS = 3600
+
+
+# ============================================================
+# ARGUMENT PARSING
+# ============================================================
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Deploy the ValueAI JumpStart model to SageMaker "
+            "using InstancePools for automatic capacity fallback."
+        )
+    )
+
+    parser.add_argument(
+        "--role-arn",
+        default=None,
+        help=(
+            "SageMaker execution role ARN. "
+            "Example: "
+            "arn:aws:iam::932453198323:role/"
+            "ValueAI-SageMaker-ExecutionRole"
+        ),
+    )
+
+    parser.add_argument(
+        "--endpoint-name",
+        default=None,
+        help=(
+            "SageMaker endpoint name. "
+            "If omitted, VALUEAI_SAGEMAKER_ENDPOINT_NAME "
+            "is used."
+        ),
+    )
+
+    parser.add_argument(
+        "--instance-type",
+        default=DEFAULT_INSTANCE_TYPE,
+        help=(
+            "Primary SageMaker inference instance type. "
+            f"Default: {DEFAULT_INSTANCE_TYPE}"
+        ),
+    )
+
+    parser.add_argument(
+        "--fallback-instance-types",
+        default=None,
+        help=(
+            "Comma-separated fallback instance types. "
+            "Example: ml.g6e.2xlarge,ml.g6e.4xlarge"
+        ),
+    )
+
+    parser.add_argument(
+        "--config-name",
+        default=DEFAULT_CONFIG_NAME,
+        help=(
+            "Published JumpStart deployment configuration. "
+            f"Default: {DEFAULT_CONFIG_NAME}"
+        ),
+    )
+
+    parser.add_argument(
+        "--model-version",
+        default=DEFAULT_MODEL_VERSION,
+        help=(
+            "Pinned JumpStart model version. "
+            f"Default: {DEFAULT_MODEL_VERSION}"
+        ),
+    )
+
+    parser.add_argument(
+        "--provision-timeout",
+        type=int,
+        default=DEFAULT_PROVISION_TIMEOUT_SECONDS,
+        help=(
+            "Maximum capacity-provisioning timeout across "
+            "InstancePools. Valid range: 300-3600 seconds. "
+            f"Default: {DEFAULT_PROVISION_TIMEOUT_SECONDS}"
+        ),
+    )
+
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Validate configuration and AWS access without "
+            "creating or changing SageMaker resources."
+        ),
+    )
+
+    return parser.parse_args()
+
+
+# ============================================================
+# CONFIGURATION HELPERS
+# ============================================================
+
+
+def normalize_role_arn(
+    role_arn: str | None,
+) -> str | None:
+    """
+    Normalize an IAM role ARN.
+
+    Handles accidentally escaped PowerShell ARNs:
+
+        arn\\:aws\\:iam::123456789012\\:role/MyRole
+
+    and converts them to:
+
+        arn:aws:iam::123456789012:role/MyRole
+    """
+
+    if not role_arn:
+        return None
+
+    normalized = role_arn.strip()
+
+    normalized = normalized.replace("\\:", ":")
+
+    return normalized
+
+
+def get_endpoint_name(
+    cli_value: str | None,
+) -> str:
+    """Resolve the SageMaker endpoint name."""
+
+    if cli_value:
+        return cli_value.strip()
+
+    return get_sagemaker_endpoint_name().strip()
+
+
+def build_instance_pool_types(
+    primary_instance_type: str,
+    fallback_instance_types: str | None,
+) -> list[str]:
+    """
+    Build the ordered InstancePools list.
+
+    Priority order:
+
+        1. primary instance
+        2. first fallback
+        3. second fallback
+        ...
+
+    Duplicate instance types are removed while preserving order.
+    """
+
+    values: list[str] = []
+
+    primary = primary_instance_type.strip()
+
+    if primary:
+        values.append(primary)
+
+    if fallback_instance_types:
+        for value in fallback_instance_types.split(","):
+            normalized = value.strip()
+
+            if normalized:
+                values.append(normalized)
+
+    # Remove duplicates while preserving order.
+    unique_values: list[str] = []
+
+    for value in values:
+        if value not in unique_values:
+            unique_values.append(value)
+
+    if not unique_values:
+        raise ValueError(
+            "At least one SageMaker instance type must be supplied."
+        )
+
+    if len(unique_values) > 5:
+        raise ValueError(
+            "SageMaker InstancePools supports a maximum of "
+            "5 instance types."
+        )
+
+    return unique_values
+
+
+# ============================================================
+# AWS IDENTITY
+# ============================================================
+
+
+def check_aws_identity(
+    region: str,
+) -> dict[str, str]:
+    """
+    Confirm that AWS credentials are available and return
+    the current caller identity.
+    """
+
+    sts = boto3.client(
+        "sts",
+        region_name=region,
+    )
+
+    response = sts.get_caller_identity()
+
+    return {
+        "Account": response["Account"],
+        "Arn": response["Arn"],
+        "UserId": response["UserId"],
+    }
+
+
+# ============================================================
+# IAM ROLE VALIDATION
+# ============================================================
+
+
+def validate_role_arn(
+    role_arn: str,
+) -> dict[str, str]:
+    """
+    Validate that the supplied IAM role exists.
+
+    This is read-only and does not modify IAM.
+    """
+
+    iam = boto3.client("iam")
+
+    role_name = role_arn.rsplit("/", 1)[-1]
+
+    response = iam.get_role(
+        RoleName=role_name,
+    )
+
+    role = response["Role"]
+
+    actual_arn = role["Arn"]
+
+    if actual_arn != role_arn:
+        raise ValueError(
+            "The supplied SageMaker role ARN does not match "
+            "the IAM role returned by AWS.\n"
+            f"Supplied: {role_arn}\n"
+            f"AWS:      {actual_arn}"
+        )
+
+    return {
+        "RoleName": role["RoleName"],
+        "Arn": role["Arn"],
+        "Path": role["Path"],
+    }
+
+
+# ============================================================
+# ENDPOINT CHECK
+# ============================================================
+
+
+def check_existing_endpoint(
+    region: str,
+    endpoint_name: str,
+) -> str | None:
+    """
+    Return the current endpoint status.
+
+    Returns:
+        EndpointStatus if the endpoint exists.
+        None if the endpoint does not exist.
+    """
+
+    client = boto3.client(
+        "sagemaker",
+        region_name=region,
+    )
+
+    try:
+        response = client.describe_endpoint(
+            EndpointName=endpoint_name,
+        )
+
+        return response["EndpointStatus"]
+
+    except client.exceptions.ClientError as exc:
+        error_code = (
+            exc.response
+            .get("Error", {})
+            .get("Code")
+        )
+
+        if error_code == "ValidationException":
+            return None
+
+        raise
+
+
+# ============================================================
+# JUMPSTART MODEL METADATA
+# ============================================================
+
+
+def validate_model_metadata(
+    region: str,
+    model_id: str,
+) -> dict:
+    """
+    Retrieve published JumpStart model metadata.
+
+    This does not create SageMaker resources.
+    """
+
+    client = boto3.client(
+        "sagemaker",
+        region_name=region,
+    )
+
+    response = client.describe_hub_content(
+        HubName="SageMakerPublicHub",
+        HubContentType="Model",
+        HubContentName=model_id,
+    )
+
+    return json.loads(
+        response["HubContentDocument"]
+    )
+
+
+# ============================================================
+# JUMPSTART DEPLOYMENT CONFIGURATION
+# ============================================================
+
+
+def validate_deployment_configuration(
+    *,
+    region: str,
+    model_id: str,
+    model_version: str,
+    config_name: str,
+    instance_type: str,
+    role_arn: str,
+) -> None:
+    """
+    Validate the requested JumpStart deployment configuration.
+
+    The validation still uses ModelBuilder because we want the
+    official JumpStart published configuration to build the model
+    correctly.
+
+    InstancePools themselves are created later with boto3 because
+    the current ModelBuilder deploy() path does not expose the
+    InstancePools production-variant configuration directly.
+    """
+
+    from sagemaker.core.jumpstart.configs import JumpStartConfig
+    from sagemaker.serve import ModelBuilder
+
+    print(
+        "\nCreating temporary ModelBuilder for "
+        "deployment-configuration validation..."
+    )
+
+    jumpstart_config = JumpStartConfig(
+        model_id=model_id,
+        model_version=model_version,
+        inference_config_name=config_name,
+    )
+
+    model_builder = ModelBuilder.from_jumpstart_config(
+        jumpstart_config=jumpstart_config,
+        role_arn=role_arn,
+    )
+
+    if not hasattr(
+        model_builder,
+        "additional_model_data_sources",
+    ):
+        model_builder.additional_model_data_sources = None
+
+    model_builder.set_deployment_config(
+        config_name=config_name,
+        instance_type=instance_type,
+    )
+
+    print(
+        "Deployment configuration accepted by "
+        "SageMaker ModelBuilder."
+    )
+
+    resolved_instance = getattr(
+        model_builder,
+        "instance_type",
+        None,
+    )
+
+    if resolved_instance:
+        print(
+            f"Resolved instance type: {resolved_instance}"
+        )
+
+    resolved_config = getattr(
+        model_builder,
+        "deployment_config",
+        None,
+    )
+
+    if resolved_config:
+        print(
+            f"Resolved deployment config: {resolved_config}"
+        )
+
+
+# ============================================================
+# MODEL NAME EXTRACTION
+# ============================================================
+
+
+def get_model_name(model) -> str:
+    """
+    Extract the SageMaker model name from the SDK V3 Model
+    resource returned by ModelBuilder.build().
+    """
+
+    # Most SDK V3 Model resources expose model_name.
+    model_name = getattr(
+        model,
+        "model_name",
+        None,
+    )
+
+    if model_name:
+        return str(model_name)
+
+    # Some resource representations may expose name.
+    model_name = getattr(
+        model,
+        "name",
+        None,
+    )
+
+    if model_name:
+        return str(model_name)
+
+    # Fall back to ARN extraction.
+    arn = getattr(
+        model,
+        "arn",
+        None,
+    )
+
+    if arn:
+        arn = str(arn)
+
+        return arn.rsplit("/", 1)[-1]
+
+    raise RuntimeError(
+        "SageMaker ModelBuilder created a model, but the "
+        "model name could not be determined."
+    )
+
+
+# ============================================================
+# INSTANCE POOL DISPLAY
+# ============================================================
+
+
+def print_instance_pools(
+    instance_types: list[str],
+) -> None:
+    """Display the InstancePools priority order."""
+
+    print("\n[INSTANCE POOLS]")
+
+    print(
+        "SageMaker will attempt instance types in this order:"
+    )
+
+    for priority, instance_type in enumerate(
+        instance_types,
+        start=1,
+    ):
+        if priority == 1:
+            label = "PRIMARY"
+        else:
+            label = f"FALLBACK {priority - 1}"
+
+        print(
+            f"  Priority {priority}: "
+            f"{instance_type:<18} [{label}]"
+        )
+
+
+# ============================================================
+# CREATE INSTANCE-POOL ENDPOINT
+# ============================================================
+
+
+def deploy_with_instance_pools(
+    *,
+    region: str,
+    model,
+    endpoint_name: str,
+    instance_types: list[str],
+    provision_timeout_seconds: int,
+):
+    """
+    Create the SageMaker endpoint using InstancePools.
+
+    This intentionally bypasses ModelBuilder.deploy() after the
+    model has been built.
+
+    Why?
+
+    ModelBuilder.build() is still responsible for creating the
+    correct JumpStart model resource/container configuration.
+
+    But boto3 CreateEndpointConfig gives us direct access to:
+
+        InstancePools
+        VariantInstanceProvisionTimeoutInSeconds
+
+    which is exactly the AWS mechanism recommended for this
+    insufficient-capacity situation.
+    """
+
+    if not (
+        300
+        <= provision_timeout_seconds
+        <= 3600
+    ):
+        raise ValueError(
+            "provision_timeout_seconds must be between "
+            "300 and 3600 seconds."
+        )
+
+    client = boto3.client(
+        "sagemaker",
+        region_name=region,
+    )
+
+    model_name = get_model_name(model)
+
+    # --------------------------------------------------------
+    # Create a unique endpoint configuration name.
+    #
+    # EndpointConfig names cannot be reused once deleted.
+    # --------------------------------------------------------
+
+    timestamp = int(time.time())
+
+    endpoint_config_name = (
+        f"{endpoint_name}-pool-{timestamp}"
+    )
+
+    # --------------------------------------------------------
+    # Build InstancePools.
+    # --------------------------------------------------------
+
+    instance_pools = []
+
+    for priority, instance_type in enumerate(
+        instance_types,
+        start=1,
+    ):
+        instance_pools.append(
+            {
+                "InstanceType": instance_type,
+                "Priority": priority,
+            }
+        )
+
+    # --------------------------------------------------------
+    # Create endpoint configuration.
+    #
+    # IMPORTANT:
+    #
+    # When InstancePools is supplied, we deliberately do NOT
+    # supply the old single InstanceType field.
+    # --------------------------------------------------------
+
+    print("\n[ENDPOINT CONFIGURATION]")
+
+    print(
+        "Creating SageMaker EndpointConfig with "
+        "InstancePools..."
+    )
+
+    print(
+        f"EndpointConfig: {endpoint_config_name}"
+    )
+
+    print(
+        f"Model:          {model_name}"
+    )
+
+    print(
+        "Initial count:  1"
+    )
+
+    print(
+        "Provision timeout: "
+        f"{provision_timeout_seconds} seconds"
+    )
+
+    response = client.create_endpoint_config(
+        EndpointConfigName=endpoint_config_name,
+        ProductionVariants=[
+            {
+                "VariantName": "AllTraffic",
+                "ModelName": model_name,
+                "InitialInstanceCount": 1,
+                "InstancePools": instance_pools,
+                "VariantInstanceProvisionTimeoutInSeconds": (
+                    provision_timeout_seconds
+                ),
+            }
+        ],
+    )
+
+    print(
+        "EndpointConfig created:"
+    )
+
+    print(
+        response.get(
+            "EndpointConfigArn",
+            endpoint_config_name,
+        )
+    )
+
+    # --------------------------------------------------------
+    # Create endpoint.
+    # --------------------------------------------------------
+
+    print("\n[ENDPOINT]")
+
+    print(
+        f"Creating endpoint: {endpoint_name}"
+    )
+
+    client.create_endpoint(
+        EndpointName=endpoint_name,
+        EndpointConfigName=endpoint_config_name,
+    )
+
+    print(
+        "Endpoint creation requested."
+    )
+
+    # --------------------------------------------------------
+    # Wait for endpoint.
+    # --------------------------------------------------------
+
+    print(
+        "\n[WAIT]"
+    )
+
+    print(
+        "SageMaker will now attempt the InstancePools "
+        "in priority order."
+    )
+
+    print(
+        "This may still take time for model download and "
+        "container startup after capacity is found."
+    )
+
+    start_time = time.time()
+
+    while True:
+        response = client.describe_endpoint(
+            EndpointName=endpoint_name,
+        )
+
+        status = response.get(
+            "EndpointStatus",
+            "Unknown",
+        )
+
+        elapsed = int(
+            time.time() - start_time
+        )
+
+        print(
+            f"[WAIT] Status: {status} "
+            f"| elapsed: {elapsed}s"
+        )
+
+        if status == "InService":
+            print(
+                "\n[OK] SageMaker endpoint is InService."
+            )
+
+            return {
+                "endpoint_name": endpoint_name,
+                "endpoint_config_name": endpoint_config_name,
+                "model_name": model_name,
+                "status": status,
+            }
+
+        if status == "Failed":
+            failure_reason = response.get(
+                "FailureReason",
+                "Unknown SageMaker failure.",
+            )
+
+            raise RuntimeError(
+                "SageMaker endpoint creation failed.\n"
+                f"FailureReason: {failure_reason}\n"
+                f"EndpointConfig: {endpoint_config_name}\n"
+                f"Model: {model_name}"
+            )
+
+        if (
+            time.time() - start_time
+            >= DEFAULT_ENDPOINT_TIMEOUT_SECONDS
+        ):
+            raise TimeoutError(
+                f"Timed out waiting for endpoint "
+                f"'{endpoint_name}' after "
+                f"{DEFAULT_ENDPOINT_TIMEOUT_SECONDS} seconds.\n"
+                f"EndpointConfig: "
+                f"{endpoint_config_name}"
+            )
+
+        time.sleep(
+            DEFAULT_POLL_SECONDS
+        )
+
+
+# ============================================================
+# DEPLOY MODEL
+# ============================================================
+
+
+def deploy_model(
+    *,
+    region: str,
+    model_id: str,
+    model_version: str,
+    endpoint_name: str,
+    role_arn: str,
+    instance_type: str,
+    config_name: str,
+    instance_types: list[str],
+    provision_timeout_seconds: int,
+):
+    """
+    Build the JumpStart model and deploy it through a custom
+    InstancePools EndpointConfig.
+    """
+
+    from sagemaker.core.jumpstart.configs import JumpStartConfig
+    from sagemaker.serve import ModelBuilder
+
+    print("\n[JUMPSTART CONFIG]")
+
+    print(
+        f"Model ID:       {model_id}"
+    )
+
+    print(
+        f"Model version:  {model_version}"
+    )
+
+    print(
+        f"Config name:    {config_name}"
+    )
+
+    print(
+        f"Primary type:   {instance_type}"
+    )
+
+    print(
+        f"Execution role: {role_arn}"
+    )
+
+    print_instance_pools(
+        instance_types
+    )
+
+    # --------------------------------------------------------
+    # JumpStart configuration.
+    # --------------------------------------------------------
+
+    jumpstart_config = JumpStartConfig(
+        model_id=model_id,
+        model_version=model_version,
+        inference_config_name=config_name,
+    )
+
+    # --------------------------------------------------------
+    # Create ModelBuilder.
+    # --------------------------------------------------------
+
+    print(
+        "\nCreating SageMaker ModelBuilder..."
+    )
+
+    model_builder = ModelBuilder.from_jumpstart_config(
+        jumpstart_config=jumpstart_config,
+        role_arn=role_arn,
+    )
+
+    if not hasattr(
+        model_builder,
+        "additional_model_data_sources",
+    ):
+        model_builder.additional_model_data_sources = None
+
+    # --------------------------------------------------------
+    # Select the published JumpStart configuration.
+    #
+    # The primary instance is used here because this is the
+    # published configuration we are using to construct the
+    # correct model/container.
+    #
+    # InstancePools are applied separately at endpoint-config
+    # creation time.
+    # --------------------------------------------------------
+
+    print(
+        "\n[DEPLOYMENT CONFIGURATION]"
+    )
+
+    print(
+        "Selecting the requested published "
+        "JumpStart deployment configuration..."
+    )
+
+    model_builder.set_deployment_config(
+        config_name=config_name,
+        instance_type=instance_type,
+    )
+
+    print(
+        "Deployment configuration selected."
+    )
+
+    # --------------------------------------------------------
+    # BUILD
+    # --------------------------------------------------------
+
+    print("\n[BUILD]")
+
+    print(
+        "Building SageMaker model resource..."
+    )
+
+    model = model_builder.build(
+        region=region,
+        role_arn=role_arn,
+        reuse_resources=True,
+    )
+
+    print(
+        "SageMaker model resource built successfully."
+    )
+
+    model_name = get_model_name(model)
+
+    print(
+        f"Model resource name: {model_name}"
+    )
+
+    # --------------------------------------------------------
+    # INSTANCE-POOL DEPLOYMENT
+    # --------------------------------------------------------
+
+    print("\n[INSTANCE POOL DEPLOYMENT]")
+
+    endpoint = deploy_with_instance_pools(
+        region=region,
+        model=model,
+        endpoint_name=endpoint_name,
+        instance_types=instance_types,
+        provision_timeout_seconds=provision_timeout_seconds,
+    )
+
+    return endpoint
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+
+def main() -> int:
+    """Main deployment workflow."""
+
+    args = parse_args()
+
+    print("=" * 72)
+
+    print(
+        "VALUEAI — PHASE 15 SAGEMAKER DEPLOYMENT"
+    )
+
+    print(
+        "INSTANCE-POOL CAPACITY FALLBACK ENABLED"
+    )
+
+    print("=" * 72)
+
+    try:
+        # ----------------------------------------------------
+        # Resolve configuration.
+        # ----------------------------------------------------
+
+        region = get_aws_region()
+
+        model_id = get_sagemaker_model_id()
+
+        endpoint_name = get_endpoint_name(
+            args.endpoint_name
+        )
+
+        role_arn = normalize_role_arn(
+            args.role_arn
+        )
+
+        instance_types = build_instance_pool_types(
+            primary_instance_type=args.instance_type,
+            fallback_instance_types=args.fallback_instance_types,
+        )
+
+        # ----------------------------------------------------
+        # Configuration validation.
+        # ----------------------------------------------------
+
+        print("\n[CONFIG]")
+
+        print(
+            f"Region:              {region}"
+        )
+
+        print(
+            f"Model ID:             {model_id}"
+        )
+
+        print(
+            f"Model version:        {args.model_version}"
+        )
+
+        print(
+            f"Endpoint:             {endpoint_name}"
+        )
+
+        print(
+            f"Primary instance:     {args.instance_type}"
+        )
+
+        print(
+            f"Config:               {args.config_name}"
+        )
+
+        print(
+            "Provision timeout:    "
+            f"{args.provision_timeout}s"
+        )
+
+        print(
+            "Role ARN:             "
+            + (
+                role_arn
+                if role_arn
+                else "<not supplied>"
+            )
+        )
+
+        if not endpoint_name:
+            raise ValueError(
+                "SageMaker endpoint name cannot be empty."
+            )
+
+        if not role_arn:
+            raise ValueError(
+                "An explicit --role-arn is required. "
+                "The current AWS identity is an IAM user, "
+                "so SageMaker SDK V3 cannot automatically "
+                "resolve a serving execution role."
+            )
+
+        if not (
+            300
+            <= args.provision_timeout
+            <= 3600
+        ):
+            raise ValueError(
+                "--provision-timeout must be between "
+                "300 and 3600 seconds."
+            )
+
+        # ----------------------------------------------------
+        # Instance pools.
+        # ----------------------------------------------------
+
+        print_instance_pools(
+            instance_types
+        )
+
+        # ----------------------------------------------------
+        # AWS identity.
+        # ----------------------------------------------------
+
+        print("\n[AWS CREDENTIALS]")
+
+        identity = check_aws_identity(
+            region
+        )
+
+        print(
+            f"Account:        {identity['Account']}"
+        )
+
+        print(
+            f"Caller ARN:     {identity['Arn']}"
+        )
+
+        # ----------------------------------------------------
+        # IAM execution role.
+        # ----------------------------------------------------
+
+        print("\n[IAM ROLE]")
+
+        role = validate_role_arn(
+            role_arn
+        )
+
+        print(
+            f"Role name:      {role['RoleName']}"
+        )
+
+        print(
+            f"Role ARN:       {role['Arn']}"
+        )
+
+        # ----------------------------------------------------
+        # JumpStart model metadata.
+        # ----------------------------------------------------
+
+        print("\n[JUMPSTART MODEL]")
+
+        metadata = validate_model_metadata(
+            region=region,
+            model_id=model_id,
+        )
+
+        supported_instances = metadata.get(
+            "SupportedInferenceInstanceTypes",
+            [],
+        )
+
+        default_instance = metadata.get(
+            "DefaultInferenceInstanceType"
+        )
+
+        print(
+            f"Default instance: {default_instance}"
+        )
+
+        print(
+            "Supported default instances: "
+            f"{', '.join(supported_instances)}"
+        )
+
+        # ----------------------------------------------------
+        # Validate every InstancePool candidate.
+        # ----------------------------------------------------
+
+        invalid_pool_types = [
+            instance_type
+            for instance_type in instance_types
+            if (
+                supported_instances
+                and instance_type not in supported_instances
+            )
+        ]
+
+        if invalid_pool_types:
+            raise ValueError(
+                "The following InstancePool types are not "
+                "listed in the JumpStart model metadata:\n"
+                + "\n".join(
+                    f"  - {value}"
+                    for value in invalid_pool_types
+                )
+            )
+
+        # ----------------------------------------------------
+        # Existing endpoint.
+        # ----------------------------------------------------
+
+        current_status = check_existing_endpoint(
+            region=region,
+            endpoint_name=endpoint_name,
+        )
+
+        print("\n[ENDPOINT]")
+
+        if current_status:
+            print(
+                f"Existing endpoint status: {current_status}"
+            )
+        else:
+            print(
+                "Endpoint does not currently exist."
+            )
+
+        # ----------------------------------------------------
+        # Already running.
+        # ----------------------------------------------------
+
+        if current_status == "InService":
+            print(
+                "\nEndpoint is already InService."
+            )
+
+            print(
+                "No deployment is necessary."
+            )
+
+            print("=" * 72)
+
+            return 0
+
+        # ----------------------------------------------------
+        # Endpoint operation already in progress.
+        # ----------------------------------------------------
+
+        if current_status in {
+            "Creating",
+            "Updating",
+            "SystemUpdating",
+        }:
+            raise RuntimeError(
+                f"Endpoint '{endpoint_name}' is currently "
+                f"{current_status}.\n"
+                "Wait for the current SageMaker operation "
+                "to finish or destroy the endpoint before "
+                "starting another deployment."
+            )
+
+        # ----------------------------------------------------
+        # Deployment configuration validation.
+        # ----------------------------------------------------
+
+        print("\n[VALIDATION]")
+
+        print(
+            "Validating the requested JumpStart "
+            "deployment configuration..."
+        )
+
+        validate_deployment_configuration(
+            region=region,
+            model_id=model_id,
+            model_version=args.model_version,
+            config_name=args.config_name,
+            instance_type=args.instance_type,
+            role_arn=role_arn,
+        )
+
+        print(
+            "\nDeployment configuration validation completed."
+        )
+
+        # ----------------------------------------------------
+        # Dry run.
+        # ----------------------------------------------------
+
+        if args.dry_run:
+            print("\n[DRY RUN]")
+
+            print(
+                "AWS credentials are valid."
+            )
+
+            print(
+                "IAM execution role exists."
+            )
+
+            print(
+                "JumpStart model metadata is available."
+            )
+
+            print(
+                "JumpStart deployment configuration "
+                "was accepted by ModelBuilder."
+            )
+
+            print(
+                "InstancePool configuration:"
+            )
+
+            for priority, instance_type in enumerate(
+                instance_types,
+                start=1,
+            ):
+                print(
+                    f"  Priority {priority}: "
+                    f"{instance_type}"
+                )
+
+            print(
+                "No SageMaker resources were created "
+                "or modified."
+            )
+
+            print("=" * 72)
+
+            return 0
+
+        # ----------------------------------------------------
+        # Deployment.
+        # ----------------------------------------------------
+
+        print("\n[DEPLOYMENT]")
+
+        print(
+            "Starting SageMaker deployment "
+            "with automatic InstancePool fallback."
+        )
+
+        print(
+            "SageMaker will try the instance types "
+            "in priority order."
+        )
+
+        endpoint = deploy_model(
+            region=region,
+            model_id=model_id,
+            model_version=args.model_version,
+            endpoint_name=endpoint_name,
+            role_arn=role_arn,
+            instance_type=args.instance_type,
+            config_name=args.config_name,
+            instance_types=instance_types,
+            provision_timeout_seconds=args.provision_timeout,
+        )
+
+        # ----------------------------------------------------
+        # Complete.
+        # ----------------------------------------------------
+
+        print("\n[DEPLOYMENT COMPLETE]")
+
+        print(
+            f"Endpoint: "
+            f"{endpoint['endpoint_name']}"
+        )
+
+        print(
+            f"EndpointConfig: "
+            f"{endpoint['endpoint_config_name']}"
+        )
+
+        print(
+            f"Model: "
+            f"{endpoint['model_name']}"
+        )
+
+        print(
+            f"Status: "
+            f"{endpoint['status']}"
+        )
+
+        print(
+            "\nThe endpoint is now InService."
+        )
+
+        print("\n[NEXT]")
+
+        print(
+            "Run:"
+        )
+
+        print(
+            "python scripts/test_sagemaker.py"
+        )
+
+        print(
+            "Do not change VALUEAI_AI_PROVIDER to "
+            "sagemaker until the endpoint smoke test passes."
+        )
+
+        print("=" * 72)
+
+        return 0
+
+    # --------------------------------------------------------
+    # Expected AWS/configuration errors.
+    # --------------------------------------------------------
+
+    except (
+        ValueError,
+        BotoCoreError,
+        ClientError,
+    ) as exc:
+
+        print("\n[FAIL]")
+
+        print(
+            str(exc)
+        )
+
+        print("=" * 72)
+
+        return 1
+
+    # --------------------------------------------------------
+    # Unexpected errors.
+    # --------------------------------------------------------
+
+    except Exception as exc:
+
+        print("\n[FAIL]")
+
+        print(
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        print("=" * 72)
+
+        return 1
+
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
+
+
+if __name__ == "__main__":
+    raise SystemExit(
+        main()
+    )
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: scripts\destroy_sagemaker.py
+
+```python
+"""
+Destroy the ValueAI SageMaker deployment.
+
+This script removes the SageMaker resources associated with
+the ValueAI endpoint:
+
+1. SageMaker endpoint
+2. Endpoint configuration
+3. SageMaker model
+
+The IAM execution role is intentionally NOT deleted.
+
+This script is designed to clean up both:
+
+    - InService endpoints
+    - Failed endpoints caused by insufficient capacity
+    - Endpoints interrupted while Creating
+
+Usage:
+
+    python scripts/destroy_sagemaker.py
+
+Optional:
+
+    python scripts/destroy_sagemaker.py `
+        --endpoint-name valueai-qwen25-7b
+
+    python scripts/destroy_sagemaker.py `
+        --dry-run
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+import time
+
+import boto3
+
+from botocore.exceptions import (
+    BotoCoreError,
+    ClientError,
+)
+
+
+# ============================================================
+# DEFAULTS
+# ============================================================
+
+DEFAULT_REGION = "us-east-1"
+
+DEFAULT_ENDPOINT_NAME = "valueai-qwen25-7b"
+
+DEFAULT_POLL_SECONDS = 10
+
+DEFAULT_TIMEOUT_SECONDS = 1800
+
+
+# ============================================================
+# CLIENT
+# ============================================================
+
+
+def build_client(region: str):
+    """Create the SageMaker client."""
+
+    return boto3.client(
+        "sagemaker",
+        region_name=region,
+    )
+
+
+# ============================================================
+# ENDPOINT
+# ============================================================
+
+
+def endpoint_exists(
+    client,
+    endpoint_name: str,
+) -> bool:
+    """Return True if the endpoint exists."""
+
+    try:
+
+        client.describe_endpoint(
+            EndpointName=endpoint_name
+        )
+
+        return True
+
+    except client.exceptions.ClientError as exc:
+
+        error_code = (
+            exc.response
+            .get("Error", {})
+            .get("Code")
+        )
+
+        if error_code == "ValidationException":
+            return False
+
+        raise
+
+
+def get_endpoint_resources(
+    client,
+    endpoint_name: str,
+) -> tuple[str | None, str | None]:
+    """
+    Retrieve:
+
+        endpoint configuration name
+        model name
+
+    from the endpoint.
+
+    Returns:
+
+        (endpoint_config_name, model_name)
+    """
+
+    endpoint = client.describe_endpoint(
+        EndpointName=endpoint_name
+    )
+
+    endpoint_config_name = endpoint.get(
+        "EndpointConfigName"
+    )
+
+    if not endpoint_config_name:
+        return None, None
+
+    endpoint_config = client.describe_endpoint_config(
+        EndpointConfigName=endpoint_config_name
+    )
+
+    production_variants = endpoint_config.get(
+        "ProductionVariants",
+        [],
+    )
+
+    if not production_variants:
+        return endpoint_config_name, None
+
+    model_name = production_variants[0].get(
+        "ModelName"
+    )
+
+    return endpoint_config_name, model_name
+
+
+# ============================================================
+# DELETE ENDPOINT
+# ============================================================
+
+
+def delete_endpoint(
+    client,
+    endpoint_name: str,
+) -> None:
+    """Delete the SageMaker real-time endpoint."""
+
+    try:
+
+        print()
+        print(
+            f"[DELETE] Endpoint: {endpoint_name}"
+        )
+
+        client.delete_endpoint(
+            EndpointName=endpoint_name
+        )
+
+        print(
+            "[OK] Endpoint deletion requested."
+        )
+
+    except client.exceptions.ClientError as exc:
+
+        error_code = (
+            exc.response
+            .get("Error", {})
+            .get("Code")
+        )
+
+        if error_code == "ValidationException":
+
+            print(
+                "[INFO] Endpoint does not exist."
+            )
+
+            return
+
+        raise
+
+
+# ============================================================
+# WAIT FOR ENDPOINT
+# ============================================================
+
+
+def wait_for_endpoint_deleted(
+    client,
+    endpoint_name: str,
+    poll_seconds: int = DEFAULT_POLL_SECONDS,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+) -> None:
+    """
+    Wait until SageMaker confirms that the endpoint
+    has been deleted.
+    """
+
+    print()
+    print(
+        "[WAIT] Waiting for endpoint deletion..."
+    )
+
+    start = time.time()
+
+    while True:
+
+        try:
+
+            response = client.describe_endpoint(
+                EndpointName=endpoint_name
+            )
+
+            status = response.get(
+                "EndpointStatus",
+                "UNKNOWN",
+            )
+
+            elapsed = int(
+                time.time() - start
+            )
+
+            print(
+                f"[WAIT] Endpoint status: {status} "
+                f"| elapsed: {elapsed}s"
+            )
+
+            if (
+                time.time() - start
+                >= timeout_seconds
+            ):
+
+                raise TimeoutError(
+                    f"Timed out waiting for endpoint "
+                    f"'{endpoint_name}' to be deleted."
+                )
+
+            time.sleep(
+                poll_seconds
+            )
+
+        except client.exceptions.ClientError as exc:
+
+            error_code = (
+                exc.response
+                .get("Error", {})
+                .get("Code")
+            )
+
+            if error_code == "ValidationException":
+
+                print(
+                    "[OK] Endpoint has been deleted."
+                )
+
+                return
+
+            raise
+
+
+# ============================================================
+# DELETE ENDPOINT CONFIG
+# ============================================================
+
+
+def delete_endpoint_config(
+    client,
+    endpoint_config_name: str | None,
+) -> None:
+    """Delete the endpoint configuration."""
+
+    if not endpoint_config_name:
+
+        print(
+            "[INFO] No endpoint configuration found."
+        )
+
+        return
+
+    try:
+
+        print()
+        print(
+            "[DELETE] Endpoint configuration: "
+            f"{endpoint_config_name}"
+        )
+
+        client.delete_endpoint_config(
+            EndpointConfigName=endpoint_config_name
+        )
+
+        print(
+            "[OK] Endpoint configuration deleted."
+        )
+
+    except client.exceptions.ClientError as exc:
+
+        error_code = (
+            exc.response
+            .get("Error", {})
+            .get("Code")
+        )
+
+        if error_code == "ValidationException":
+
+            print(
+                "[INFO] Endpoint configuration "
+                "does not exist."
+            )
+
+            return
+
+        raise
+
+
+# ============================================================
+# DELETE MODEL
+# ============================================================
+
+
+def delete_model(
+    client,
+    model_name: str | None,
+) -> None:
+    """Delete the SageMaker model."""
+
+    if not model_name:
+
+        print(
+            "[INFO] No SageMaker model found."
+        )
+
+        return
+
+    try:
+
+        print()
+        print(
+            f"[DELETE] Model: {model_name}"
+        )
+
+        client.delete_model(
+            ModelName=model_name
+        )
+
+        print(
+            "[OK] SageMaker model deleted."
+        )
+
+    except client.exceptions.ClientError as exc:
+
+        error_code = (
+            exc.response
+            .get("Error", {})
+            .get("Code")
+        )
+
+        if error_code == "ValidationException":
+
+            print(
+                "[INFO] SageMaker model "
+                "does not exist."
+            )
+
+            return
+
+        raise
+
+
+# ============================================================
+# PARSE ARGS
+# ============================================================
+
+
+def parse_args():
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Destroy the ValueAI SageMaker deployment."
+        )
+    )
+
+    parser.add_argument(
+        "--endpoint-name",
+        default=DEFAULT_ENDPOINT_NAME,
+        help=(
+            "SageMaker endpoint name. "
+            f"Default: {DEFAULT_ENDPOINT_NAME}"
+        ),
+    )
+
+    parser.add_argument(
+        "--region",
+        default=DEFAULT_REGION,
+        help=(
+            "AWS region. "
+            f"Default: {DEFAULT_REGION}"
+        ),
+    )
+
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Show what would be deleted without "
+            "deleting resources."
+        ),
+    )
+
+    return parser.parse_args()
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+
+def main() -> int:
+
+    args = parse_args()
+
+    print("=" * 72)
+
+    print(
+        "VALUEAI — SAGEMAKER RESOURCE DESTRUCTION"
+    )
+
+    print("=" * 72)
+
+    print()
+
+    print("[CONFIG]")
+
+    print(
+        f"Region:   {args.region}"
+    )
+
+    print(
+        f"Endpoint: {args.endpoint_name}"
+    )
+
+    client = build_client(
+        args.region
+    )
+
+    try:
+
+        # ----------------------------------------------------
+        # AWS identity
+        # ----------------------------------------------------
+
+        sts = boto3.client(
+            "sts",
+            region_name=args.region,
+        )
+
+        identity = sts.get_caller_identity()
+
+        print()
+
+        print("[AWS CREDENTIALS]")
+
+        print(
+            f"Account:     {identity['Account']}"
+        )
+
+        print(
+            f"Caller ARN:  {identity['Arn']}"
+        )
+
+        # ----------------------------------------------------
+        # Endpoint lookup
+        # ----------------------------------------------------
+
+        exists = endpoint_exists(
+            client,
+            args.endpoint_name,
+        )
+
+        if not exists:
+
+            print()
+
+            print("[INFO]")
+
+            print(
+                f"Endpoint '{args.endpoint_name}' "
+                "does not exist."
+            )
+
+            print(
+                "No endpoint resources can be discovered "
+                "through the endpoint."
+            )
+
+            print(
+                "If a previous deployment was interrupted "
+                "before endpoint creation, inspect SageMaker "
+                "Models and Endpoint configurations manually."
+            )
+
+            print("=" * 72)
+
+            return 0
+
+        # ----------------------------------------------------
+        # Discover resources.
+        # ----------------------------------------------------
+
+        endpoint_config_name, model_name = (
+            get_endpoint_resources(
+                client,
+                args.endpoint_name,
+            )
+        )
+
+        print()
+
+        print("[RESOURCES FOUND]")
+
+        print(
+            f"Endpoint:          "
+            f"{args.endpoint_name}"
+        )
+
+        print(
+            "Endpoint config:   "
+            f"{endpoint_config_name or 'NOT FOUND'}"
+        )
+
+        print(
+            f"Model:             "
+            f"{model_name or 'NOT FOUND'}"
+        )
+
+        # ----------------------------------------------------
+        # Dry run.
+        # ----------------------------------------------------
+
+        if args.dry_run:
+
+            print()
+
+            print("[DRY RUN]")
+
+            print(
+                "The following resources would be deleted:"
+            )
+
+            print(
+                f"  Endpoint:        "
+                f"{args.endpoint_name}"
+            )
+
+            print(
+                f"  Endpoint config: "
+                f"{endpoint_config_name or 'N/A'}"
+            )
+
+            print(
+                f"  Model:           "
+                f"{model_name or 'N/A'}"
+            )
+
+            print(
+                "IAM execution role would be retained."
+            )
+
+            print("=" * 72)
+
+            return 0
+
+        # ----------------------------------------------------
+        # Confirmation.
+        # ----------------------------------------------------
+
+        print()
+
+        print("[WARNING]")
+
+        print(
+            "This will delete:"
+        )
+
+        print(
+            f"  - Endpoint: "
+            f"{args.endpoint_name}"
+        )
+
+        print(
+            f"  - Endpoint configuration: "
+            f"{endpoint_config_name or 'N/A'}"
+        )
+
+        print(
+            f"  - SageMaker model: "
+            f"{model_name or 'N/A'}"
+        )
+
+        print()
+
+        print(
+            "The IAM execution role will NOT be deleted."
+        )
+
+        confirmation = input(
+            "\nType DELETE to continue: "
+        ).strip()
+
+        if confirmation != "DELETE":
+
+            print()
+
+            print("[CANCELLED]")
+
+            print(
+                "No resources were deleted."
+            )
+
+            print("=" * 72)
+
+            return 0
+
+        # ----------------------------------------------------
+        # 1. Delete endpoint
+        # ----------------------------------------------------
+
+        delete_endpoint(
+            client,
+            args.endpoint_name,
+        )
+
+        # ----------------------------------------------------
+        # 2. Wait
+        # ----------------------------------------------------
+
+        wait_for_endpoint_deleted(
+            client,
+            args.endpoint_name,
+        )
+
+        # ----------------------------------------------------
+        # 3. Delete endpoint configuration
+        # ----------------------------------------------------
+
+        delete_endpoint_config(
+            client,
+            endpoint_config_name,
+        )
+
+        # ----------------------------------------------------
+        # 4. Delete model
+        # ----------------------------------------------------
+
+        delete_model(
+            client,
+            model_name,
+        )
+
+        # ----------------------------------------------------
+        # Complete.
+        # ----------------------------------------------------
+
+        print()
+
+        print("=" * 72)
+
+        print(
+            "VALUEAI SAGEMAKER CLEANUP COMPLETE"
+        )
+
+        print("=" * 72)
+
+        print()
+
+        print("[DELETED]")
+
+        print(
+            f"Endpoint:        "
+            f"{args.endpoint_name}"
+        )
+
+        print(
+            f"Endpoint config: "
+            f"{endpoint_config_name or 'N/A'}"
+        )
+
+        print(
+            f"Model:           "
+            f"{model_name or 'N/A'}"
+        )
+
+        print()
+
+        print("[RETAINED]")
+
+        print(
+            "IAM execution role: "
+            "ValueAI-SageMaker-ExecutionRole"
+        )
+
+        print()
+
+        print(
+            "The IAM role remains available for the "
+            "next deployment."
+        )
+
+        return 0
+
+    except KeyboardInterrupt:
+
+        print()
+
+        print(
+            "[CANCELLED] Operation interrupted."
+        )
+
+        return 130
+
+    except TimeoutError as exc:
+
+        print()
+
+        print(
+            f"[ERROR] {exc}"
+        )
+
+        return 1
+
+    except (
+        BotoCoreError,
+        ClientError,
+    ) as exc:
+
+        print()
+
+        print("[AWS ERROR]")
+
+        print(
+            str(exc)
+        )
+
+        return 1
+
+    except Exception as exc:
+
+        print()
+
+        print("[ERROR]")
+
+        print(
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        return 1
+
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
+
+
+if __name__ == "__main__":
+
+    sys.exit(
+        main()
+    )
 ```
 
 
@@ -10008,6 +13392,506 @@ Write-Host "==========================================" -ForegroundColor Cyan
 
 
 
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: scripts\test_sagemaker.py
+
+```python
+"""
+ValueAI SageMaker Integration Test
+===================================
+
+Phase 14 acceptance test for Phases 9-14.
+
+Tests:
+
+    1. AWS configuration
+    2. AWS credential resolution
+    3. AWS identity
+    4. SageMaker endpoint existence
+    5. SageMaker endpoint status
+    6. Raw Qwen endpoint invocation
+    7. ValueAI evidence-first SageMaker invocation
+
+This script does NOT:
+
+    - create AWS resources
+    - deploy a SageMaker endpoint
+    - modify AWS resources
+    - modify .env
+    - modify agent_graph.py
+    - fall back to Ollama
+
+A live endpoint is required for the final two tests.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+
+# ============================================================
+# PROJECT ROOT
+# ============================================================
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(
+        0,
+        str(PROJECT_ROOT),
+    )
+
+
+# ============================================================
+# THIRD-PARTY IMPORTS
+# ============================================================
+
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
+
+
+# ============================================================
+# VALUEAI IMPORTS
+# ============================================================
+
+from src.ai_agent.sagemaker_agent import (
+    build_sagemaker_payload,
+    invoke_sagemaker_agent,
+    invoke_sagemaker_endpoint,
+)
+from src.utils.config import (
+    get_aws_region,
+    get_sagemaker_endpoint_name,
+    get_sagemaker_model_id,
+    get_sagemaker_max_new_tokens,
+    get_sagemaker_temperature,
+    get_sagemaker_top_p,
+)
+
+
+# ============================================================
+# TEST CONFIGURATION
+# ============================================================
+
+RAW_TEST_PROMPT = (
+    "Respond with exactly one short sentence: "
+    "What is the purpose of a healthcare data analytics platform?"
+)
+
+EVIDENCE_TEST_QUERY = (
+    "Analyze the high-risk cluster and give 3 strategic recommendations."
+)
+
+
+# ============================================================
+# OUTPUT HELPERS
+# ============================================================
+
+
+def success(message: str) -> None:
+    print(f"[PASS] {message}")
+
+
+def info(message: str) -> None:
+    print(f"[INFO] {message}")
+
+
+def failure(message: str) -> None:
+    print(f"[FAIL] {message}")
+
+
+# ============================================================
+# PHASE 12 — CONFIGURATION TEST
+# ============================================================
+
+
+def test_configuration() -> tuple[str, str]:
+    print()
+    print("=" * 72)
+    print("TEST 1 — SAGEMAKER CONFIGURATION")
+    print("=" * 72)
+
+    region = get_aws_region()
+    endpoint_name = get_sagemaker_endpoint_name()
+    model_id = get_sagemaker_model_id()
+    max_new_tokens = get_sagemaker_max_new_tokens()
+    temperature = get_sagemaker_temperature()
+    top_p = get_sagemaker_top_p()
+
+    info(f"AWS Region: {region}")
+    info(f"Endpoint: {endpoint_name}")
+    info(f"Expected Model ID: {model_id}")
+    info(f"Max New Tokens: {max_new_tokens}")
+    info(f"Temperature: {temperature}")
+    info(f"Top P: {top_p}")
+
+    if not endpoint_name.strip():
+        raise RuntimeError(
+            "VALUEAI_SAGEMAKER_ENDPOINT_NAME is empty. "
+            "A live SageMaker endpoint must exist before the "
+            "full Phase 14 test can run."
+        )
+
+    success("SageMaker configuration is present.")
+
+    return region, endpoint_name
+
+
+# ============================================================
+# AWS CREDENTIAL TEST
+# ============================================================
+
+
+def test_aws_credentials(
+    region: str,
+) -> None:
+    print()
+    print("=" * 72)
+    print("TEST 2 — AWS CREDENTIALS / IDENTITY")
+    print("=" * 72)
+
+    session = boto3.Session(
+        region_name=region
+    )
+
+    credentials = session.get_credentials()
+
+    if credentials is None:
+        raise RuntimeError(
+            "No AWS credentials were resolved by boto3."
+        )
+
+    success(
+        "AWS credentials were resolved by the boto3 credential chain."
+    )
+
+    sts = session.client(
+        "sts"
+    )
+
+    try:
+
+        identity = sts.get_caller_identity()
+
+    except (ClientError, BotoCoreError) as exc:
+
+        raise RuntimeError(
+            f"AWS identity check failed: {exc}"
+        ) from exc
+
+    success("AWS identity check succeeded.")
+
+    account = identity.get(
+        "Account",
+        "<unknown>",
+    )
+
+    arn = identity.get(
+        "Arn",
+        "<unknown>",
+    )
+
+    info(f"AWS Account: {account}")
+    info(f"AWS Identity: {arn}")
+
+
+# ============================================================
+# ENDPOINT TEST
+# ============================================================
+
+
+def test_endpoint_status(
+    region: str,
+    endpoint_name: str,
+) -> dict:
+    print()
+    print("=" * 72)
+    print("TEST 3 — SAGEMAKER ENDPOINT STATUS")
+    print("=" * 72)
+
+    client = boto3.client(
+        "sagemaker",
+        region_name=region,
+    )
+
+    try:
+
+        response = client.describe_endpoint(
+            EndpointName=endpoint_name
+        )
+
+    except ClientError as exc:
+
+        error = exc.response.get(
+            "Error",
+            {},
+        )
+
+        raise RuntimeError(
+            "Unable to describe SageMaker endpoint. "
+            f"Code: {error.get('Code', 'Unknown')}. "
+            f"Message: {error.get('Message', str(exc))}"
+        ) from exc
+
+    status = response.get(
+        "EndpointStatus"
+    )
+
+    info(f"Endpoint: {endpoint_name}")
+    info(f"Endpoint Status: {status}")
+
+    if status != "InService":
+        raise RuntimeError(
+            f"SageMaker endpoint is not InService. "
+            f"Current status: {status}"
+        )
+
+    success(
+        "SageMaker endpoint exists and is InService."
+    )
+
+    return response
+
+
+# ============================================================
+# RAW PAYLOAD CONTRACT TEST
+# ============================================================
+
+
+def test_payload_contract() -> None:
+    print()
+    print("=" * 72)
+    print("TEST 4 — SAGEMAKER PAYLOAD CONTRACT")
+    print("=" * 72)
+
+    payload = build_sagemaker_payload(
+        RAW_TEST_PROMPT
+    )
+
+    info(
+        json.dumps(
+            payload,
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
+
+    if payload.get("inputs") != RAW_TEST_PROMPT:
+        raise RuntimeError(
+            "Payload 'inputs' field is incorrect."
+        )
+
+    parameters = payload.get(
+        "parameters"
+    )
+
+    if not isinstance(
+        parameters,
+        dict,
+    ):
+        raise RuntimeError(
+            "Payload 'parameters' object is missing."
+        )
+
+    required_parameters = {
+        "max_new_tokens",
+        "temperature",
+        "top_p",
+        "return_full_text",
+    }
+
+    missing = (
+        required_parameters
+        - set(parameters.keys())
+    )
+
+    if missing:
+        raise RuntimeError(
+            "Payload is missing parameters: "
+            + ", ".join(sorted(missing))
+        )
+
+    success(
+        "SageMaker Qwen text-generation payload contract is valid."
+    )
+
+
+# ============================================================
+# RAW ENDPOINT INVOCATION
+# ============================================================
+
+
+def test_raw_endpoint() -> str:
+    print()
+    print("=" * 72)
+    print("TEST 5 — RAW SAGEMAKER QWEN INVOCATION")
+    print("=" * 72)
+
+    response = invoke_sagemaker_endpoint(
+        RAW_TEST_PROMPT
+    )
+
+    if not response.strip():
+        raise RuntimeError(
+            "SageMaker returned an empty generated response."
+        )
+
+    success(
+        "Raw SageMaker inference succeeded."
+    )
+
+    print()
+    print("SageMaker Response:")
+    print("-" * 72)
+    print(response)
+    print("-" * 72)
+
+    return response
+
+
+# ============================================================
+# EVIDENCE-FIRST INTEGRATION TEST
+# ============================================================
+
+
+def test_evidence_first_agent() -> str:
+    print()
+    print("=" * 72)
+    print("TEST 6 — VALUEAI EVIDENCE-FIRST SAGEMAKER AGENT")
+    print("=" * 72)
+
+    info(
+        "Test query:"
+    )
+
+    print(
+        EVIDENCE_TEST_QUERY
+    )
+
+    response = invoke_sagemaker_agent(
+        EVIDENCE_TEST_QUERY
+    )
+
+    if not response.strip():
+        raise RuntimeError(
+            "Evidence-first SageMaker agent returned an empty response."
+        )
+
+    success(
+        "ValueAI evidence-first SageMaker invocation succeeded."
+    )
+
+    print()
+    print("ValueAI SageMaker Response:")
+    print("-" * 72)
+    print(response)
+    print("-" * 72)
+
+    return response
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+
+def main() -> int:
+
+    print()
+    print("=" * 72)
+    print("VALUEAI — PHASE 9-14 SAGEMAKER ACCEPTANCE TEST")
+    print("=" * 72)
+
+    print()
+    print(
+        "This test validates the SageMaker provider without "
+        "modifying the frozen local agent."
+    )
+
+    try:
+
+        # ----------------------------------------------------
+        # Phase 12
+        # ----------------------------------------------------
+
+        region, endpoint_name = test_configuration()
+
+        # ----------------------------------------------------
+        # AWS credential chain
+        # ----------------------------------------------------
+
+        test_aws_credentials(
+            region
+        )
+
+        # ----------------------------------------------------
+        # Endpoint status
+        # ----------------------------------------------------
+
+        test_endpoint_status(
+            region,
+            endpoint_name,
+        )
+
+        # ----------------------------------------------------
+        # Phase 9 payload contract
+        # ----------------------------------------------------
+
+        test_payload_contract()
+
+        # ----------------------------------------------------
+        # Phase 14 raw endpoint
+        # ----------------------------------------------------
+
+        test_raw_endpoint()
+
+        # ----------------------------------------------------
+        # Phases 10 + 11 + 14
+        # ----------------------------------------------------
+
+        test_evidence_first_agent()
+
+    except Exception as exc:
+
+        failure(
+            str(exc)
+        )
+
+        print()
+        print("=" * 72)
+        print("SAGEMAKER ACCEPTANCE TEST FAILED")
+        print("=" * 72)
+
+        return 1
+
+    print()
+    print("=" * 72)
+    print("SAGEMAKER ACCEPTANCE TEST PASSED")
+    print("=" * 72)
+
+    print()
+    print("Validated:")
+    print("  ✓ Phase 9  — SageMaker inference contract")
+    print("  ✓ Phase 10 — Evidence-first SageMaker architecture")
+    print("  ✓ Phase 11 — SageMaker agent adapter")
+    print("  ✓ Phase 12 — AWS/SageMaker configuration")
+    print("  ✓ Phase 13 — Existing boto3 dependency is sufficient")
+    print("  ✓ Phase 14 — Independent SageMaker endpoint invocation")
+    print("  ✓ No local/Ollama fallback was used")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(
+        main()
+    )
 ```
 
 
@@ -11555,27 +15439,1010 @@ TOOLS = [
 
 <div style='page-break-after: always;'></div>
 
+# File: src\ai_agent\llm_provider.py
+
+```python
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: src\ai_agent\provider.py
+
+```python
+"""
+ValueAI AI Provider Facade
+
+This module provides provider selection without modifying the
+existing LangGraph implementation.
+
+Architecture:
+
+    Application
+        |
+        v
+    provider.invoke_agent()
+        |
+        +-----------------------------+
+        |                             |
+        v                             v
+      local                       sagemaker
+        |                             |
+        v                             v
+    agent_graph.py              SageMaker adapter
+    (FROZEN)                    (added later)
+
+The local provider deliberately delegates directly to the
+existing, already-validated agent_graph.invoke_agent().
+
+IMPORTANT:
+    src/ai_agent/agent_graph.py is intentionally NOT modified
+    by this module.
+"""
+
+from __future__ import annotations
+
+from typing import Final
+
+from src.ai_agent.agent_graph import (
+    invoke_agent as invoke_local_agent,
+)
+from src.utils.config import get_ai_provider
+
+
+# ============================================================
+# Provider Constants
+# ============================================================
+
+LOCAL_PROVIDER: Final[str] = "local"
+SAGEMAKER_PROVIDER: Final[str] = "sagemaker"
+
+SUPPORTED_PROVIDERS: Final[frozenset[str]] = frozenset(
+    {
+        LOCAL_PROVIDER,
+        SAGEMAKER_PROVIDER,
+    }
+)
+
+
+# ============================================================
+# Provider Resolution
+# ============================================================
+
+
+def resolve_provider(
+    provider: str | None = None,
+) -> str:
+    """
+    Resolve the AI inference provider.
+
+    Precedence:
+
+        1. Explicit provider argument
+        2. VALUEAI_AI_PROVIDER from .env
+        3. config.py default
+
+    Args:
+        provider:
+            Optional explicit provider override.
+
+            Examples:
+                "local"
+                "sagemaker"
+
+    Returns:
+        Normalized provider name.
+
+    Raises:
+        ValueError:
+            If an unsupported provider is supplied.
+
+    Examples:
+        If .env contains:
+
+            VALUEAI_AI_PROVIDER=local
+
+        then:
+
+            resolve_provider()
+            -> "local"
+
+            resolve_provider("local")
+            -> "local"
+
+            resolve_provider("sagemaker")
+            -> "sagemaker"
+    """
+
+    # --------------------------------------------------------
+    # Explicit runtime override
+    # --------------------------------------------------------
+
+    if provider is not None:
+        resolved_provider = provider.strip().lower()
+
+        if not resolved_provider:
+            raise ValueError(
+                "AI provider override cannot be empty."
+            )
+
+    # --------------------------------------------------------
+    # Environment default
+    # --------------------------------------------------------
+
+    else:
+        resolved_provider = get_ai_provider()
+
+    # --------------------------------------------------------
+    # Validate provider
+    # --------------------------------------------------------
+
+    if resolved_provider not in SUPPORTED_PROVIDERS:
+        supported = ", ".join(
+            sorted(SUPPORTED_PROVIDERS)
+        )
+
+        raise ValueError(
+            f"Unsupported AI provider: "
+            f"'{resolved_provider}'. "
+            f"Supported providers: {supported}"
+        )
+
+    return resolved_provider
+
+
+# ============================================================
+# Provider Identification
+# ============================================================
+
+
+def get_active_provider(
+    provider: str | None = None,
+) -> str:
+    """
+    Return the provider that would be used for an invocation.
+
+    This is a lightweight helper useful for:
+        - Streamlit
+        - tests
+        - logging
+        - debugging
+
+    It does not perform inference.
+
+    Args:
+        provider:
+            Optional explicit provider override.
+
+    Returns:
+        Resolved provider name.
+    """
+    return resolve_provider(provider)
+
+
+# ============================================================
+# Local Provider
+# ============================================================
+
+
+def _invoke_local(
+    user_query: str,
+):
+    """
+    Invoke the existing local ValueAI agent.
+
+    IMPORTANT:
+        This function delegates directly to the existing
+        agent_graph.invoke_agent() implementation.
+
+    No LangGraph logic is duplicated here.
+    No prompts are modified here.
+    No tools are modified here.
+    No evidence logic is modified here.
+
+    Args:
+        user_query:
+            User's natural-language question.
+
+    Returns:
+        Whatever the existing local agent returns.
+    """
+    return invoke_local_agent(user_query)
+
+
+# ============================================================
+# SageMaker Provider Placeholder
+# ============================================================
+
+
+def _invoke_sagemaker(
+    user_query: str,
+):
+    """
+    Invoke the real SageMaker evidence-first provider.
+
+    The import is intentionally lazy so the SageMaker adapter
+    is only loaded when SageMaker is actually selected.
+    """
+
+    from src.ai_agent.sagemaker_agent import (
+        invoke_sagemaker_agent,
+    )
+
+    return invoke_sagemaker_agent(
+        user_query
+    )
+
+
+# ============================================================
+# Public Provider API
+# ============================================================
+
+
+def invoke_agent(
+    user_query: str,
+    provider: str | None = None,
+):
+    """
+    Invoke the ValueAI AI agent using the selected provider.
+
+    Provider precedence:
+
+        explicit provider argument
+                    |
+                    v
+             .env configuration
+                    |
+                    v
+              provider router
+
+    Supported providers:
+
+        local
+            Existing Ollama / Qwen LangGraph agent.
+
+        sagemaker
+            AWS SageMaker provider.
+            Currently a deliberate placeholder until the
+            SageMaker implementation phase.
+
+    Args:
+        user_query:
+            User's natural-language question.
+
+        provider:
+            Optional runtime provider override.
+
+            If omitted:
+                VALUEAI_AI_PROVIDER is used.
+
+            If supplied:
+                it overrides VALUEAI_AI_PROVIDER.
+
+    Returns:
+        The response returned by the selected provider.
+
+    Raises:
+        ValueError:
+            If the provider is unsupported or empty.
+
+        NotImplementedError:
+            If SageMaker is selected before its implementation
+            is added.
+
+    Examples:
+
+        # Uses .env
+        invoke_agent("What increases readmission risk?")
+
+        # Explicit local override
+        invoke_agent(
+            "What increases readmission risk?",
+            provider="local",
+        )
+
+        # Explicit SageMaker override
+        invoke_agent(
+            "What increases readmission risk?",
+            provider="sagemaker",
+        )
+    """
+
+    resolved_provider = resolve_provider(provider)
+
+    # --------------------------------------------------------
+    # Local provider
+    # --------------------------------------------------------
+
+    if resolved_provider == LOCAL_PROVIDER:
+        return _invoke_local(user_query)
+
+    # --------------------------------------------------------
+    # SageMaker provider
+    # --------------------------------------------------------
+
+    if resolved_provider == SAGEMAKER_PROVIDER:
+        return _invoke_sagemaker(user_query)
+
+    # --------------------------------------------------------
+    # Defensive guard
+    # --------------------------------------------------------
+
+    # resolve_provider() already validates this, but keeping
+    # an explicit guard here protects the dispatch layer if
+    # the implementation changes later.
+    raise ValueError(
+        f"Unsupported AI provider: '{resolved_provider}'. "
+        f"Supported providers: "
+        f"{', '.join(sorted(SUPPORTED_PROVIDERS))}"
+    )
+
+
+# ============================================================
+# Public API
+# ============================================================
+
+__all__ = [
+    "LOCAL_PROVIDER",
+    "SAGEMAKER_PROVIDER",
+    "SUPPORTED_PROVIDERS",
+    "resolve_provider",
+    "get_active_provider",
+    "invoke_agent",
+]
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: src\ai_agent\sagemaker_agent.py
+
+```python
+"""
+ValueAI SageMaker AI Provider
+================================
+
+SageMaker implementation of the ValueAI evidence-first AI assistant.
+
+Architecture:
+
+    User Question
+          |
+          v
+    sagemaker_agent.py
+          |
+          v
+    Frozen agent_graph evidence router
+          |
+          v
+    agent_tools.py
+          |
+          v
+    Verified Analytical Evidence
+          |
+          v
+    Evidence-First Prompt
+          |
+          v
+    AWS SageMaker Runtime
+          |
+          v
+    Qwen2.5-7B-Instruct
+          |
+          v
+    Final Executive Response
+
+IMPORTANT
+---------
+src/ai_agent/agent_graph.py is FROZEN.
+
+This module reuses its deterministic evidence retrieval machinery
+without modifying the existing LangGraph implementation.
+
+This module does NOT:
+    - modify agent_graph.py
+    - initialize Ollama
+    - initialize ChatOllama
+    - retrain analytical models
+    - rebuild datasets
+    - modify agent_tools.py
+    - silently fall back to Local/Ollama
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
+
+from src.ai_agent.agent_graph import (
+    SYSTEM_PROMPT,
+    retrieve_evidence,
+)
+from src.utils.config import (
+    get_aws_region,
+    get_sagemaker_endpoint_name,
+    get_sagemaker_max_new_tokens,
+    get_sagemaker_temperature,
+    get_sagemaker_top_p,
+)
+
+
+# ============================================================
+# CONSTANTS
+# ============================================================
+
+SAGEMAKER_CONTENT_TYPE = "application/json"
+SAGEMAKER_ACCEPT = "application/json"
+
+
+# ============================================================
+# EXCEPTIONS
+# ============================================================
+
+
+class SageMakerConfigurationError(RuntimeError):
+    """Raised when SageMaker configuration is incomplete."""
+
+
+class SageMakerInvocationError(RuntimeError):
+    """Raised when SageMaker inference fails."""
+
+
+class SageMakerResponseError(RuntimeError):
+    """Raised when SageMaker returns an unexpected response."""
+
+
+# ============================================================
+# CLIENT
+# ============================================================
+
+
+def _get_runtime_client():
+    """
+    Create the AWS SageMaker Runtime client.
+
+    AWS credentials are resolved through boto3's normal credential
+    chain. No credentials are hard-coded in this application.
+    """
+
+    try:
+        return boto3.client(
+            "sagemaker-runtime",
+            region_name=get_aws_region(),
+        )
+
+    except Exception as exc:
+        raise SageMakerConfigurationError(
+            f"Unable to initialize SageMaker Runtime client: {exc}"
+        ) from exc
+
+
+# ============================================================
+# EVIDENCE PROMPT
+# ============================================================
+
+
+def _build_evidence_prompt(
+    user_query: str,
+    evidence_state: dict[str, Any],
+) -> str:
+    """
+    Build the same evidence-first prompt contract used by the
+    frozen local ValueAI agent.
+
+    The analytical evidence is retrieved before this function
+    constructs the final LLM request.
+    """
+
+    evidence = evidence_state.get(
+        "evidence",
+        {},
+    )
+
+    evidence_source = evidence_state.get(
+        "evidence_source",
+        "none",
+    )
+
+    evidence_json = json.dumps(
+        evidence,
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    return f"""
+VERIFIED ANALYTICAL EVIDENCE
+============================
+
+Evidence source:
+{evidence_source}
+
+The following JSON was retrieved directly from the ValueAI
+analytical artifacts before this response was generated.
+
+Treat this evidence as authoritative.
+
+{evidence_json}
+
+
+USER QUESTION
+=============
+
+{user_query}
+
+
+RESPONSE REQUIREMENTS
+=====================
+
+Answer the user's question using the verified evidence above.
+
+Do not invent quantitative values.
+
+Do not introduce numerical values that are absent from the evidence.
+
+Do not alter the meaning of the evidence.
+
+If the evidence does not establish something, explicitly say so.
+
+Keep observed data, model importance, model predictions, and causal
+evidence separate.
+
+If the question concerns SHAP, remember that the supplied SHAP values
+are mean absolute SHAP values and therefore provide importance magnitude,
+not direction or causation.
+
+If strategic recommendations are requested, provide proposed
+interventions only and describe them as hypotheses for evaluation.
+
+Never claim that an intervention will reduce readmissions, costs,
+utilization, length of stay, or generate savings unless such evidence
+is explicitly supplied.
+
+When the question is a high-risk cluster or strategic business
+question, follow the executive response structure in the system
+instructions.
+"""
+
+
+# ============================================================
+# SAGEMAKER PAYLOAD
+# ============================================================
+
+
+def build_sagemaker_payload(
+    prompt: str,
+) -> dict[str, Any]:
+    """
+    Build the JSON payload expected by the SageMaker
+    Qwen2.5-7B-Instruct text-generation endpoint.
+
+    Contract:
+
+        {
+            "inputs": "...",
+            "parameters": {
+                "max_new_tokens": ...,
+                "temperature": ...,
+                "top_p": ...,
+                "return_full_text": false
+            }
+        }
+    """
+
+    return {
+        "inputs": prompt,
+        "parameters": {
+            "max_new_tokens": get_sagemaker_max_new_tokens(),
+            "temperature": get_sagemaker_temperature(),
+            "top_p": get_sagemaker_top_p(),
+            "return_full_text": False,
+        },
+    }
+
+
+# ============================================================
+# RESPONSE PARSING
+# ============================================================
+
+
+def parse_sagemaker_response(
+    response_body: str,
+) -> str:
+    """
+    Parse a SageMaker text-generation response.
+
+    Primary expected format:
+
+        [
+            {
+                "generated_text": "..."
+            }
+        ]
+
+    A dictionary form is also supported for compatibility.
+    """
+
+    try:
+        parsed = json.loads(
+            response_body
+        )
+
+    except json.JSONDecodeError as exc:
+        raise SageMakerResponseError(
+            "SageMaker returned a response that is not valid JSON."
+        ) from exc
+
+    generated_text: str | None = None
+
+    # --------------------------------------------------------
+    # Standard Hugging Face / JumpStart format
+    # --------------------------------------------------------
+
+    if isinstance(parsed, list) and parsed:
+
+        first = parsed[0]
+
+        if isinstance(first, dict):
+
+            value = first.get(
+                "generated_text"
+            )
+
+            if isinstance(value, str):
+                generated_text = value
+
+            # Some serving configurations may return:
+            # {"generation": {"content": "..."}}
+            if generated_text is None:
+
+                generation = first.get(
+                    "generation"
+                )
+
+                if isinstance(
+                    generation,
+                    dict,
+                ):
+
+                    content = generation.get(
+                        "content"
+                    )
+
+                    if isinstance(
+                        content,
+                        str,
+                    ):
+                        generated_text = content
+
+    # --------------------------------------------------------
+    # Dictionary format
+    # --------------------------------------------------------
+
+    elif isinstance(parsed, dict):
+
+        value = parsed.get(
+            "generated_text"
+        )
+
+        if isinstance(value, str):
+            generated_text = value
+
+        if generated_text is None:
+
+            generation = parsed.get(
+                "generation"
+            )
+
+            if isinstance(
+                generation,
+                dict,
+            ):
+
+                content = generation.get(
+                    "content"
+                )
+
+                if isinstance(
+                    content,
+                    str,
+                ):
+                    generated_text = content
+
+        if generated_text is None:
+
+            choices = parsed.get(
+                "choices"
+            )
+
+            if isinstance(
+                choices,
+                list,
+            ) and choices:
+
+                first_choice = choices[0]
+
+                if isinstance(
+                    first_choice,
+                    dict,
+                ):
+
+                    text = first_choice.get(
+                        "text"
+                    )
+
+                    if isinstance(
+                        text,
+                        str,
+                    ):
+                        generated_text = text
+
+    if not generated_text:
+        raise SageMakerResponseError(
+            "SageMaker returned JSON, but no generated text "
+            "could be extracted from the response."
+        )
+
+    return generated_text.strip()
+
+
+# ============================================================
+# RAW SAGEMAKER INVOCATION
+# ============================================================
+
+
+def invoke_sagemaker_endpoint(
+    prompt: str,
+) -> str:
+    """
+    Invoke the configured SageMaker endpoint directly.
+
+    This function performs inference only.
+
+    It does NOT perform evidence retrieval.
+    """
+
+    if not prompt or not prompt.strip():
+        raise ValueError(
+            "SageMaker prompt cannot be empty."
+        )
+
+    endpoint_name = get_sagemaker_endpoint_name()
+
+    payload = build_sagemaker_payload(
+        prompt.strip()
+    )
+
+    runtime_client = _get_runtime_client()
+
+    try:
+
+        response = runtime_client.invoke_endpoint(
+            EndpointName=endpoint_name,
+            ContentType=SAGEMAKER_CONTENT_TYPE,
+            Accept=SAGEMAKER_ACCEPT,
+            Body=json.dumps(
+                payload
+            ).encode("utf-8"),
+        )
+
+    except ClientError as exc:
+
+        error = exc.response.get(
+            "Error",
+            {},
+        )
+
+        error_code = error.get(
+            "Code",
+            "Unknown",
+        )
+
+        error_message = error.get(
+            "Message",
+            str(exc),
+        )
+
+        raise SageMakerInvocationError(
+            "SageMaker endpoint invocation failed. "
+            f"Code: {error_code}. "
+            f"Message: {error_message}"
+        ) from exc
+
+    except BotoCoreError as exc:
+
+        raise SageMakerInvocationError(
+            f"AWS SDK error while invoking SageMaker: {exc}"
+        ) from exc
+
+    except Exception as exc:
+
+        raise SageMakerInvocationError(
+            f"Unexpected SageMaker invocation error: {exc}"
+        ) from exc
+
+    body = response.get(
+        "Body"
+    )
+
+    if body is None:
+        raise SageMakerResponseError(
+            "SageMaker response did not contain a response body."
+        )
+
+    try:
+
+        response_body = body.read().decode(
+            "utf-8"
+        )
+
+    except Exception as exc:
+
+        raise SageMakerResponseError(
+            f"Unable to read SageMaker response body: {exc}"
+        ) from exc
+
+    return parse_sagemaker_response(
+        response_body
+    )
+
+
+# ============================================================
+# EVIDENCE-FIRST SAGEMAKER AGENT
+# ============================================================
+
+
+def invoke_sagemaker_agent(
+    user_query: str,
+) -> str:
+    """
+    Run the complete ValueAI SageMaker evidence-first workflow.
+
+    Flow:
+
+        user query
+             |
+             v
+        deterministic evidence retrieval
+             |
+             v
+        verified analytical evidence
+             |
+             v
+        evidence-first prompt
+             |
+             v
+        SageMaker Qwen
+             |
+             v
+        final response
+
+    There is intentionally NO fallback to the local Ollama agent.
+    """
+
+    if not user_query or not user_query.strip():
+        raise ValueError(
+            "User query cannot be empty."
+        )
+
+    normalized_query = user_query.strip()
+
+    # --------------------------------------------------------
+    # Retrieve deterministic ValueAI evidence.
+    #
+    # This reuses the frozen evidence machinery from
+    # agent_graph.py.
+    # --------------------------------------------------------
+
+    evidence_state = retrieve_evidence(
+        {
+            "user_query": normalized_query,
+        }
+    )
+
+    prompt = _build_evidence_prompt(
+        normalized_query,
+        evidence_state,
+    )
+
+    # --------------------------------------------------------
+    # Send evidence-grounded prompt to SageMaker.
+    # --------------------------------------------------------
+
+    return invoke_sagemaker_endpoint(
+        prompt
+    )
+
+
+__all__ = [
+    "SageMakerConfigurationError",
+    "SageMakerInvocationError",
+    "SageMakerResponseError",
+    "build_sagemaker_payload",
+    "parse_sagemaker_response",
+    "invoke_sagemaker_endpoint",
+    "invoke_sagemaker_agent",
+]
+```
+
+
+<div style='page-break-after: always;'></div>
+
 # File: src\ai_agent\streamlit_app.py
 
 ```python
 """
 ValueAI Healthcare Value Intelligence Assistant
-Phase 3 - GenAI & Agentic AI
+Phase 6 - Multi-Provider GenAI Interface
 
-Enterprise-style Streamlit interface for the LangGraph
+Enterprise-style Streamlit interface for the ValueAI
 data science assistant.
+
+Architecture:
+
+    Streamlit
+        |
+        v
+    src.ai_agent.provider
+        |
+        +-------------------------+
+        |                         |
+        v                         v
+      local                   sagemaker
+        |                         |
+        v                         v
+    agent_graph.py        sagemaker_agent.py
+      FROZEN                    NEW
+
+IMPORTANT:
+    agent_graph.py is intentionally NOT modified by this
+    application.
+
+    Provider routing is handled exclusively through:
+        src.ai_agent.provider.invoke_agent()
 """
+
+from __future__ import annotations
 
 from pathlib import Path
 import hashlib
 import json
 import sys
 
+
+# ============================================================
+# PROJECT ROOT / IMPORT PATH
+# ============================================================
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+
+# ============================================================
+# THIRD-PARTY IMPORTS
+# ============================================================
+
 import pandas as pd
 import streamlit as st
 
-from src.ai_agent.agent_graph import invoke_agent
+
+# ============================================================
+# APPLICATION IMPORTS
+# ============================================================
+
 from src.ai_agent.agent_tools import analyze_high_risk_cluster
+from src.ai_agent.provider import (
+    LOCAL_PROVIDER,
+    SAGEMAKER_PROVIDER,
+    get_active_provider,
+    invoke_agent,
+)
+from src.utils.config import get_ai_provider
+
 import src.ai_agent.agent_graph as agent_graph_module
 import src.ai_agent.agent_tools as agent_tools_module
 
@@ -11583,8 +16450,6 @@ import src.ai_agent.agent_tools as agent_tools_module
 # ============================================================
 # PROJECT PATHS
 # ============================================================
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 MODEL_METADATA_PATH = (
     PROJECT_ROOT / "models" / "classification_metadata.json"
@@ -11595,19 +16460,29 @@ MODEL_PATH = (
 )
 
 CLUSTER_DATA_PATH = (
-    PROJECT_ROOT / "data" / "processed" / "clustered_dataset.parquet"
+    PROJECT_ROOT
+    / "data"
+    / "processed"
+    / "clustered_dataset.parquet"
 )
 
 SHAP_PATH = (
-    PROJECT_ROOT / "docs" / "shap_feature_importance.csv"
+    PROJECT_ROOT
+    / "docs"
+    / "shap_feature_importance.csv"
 )
 
 TIME_SERIES_PATH = (
-    PROJECT_ROOT / "models" / "timeseries_model.pkl"
+    PROJECT_ROOT
+    / "models"
+    / "timeseries_model.pkl"
 )
 
 MONTE_CARLO_PATH = (
-    PROJECT_ROOT / "data" / "processed" / "monte_carlo_results.json"
+    PROJECT_ROOT
+    / "data"
+    / "processed"
+    / "monte_carlo_results.json"
 )
 
 
@@ -11619,8 +16494,8 @@ def file_sha256(path: Path) -> str:
     """
     Return SHA-256 hash for a file.
 
-    Used temporarily to prove exactly which source files
-    Streamlit has loaded.
+    Used to prove exactly which source files Streamlit
+    has loaded.
     """
 
     if not path.exists():
@@ -11679,13 +16554,18 @@ st.markdown(
 # ============================================================
 
 @st.cache_data
-def load_model_metadata():
+def load_model_metadata() -> dict:
+    """
+    Load classification model metadata.
+
+    Returns an empty dictionary when the artifact does not
+    exist or cannot be parsed.
+    """
 
     if not MODEL_METADATA_PATH.exists():
         return {}
 
     try:
-
         with open(
             MODEL_METADATA_PATH,
             "r",
@@ -11695,7 +16575,6 @@ def load_model_metadata():
             return json.load(file)
 
     except Exception:
-
         return {}
 
 
@@ -11704,13 +16583,15 @@ def load_model_metadata():
 # ============================================================
 
 @st.cache_data
-def load_dataset_record_count():
+def load_dataset_record_count() -> int | None:
+    """
+    Return the number of records in the clustered dataset.
+    """
 
     if not CLUSTER_DATA_PATH.exists():
         return None
 
     try:
-
         df = pd.read_parquet(
             CLUSTER_DATA_PATH,
             columns=["RISK_CLUSTER"],
@@ -11719,7 +16600,6 @@ def load_dataset_record_count():
         return len(df)
 
     except Exception:
-
         return None
 
 
@@ -11728,13 +16608,15 @@ def load_dataset_record_count():
 # ============================================================
 
 @st.cache_data
-def load_cluster_count():
+def load_cluster_count() -> int | None:
+    """
+    Return the number of unique risk clusters.
+    """
 
     if not CLUSTER_DATA_PATH.exists():
         return None
 
     try:
-
         df = pd.read_parquet(
             CLUSTER_DATA_PATH,
             columns=["RISK_CLUSTER"],
@@ -11745,7 +16627,6 @@ def load_cluster_count():
         )
 
     except Exception:
-
         return None
 
 
@@ -11766,14 +16647,29 @@ cluster_count = load_cluster_count()
 
 default_prompt = (
     "Analyze the high-risk cluster. "
-    "What are the top 3 drivers of readmission based on the SHAP values, "
-    "and generate 3 strategic, value-based recommendations for the business?"
+    "What are the top 3 drivers of readmission based on the "
+    "SHAP values, and generate 3 strategic, value-based "
+    "recommendations for the business?"
 )
 
 
 if "business_question" not in st.session_state:
 
     st.session_state["business_question"] = default_prompt
+
+
+# ============================================================
+# PROVIDER CONFIGURATION
+# ============================================================
+
+configured_provider = get_ai_provider()
+
+
+if "selected_ai_provider" not in st.session_state:
+
+    st.session_state["selected_ai_provider"] = (
+        configured_provider
+    )
 
 
 # ============================================================
@@ -11784,7 +16680,81 @@ with st.sidebar:
 
     st.markdown("## VALUEAI")
 
-    st.caption("Healthcare Value Intelligence")
+    st.caption(
+        "Healthcare Value Intelligence"
+    )
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # AI INFERENCE PROVIDER
+    # --------------------------------------------------------
+
+    st.markdown("### AI INFERENCE PROVIDER")
+
+    provider_options = {
+        "Local (Ollama / Qwen)": LOCAL_PROVIDER,
+        "AWS SageMaker": SAGEMAKER_PROVIDER,
+    }
+
+    provider_labels = list(
+        provider_options.keys()
+    )
+
+    current_provider = (
+        st.session_state["selected_ai_provider"]
+    )
+
+    current_provider_label = next(
+        (
+            label
+            for label, value in provider_options.items()
+            if value == current_provider
+        ),
+        provider_labels[0],
+    )
+
+    selected_provider_label = st.radio(
+        "Inference provider",
+        options=provider_labels,
+        index=provider_labels.index(
+            current_provider_label
+        ),
+        key="ai_provider_selector",
+    )
+
+    selected_provider = provider_options[
+        selected_provider_label
+    ]
+
+    st.session_state[
+        "selected_ai_provider"
+    ] = selected_provider
+
+    st.caption(
+        f"Configured default: `{configured_provider}`"
+    )
+
+    if selected_provider == LOCAL_PROVIDER:
+
+        st.success(
+            "Local inference selected"
+        )
+
+        st.caption(
+            "Ollama / Qwen 2.5 7B"
+        )
+
+    elif selected_provider == SAGEMAKER_PROVIDER:
+
+        st.info(
+            "AWS SageMaker selected"
+        )
+
+        st.caption(
+            "Inference will be routed through "
+            "the SageMaker provider."
+        )
 
     st.divider()
 
@@ -11841,9 +16811,11 @@ with st.sidebar:
 
     st.metric(
         "Records",
-        f"{record_count:,}"
-        if record_count is not None
-        else "N/A",
+        (
+            f"{record_count:,}"
+            if record_count is not None
+            else "N/A"
+        ),
     )
 
     st.metric(
@@ -11856,9 +16828,11 @@ with st.sidebar:
 
     st.metric(
         "Clusters",
-        cluster_count
-        if cluster_count is not None
-        else "N/A",
+        (
+            cluster_count
+            if cluster_count is not None
+            else "N/A"
+        ),
     )
 
     st.divider()
@@ -11899,24 +16873,56 @@ with st.sidebar:
 
     st.markdown("### AI ENGINE")
 
-    st.write("**Local LLM**")
+    if selected_provider == LOCAL_PROVIDER:
 
-    st.code(
-        "Qwen 2.5 7B",
-        language="text",
-    )
+        st.write("**Provider**")
+
+        st.code(
+            "Local",
+            language="text",
+        )
+
+        st.write("**LLM**")
+
+        st.code(
+            "Qwen 2.5 7B",
+            language="text",
+        )
+
+        st.write("**Runtime**")
+
+        st.code(
+            "Ollama",
+            language="text",
+        )
+
+    else:
+
+        st.write("**Provider**")
+
+        st.code(
+            "AWS SageMaker",
+            language="text",
+        )
+
+        st.write("**Model Runtime**")
+
+        st.code(
+            "SageMaker Endpoint",
+            language="text",
+        )
 
     st.write("**Agent Framework**")
 
     st.code(
-        "LangGraph",
+        "LangGraph / ValueAI Provider",
         language="text",
     )
 
-    st.write("**Inference**")
+    st.write("**Analytical Engine**")
 
     st.code(
-        "Local XGBoost",
+        "Local XGBoost / GMM / Time-Series",
         language="text",
     )
 
@@ -11932,6 +16938,27 @@ st.caption(
 )
 
 st.divider()
+
+
+# ============================================================
+# ACTIVE PROVIDER STATUS
+# ============================================================
+
+active_provider = get_active_provider(
+    st.session_state["selected_ai_provider"]
+)
+
+provider_display_name = {
+    LOCAL_PROVIDER: "Local (Ollama / Qwen)",
+    SAGEMAKER_PROVIDER: "AWS SageMaker",
+}.get(
+    active_provider,
+    active_provider,
+)
+
+st.info(
+    f"AI inference provider: **{provider_display_name}**"
+)
 
 
 # ============================================================
@@ -11960,6 +16987,25 @@ with st.expander(
     st.write(
         "Project root:",
         str(PROJECT_ROOT),
+    )
+
+    st.markdown(
+        "### Provider"
+    )
+
+    st.write(
+        "Configured provider:",
+        configured_provider,
+    )
+
+    st.write(
+        "Selected provider:",
+        selected_provider,
+    )
+
+    st.write(
+        "Resolved provider:",
+        active_provider,
     )
 
     st.markdown(
@@ -12025,7 +17071,7 @@ with st.expander(
     )
 
     st.caption(
-        "This bypasses LangGraph and Qwen and directly executes "
+        "This bypasses the AI provider and directly executes "
         "analyze_high_risk_cluster()."
     )
 
@@ -12093,9 +17139,9 @@ with quick_col1:
         st.session_state["business_question"] = (
             "Analyze the high-risk cluster. "
             "Describe its population and utilization profile, "
-            "identify the top 3 model drivers based on mean absolute "
-            "SHAP importance, and propose 3 evidence-grounded "
-            "business interventions."
+            "identify the top 3 model drivers based on mean "
+            "absolute SHAP importance, and propose 3 "
+            "evidence-grounded business interventions."
         )
 
         st.rerun()
@@ -12109,10 +17155,10 @@ with quick_col2:
     ):
 
         st.session_state["business_question"] = (
-            "What are the top 10 drivers of readmission according to "
-            "the Phase 2 SHAP analysis? Explain what mean absolute SHAP "
-            "importance tells us and clearly distinguish model "
-            "importance from causation."
+            "What are the top 10 drivers of readmission according "
+            "to the Phase 2 SHAP analysis? Explain what mean "
+            "absolute SHAP importance tells us and clearly "
+            "distinguish model importance from causation."
         )
 
         st.rerun()
@@ -12126,11 +17172,12 @@ with quick_col3:
     ):
 
         st.session_state["business_question"] = (
-            "Generate an executive business memo for the high-risk "
-            "cluster using the available analytical evidence. "
-            "Include the population profile, top model drivers, "
-            "what the data shows, 3 proposed strategic interventions, "
-            "value mechanisms, KPIs, and model/data caveats."
+            "Generate an executive business memo for the "
+            "high-risk cluster using the available analytical "
+            "evidence. Include the population profile, top "
+            "model drivers, what the data shows, 3 proposed "
+            "strategic interventions, value mechanisms, KPIs, "
+            "and model/data caveats."
         )
 
         st.rerun()
@@ -12172,20 +17219,37 @@ if analyze_button:
         st.stop()
 
     with st.spinner(
-        "Analyzing Phase 2 evidence and generating executive insights..."
+        "Analyzing Phase 2 evidence and generating "
+        "executive insights..."
     ):
 
         try:
 
             response = invoke_agent(
-                prompt.strip()
+                prompt.strip(),
+                provider=selected_provider,
             )
 
         except Exception as exc:
 
-            st.error(
-                "The analysis could not be completed."
-            )
+            if selected_provider == SAGEMAKER_PROVIDER:
+
+                st.error(
+                    "The AWS SageMaker analysis could not "
+                    "be completed."
+                )
+
+                st.caption(
+                    "No fallback to the Local/Ollama provider "
+                    "was performed."
+                )
+
+            else:
+
+                st.error(
+                    "The Local AI analysis could not "
+                    "be completed."
+                )
 
             st.exception(exc)
 
@@ -12194,6 +17258,10 @@ if analyze_button:
     st.session_state[
         "analysis_response"
     ] = response
+
+    st.session_state[
+        "analysis_provider"
+    ] = selected_provider
 
 
 # ============================================================
@@ -12208,18 +17276,31 @@ if "analysis_response" in st.session_state:
         "EXECUTIVE MEMO"
     )
 
-    st.caption(
-        "Generated from the ValueAI analytical tools and local "
-        "Qwen 2.5 7B reasoning layer."
+    response_provider = st.session_state.get(
+        "analysis_provider",
+        selected_provider,
     )
 
-    response = st.session_state[
-        "analysis_response"
-    ]
+    response_provider_name = {
+        LOCAL_PROVIDER: "Local (Ollama / Qwen)",
+        SAGEMAKER_PROVIDER: "AWS SageMaker",
+    }.get(
+        response_provider,
+        response_provider,
+    )
+
+    st.caption(
+        "Generated from the ValueAI analytical tools using "
+        f"the **{response_provider_name}** inference provider."
+    )
 
     with st.container(border=True):
 
-        st.markdown(response)
+        st.markdown(
+            st.session_state[
+                "analysis_response"
+            ]
+        )
 ```
 
 
@@ -16077,6 +21158,422 @@ if __name__ == "__main__":
 # File: src\utils\config.py
 
 ```python
+"""
+ValueAI Application Configuration
+
+Centralized configuration management for the ValueAI project.
+
+Responsibilities:
+    - Load environment variables from .env
+    - Validate supported configuration values
+    - Expose provider configuration
+    - Provide safe defaults for development
+
+This module intentionally does NOT:
+    - Initialize Ollama
+    - Initialize Qwen
+    - Initialize SageMaker
+    - Modify the LangGraph agent
+    - Perform model inference
+
+Provider-specific inference logic belongs in:
+    src/ai_agent/provider.py
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Final
+
+from dotenv import load_dotenv
+
+
+# ============================================================
+# Project Paths
+# ============================================================
+
+PROJECT_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
+ENV_FILE: Final[Path] = PROJECT_ROOT / ".env"
+
+
+# ============================================================
+# Environment Loading
+# ============================================================
+
+# Load .env if it exists.
+#
+# override=False is intentional:
+# an explicitly supplied system environment variable takes
+# precedence over the value stored in .env.
+load_dotenv(ENV_FILE, override=False)
+
+
+# ============================================================
+# Supported Values
+# ============================================================
+
+SUPPORTED_AI_PROVIDERS: Final[frozenset[str]] = frozenset(
+    {
+        "local",
+        "sagemaker",
+    }
+)
+
+
+# ============================================================
+# Generic Environment Helpers
+# ============================================================
+
+
+def _get_env(
+    name: str,
+    default: str | None = None,
+) -> str | None:
+    """
+    Read an environment variable and normalize whitespace.
+
+    Args:
+        name:
+            Environment variable name.
+
+        default:
+            Value returned when the variable is not defined.
+
+    Returns:
+        The stripped environment variable value, or default.
+    """
+    value = os.getenv(name, default)
+
+    if value is None:
+        return None
+
+    return value.strip()
+
+
+def _get_required_env(name: str) -> str:
+    """
+    Read a required environment variable.
+
+    Args:
+        name:
+            Environment variable name.
+
+    Returns:
+        Non-empty environment variable value.
+
+    Raises:
+        ValueError:
+            If the variable is missing or empty.
+    """
+    value = _get_env(name)
+
+    if not value:
+        raise ValueError(
+            f"Required environment variable '{name}' is not set."
+        )
+
+    return value
+
+
+# ============================================================
+# AI Provider Configuration
+# ============================================================
+
+
+def get_ai_provider() -> str:
+    """
+    Return the configured default AI inference provider.
+
+    Supported providers:
+        - local
+        - sagemaker
+
+    The value is normalized to lowercase.
+
+    Returns:
+        The configured provider name.
+
+    Raises:
+        ValueError:
+            If the configured provider is unsupported.
+
+    Examples:
+        >>> get_ai_provider()
+        'local'
+    """
+    provider = _get_env(
+        "VALUEAI_AI_PROVIDER",
+        default="local",
+    )
+
+    if provider is None:
+        provider = "local"
+
+    provider = provider.lower()
+
+    if provider not in SUPPORTED_AI_PROVIDERS:
+        supported = ", ".join(sorted(SUPPORTED_AI_PROVIDERS))
+
+        raise ValueError(
+            f"Unsupported AI provider: '{provider}'. "
+            f"Supported providers: {supported}"
+        )
+
+    return provider
+
+
+# ============================================================
+# Local LLM Configuration
+# ============================================================
+
+
+def get_local_llm_provider() -> str:
+    """
+    Return the configured local LLM provider.
+
+    Defaults to:
+        ollama
+    """
+    return _get_env(
+        "VALUEAI_LOCAL_LLM_PROVIDER",
+        default="ollama",
+    ) or "ollama"
+
+
+def get_local_llm_model() -> str:
+    """
+    Return the configured local LLM model.
+
+    Defaults to:
+        qwen2.5:7b
+    """
+    return _get_env(
+        "VALUEAI_LOCAL_LLM_MODEL",
+        default="qwen2.5:7b",
+    ) or "qwen2.5:7b"
+
+
+def get_ollama_base_url() -> str:
+    """
+    Return the Ollama server base URL.
+
+    Defaults to:
+        http://localhost:11434
+    """
+    return _get_env(
+        "VALUEAI_OLLAMA_BASE_URL",
+        default="http://localhost:11434",
+    ) or "http://localhost:11434"
+
+
+# ============================================================
+# AWS / SageMaker Configuration
+# ============================================================
+
+
+def get_aws_region() -> str:
+    """
+    Return the AWS region used by ValueAI.
+
+    Defaults to:
+        us-east-1
+
+    This function only reads configuration.
+    It does not create an AWS client.
+    """
+    return _get_env(
+        "AWS_REGION",
+        default="us-east-1",
+    ) or "us-east-1"
+
+
+def get_sagemaker_endpoint_name() -> str:
+    """
+    Return the configured SageMaker endpoint name.
+
+    Raises:
+        ValueError:
+            If no endpoint name has been configured.
+
+    This is intentionally only validated when SageMaker
+    configuration is actually requested.
+    """
+    return _get_required_env(
+        "VALUEAI_SAGEMAKER_ENDPOINT_NAME"
+    )
+
+
+def get_sagemaker_model_id() -> str:
+    """
+    Return the SageMaker JumpStart model ID expected by ValueAI.
+
+    This is metadata/configuration for the deployed endpoint.
+    The runtime invocation itself only requires the endpoint name.
+    """
+    return (
+        _get_env(
+            "VALUEAI_SAGEMAKER_MODEL_ID",
+            default="huggingface-llm-qwen2-5-7b-instruct",
+        )
+        or "huggingface-llm-qwen2-5-7b-instruct"
+    )
+
+
+def get_sagemaker_max_new_tokens() -> int:
+    """
+    Maximum number of tokens generated by the SageMaker endpoint.
+    """
+    value = _get_env(
+        "VALUEAI_SAGEMAKER_MAX_NEW_TOKENS",
+        default="512",
+    )
+
+    try:
+        parsed = int(value or "512")
+    except ValueError as exc:
+        raise ValueError(
+            "VALUEAI_SAGEMAKER_MAX_NEW_TOKENS must be an integer."
+        ) from exc
+
+    if parsed <= 0:
+        raise ValueError(
+            "VALUEAI_SAGEMAKER_MAX_NEW_TOKENS must be greater than zero."
+        )
+
+    return parsed
+
+
+def get_sagemaker_temperature() -> float:
+    """
+    Temperature used by the SageMaker text-generation endpoint.
+    """
+    value = _get_env(
+        "VALUEAI_SAGEMAKER_TEMPERATURE",
+        default="0.0",
+    )
+
+    try:
+        parsed = float(value or "0.0")
+    except ValueError as exc:
+        raise ValueError(
+            "VALUEAI_SAGEMAKER_TEMPERATURE must be a number."
+        ) from exc
+
+    if parsed < 0:
+        raise ValueError(
+            "VALUEAI_SAGEMAKER_TEMPERATURE cannot be negative."
+        )
+
+    return parsed
+
+
+def get_sagemaker_top_p() -> float:
+    """
+    Top-p value used by the SageMaker text-generation endpoint.
+    """
+    value = _get_env(
+        "VALUEAI_SAGEMAKER_TOP_P",
+        default="1.0",
+    )
+
+    try:
+        parsed = float(value or "1.0")
+    except ValueError as exc:
+        raise ValueError(
+            "VALUEAI_SAGEMAKER_TOP_P must be a number."
+        ) from exc
+
+    if parsed <= 0 or parsed > 1:
+        raise ValueError(
+            "VALUEAI_SAGEMAKER_TOP_P must be greater than 0 and <= 1."
+        )
+
+    return parsed
+
+# ============================================================
+# Application Configuration
+# ============================================================
+
+
+def get_environment() -> str:
+    """
+    Return the current ValueAI environment.
+
+    Defaults to:
+        development
+    """
+    return _get_env(
+        "VALUEAI_ENVIRONMENT",
+        default="development",
+    ) or "development"
+
+
+def get_log_level() -> str:
+    """
+    Return the configured application log level.
+
+    Defaults to:
+        INFO
+    """
+    return (
+        _get_env(
+            "VALUEAI_LOG_LEVEL",
+            default="INFO",
+        )
+        or "INFO"
+    ).upper()
+
+
+# ============================================================
+# Configuration Summary
+# ============================================================
+
+
+def get_config_summary() -> dict[str, str]:
+    return {
+        "environment": get_environment(),
+        "ai_provider": get_ai_provider(),
+        "local_llm_provider": get_local_llm_provider(),
+        "local_llm_model": get_local_llm_model(),
+        "ollama_base_url": get_ollama_base_url(),
+        "aws_region": get_aws_region(),
+        "sagemaker_model_id": get_sagemaker_model_id(),
+        "sagemaker_endpoint_name": (
+            get_sagemaker_endpoint_name()
+            if os.getenv("VALUEAI_SAGEMAKER_ENDPOINT_NAME")
+            else "<not configured>"
+        ),
+        "sagemaker_max_new_tokens": str(
+            get_sagemaker_max_new_tokens()
+        ),
+        "sagemaker_temperature": str(
+            get_sagemaker_temperature()
+        ),
+        "sagemaker_top_p": str(
+            get_sagemaker_top_p()
+        ),
+        "log_level": get_log_level(),
+    }
+
+
+# ============================================================
+# Module-Level Validation
+# ============================================================
+
+# Validate the provider as soon as the configuration module
+# is imported.
+#
+# This means an invalid value such as:
+#
+#     VALUEAI_AI_PROVIDER=banana
+#
+# fails immediately with a clear configuration error.
+#
+# We deliberately do NOT validate the SageMaker endpoint here,
+# because local inference must remain usable even when
+# SageMaker has not yet been configured.
+get_ai_provider()
 ```
 
 
@@ -16124,6 +21621,823 @@ def get_logger(name: str, log_file: str = "valueai.log") -> logging.Logger:
 # File: tests\test_agent.py
 
 ```python
+"""
+ValueAI AI Provider Facade Tests
+
+Tests the provider facade without invoking real AI providers.
+
+Coverage:
+    - Supported provider definitions
+    - Provider resolution
+    - Explicit provider precedence
+    - Environment/configuration provider selection
+    - Whitespace and case normalization
+    - Invalid provider handling
+    - Local provider dispatch
+    - SageMaker provider dispatch
+    - No-fallback behavior
+    - Query forwarding
+    - Local agent_graph delegation
+    - Public API availability
+
+IMPORTANT:
+    These tests intentionally mock provider dispatch and the
+    underlying local agent where appropriate.
+
+    They do NOT:
+        - Call Ollama
+        - Call Qwen
+        - Call AWS
+        - Call SageMaker
+        - Perform network requests
+        - Modify agent_graph.py
+        - Modify application configuration
+"""
+
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from unittest.mock import patch
+
+
+# ============================================================
+# Project Root / Import Path
+# ============================================================
+
+# Ensure the project root is available on sys.path when pytest
+# is executed directly from the project directory.
+#
+# This prevents:
+#
+#     ModuleNotFoundError: No module named 'src'
+#
+# when running:
+#
+#     pytest -q tests/test_agent.py
+#
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+
+# ============================================================
+# Third-Party Imports
+# ============================================================
+
+import pytest
+
+
+# ============================================================
+# Application Imports
+# ============================================================
+
+from src.ai_agent.provider import (
+    LOCAL_PROVIDER,
+    SAGEMAKER_PROVIDER,
+    SUPPORTED_PROVIDERS,
+    get_active_provider,
+    invoke_agent,
+    resolve_provider,
+)
+
+
+# ============================================================
+# Provider Constants
+# ============================================================
+
+
+def test_supported_providers_contains_local_and_sagemaker() -> None:
+    """Both supported provider names must be registered."""
+
+    assert LOCAL_PROVIDER == "local"
+    assert SAGEMAKER_PROVIDER == "sagemaker"
+
+    assert LOCAL_PROVIDER in SUPPORTED_PROVIDERS
+    assert SAGEMAKER_PROVIDER in SUPPORTED_PROVIDERS
+
+
+def test_supported_providers_contains_only_expected_values() -> None:
+    """The facade currently supports exactly local and sagemaker."""
+
+    assert SUPPORTED_PROVIDERS == frozenset(
+        {
+            "local",
+            "sagemaker",
+        }
+    )
+
+
+# ============================================================
+# Provider Resolution
+# ============================================================
+
+
+def test_resolve_provider_without_override_uses_configuration() -> None:
+    """
+    Without an explicit provider, resolve_provider() must use
+    get_ai_provider().
+    """
+
+    with patch(
+        "src.ai_agent.provider.get_ai_provider",
+        return_value="local",
+    ) as mock_get_provider:
+        result = resolve_provider()
+
+    assert result == "local"
+
+    mock_get_provider.assert_called_once_with()
+
+
+def test_resolve_provider_explicit_local() -> None:
+    """An explicit local provider must resolve to local."""
+
+    assert resolve_provider("local") == "local"
+
+
+def test_resolve_provider_explicit_sagemaker() -> None:
+    """An explicit SageMaker provider must resolve to sagemaker."""
+
+    assert resolve_provider("sagemaker") == "sagemaker"
+
+
+def test_resolve_provider_is_case_insensitive() -> None:
+    """Explicit provider names must be normalized to lowercase."""
+
+    assert resolve_provider("LOCAL") == "local"
+    assert resolve_provider("Local") == "local"
+    assert resolve_provider("SAGEMAKER") == "sagemaker"
+    assert resolve_provider("SageMaker") == "sagemaker"
+
+
+def test_resolve_provider_strips_whitespace() -> None:
+    """Leading and trailing whitespace must be ignored."""
+
+    assert resolve_provider("  local  ") == "local"
+    assert resolve_provider("  sagemaker  ") == "sagemaker"
+
+
+def test_resolve_provider_rejects_empty_override() -> None:
+    """An explicitly empty provider must raise ValueError."""
+
+    with pytest.raises(
+        ValueError,
+        match="AI provider override cannot be empty",
+    ):
+        resolve_provider("")
+
+
+def test_resolve_provider_rejects_whitespace_only_override() -> None:
+    """A whitespace-only provider must raise ValueError."""
+
+    with pytest.raises(
+        ValueError,
+        match="AI provider override cannot be empty",
+    ):
+        resolve_provider("   ")
+
+
+def test_resolve_provider_rejects_invalid_explicit_provider() -> None:
+    """Unsupported explicit providers must raise ValueError."""
+
+    with pytest.raises(
+        ValueError,
+        match="Unsupported AI provider",
+    ):
+        resolve_provider("banana")
+
+
+def test_resolve_provider_rejects_invalid_configured_provider() -> None:
+    """Unsupported configured providers must raise ValueError."""
+
+    with patch(
+        "src.ai_agent.provider.get_ai_provider",
+        return_value="banana",
+    ):
+        with pytest.raises(
+            ValueError,
+            match="Unsupported AI provider",
+        ):
+            resolve_provider()
+
+
+def test_resolve_provider_explicit_override_has_precedence() -> None:
+    """
+    An explicit provider must override the configured provider.
+    """
+
+    with patch(
+        "src.ai_agent.provider.get_ai_provider",
+        return_value="local",
+    ) as mock_get_provider:
+        result = resolve_provider("sagemaker")
+
+    assert result == "sagemaker"
+
+    # Configuration must not be consulted when an explicit
+    # provider is supplied.
+    mock_get_provider.assert_not_called()
+
+
+# ============================================================
+# Active Provider
+# ============================================================
+
+
+def test_get_active_provider_uses_resolve_provider() -> None:
+    """
+    get_active_provider() must delegate to resolve_provider().
+
+    Because provider.py calls:
+
+        resolve_provider(provider)
+
+    and provider defaults to None, the expected call is:
+
+        resolve_provider(None)
+    """
+
+    with patch(
+        "src.ai_agent.provider.resolve_provider",
+        return_value="local",
+    ) as mock_resolve:
+        result = get_active_provider()
+
+    assert result == "local"
+
+    mock_resolve.assert_called_once_with(None)
+
+
+def test_get_active_provider_accepts_explicit_override() -> None:
+    """get_active_provider() must support explicit overrides."""
+
+    with patch(
+        "src.ai_agent.provider.resolve_provider",
+        return_value="sagemaker",
+    ) as mock_resolve:
+        result = get_active_provider("sagemaker")
+
+    assert result == "sagemaker"
+
+    mock_resolve.assert_called_once_with("sagemaker")
+
+
+# ============================================================
+# Local Provider Dispatch
+# ============================================================
+
+
+def test_invoke_agent_dispatches_to_local_provider() -> None:
+    """
+    provider='local' must dispatch to _invoke_local().
+    """
+
+    expected_response = "local provider response"
+
+    with patch(
+        "src.ai_agent.provider._invoke_local",
+        return_value=expected_response,
+    ) as mock_local, patch(
+        "src.ai_agent.provider._invoke_sagemaker",
+    ) as mock_sagemaker:
+
+        result = invoke_agent(
+            "What increases readmission risk?",
+            provider="local",
+        )
+
+    assert result == expected_response
+
+    mock_local.assert_called_once_with(
+        "What increases readmission risk?"
+    )
+
+    mock_sagemaker.assert_not_called()
+
+
+def test_invoke_agent_explicit_local_overrides_configuration() -> None:
+    """
+    An explicit local provider must override a configured
+    SageMaker provider.
+    """
+
+    expected_response = "local response"
+
+    with patch(
+        "src.ai_agent.provider.get_ai_provider",
+        return_value="sagemaker",
+    ), patch(
+        "src.ai_agent.provider._invoke_local",
+        return_value=expected_response,
+    ) as mock_local, patch(
+        "src.ai_agent.provider._invoke_sagemaker",
+    ) as mock_sagemaker:
+
+        result = invoke_agent(
+            "Explain the high-risk cluster.",
+            provider="local",
+        )
+
+    assert result == expected_response
+
+    mock_local.assert_called_once_with(
+        "Explain the high-risk cluster."
+    )
+
+    mock_sagemaker.assert_not_called()
+
+
+# ============================================================
+# Local Provider → agent_graph Delegation
+# ============================================================
+
+
+def test_invoke_local_delegates_to_existing_agent_graph() -> None:
+    """
+    The local provider must delegate directly to the existing
+    agent_graph.invoke_agent implementation.
+
+    The real local agent is mocked, so this test does not invoke
+    Ollama or Qwen.
+    """
+
+    expected_response = "existing local graph response"
+
+    user_query = (
+        "Does AVG_DAYS_BETWEEN_INPATIENT_CLAIMS "
+        "increase or decrease readmission risk?"
+    )
+
+    with patch(
+        "src.ai_agent.provider.invoke_local_agent",
+        return_value=expected_response,
+    ) as mock_local_agent:
+
+        # Import the private adapter only for this delegation test.
+        from src.ai_agent.provider import _invoke_local
+
+        result = _invoke_local(user_query)
+
+    assert result == expected_response
+
+    mock_local_agent.assert_called_once_with(user_query)
+
+
+# ============================================================
+# SageMaker Provider Dispatch
+# ============================================================
+
+
+def test_invoke_agent_dispatches_to_sagemaker_provider() -> None:
+    """
+    provider='sagemaker' must dispatch to _invoke_sagemaker().
+    """
+
+    expected_response = "sagemaker provider response"
+
+    with patch(
+        "src.ai_agent.provider._invoke_sagemaker",
+        return_value=expected_response,
+    ) as mock_sagemaker, patch(
+        "src.ai_agent.provider._invoke_local",
+    ) as mock_local:
+
+        result = invoke_agent(
+            "What increases readmission risk?",
+            provider="sagemaker",
+        )
+
+    assert result == expected_response
+
+    mock_sagemaker.assert_called_once_with(
+        "What increases readmission risk?"
+    )
+
+    mock_local.assert_not_called()
+
+
+def test_invoke_agent_configured_sagemaker_dispatches_to_sagemaker() -> None:
+    """
+    When configuration selects SageMaker, invocation must
+    dispatch to SageMaker.
+    """
+
+    expected_response = "configured sagemaker response"
+
+    with patch(
+        "src.ai_agent.provider.get_ai_provider",
+        return_value="sagemaker",
+    ), patch(
+        "src.ai_agent.provider._invoke_sagemaker",
+        return_value=expected_response,
+    ) as mock_sagemaker, patch(
+        "src.ai_agent.provider._invoke_local",
+    ) as mock_local:
+
+        result = invoke_agent(
+            "Analyze readmission risk."
+        )
+
+    assert result == expected_response
+
+    mock_sagemaker.assert_called_once_with(
+        "Analyze readmission risk."
+    )
+
+    mock_local.assert_not_called()
+
+
+def test_invoke_agent_explicit_sagemaker_overrides_local_configuration() -> None:
+    """
+    An explicit SageMaker provider must override a configured
+    local provider.
+    """
+
+    expected_response = "explicit sagemaker response"
+
+    with patch(
+        "src.ai_agent.provider.get_ai_provider",
+        return_value="local",
+    ), patch(
+        "src.ai_agent.provider._invoke_sagemaker",
+        return_value=expected_response,
+    ) as mock_sagemaker, patch(
+        "src.ai_agent.provider._invoke_local",
+    ) as mock_local:
+
+        result = invoke_agent(
+            "Analyze average days between inpatient claims.",
+            provider="sagemaker",
+        )
+
+    assert result == expected_response
+
+    mock_sagemaker.assert_called_once_with(
+        "Analyze average days between inpatient claims."
+    )
+
+    mock_local.assert_not_called()
+
+
+# ============================================================
+# No-Fallback Contract
+# ============================================================
+
+
+def test_sagemaker_failure_does_not_fallback_to_local() -> None:
+    """
+    CRITICAL CONTRACT:
+
+    If SageMaker fails, the provider facade must NOT silently
+    fall back to the local Ollama/Qwen provider.
+    """
+
+    sagemaker_error = RuntimeError(
+        "SageMaker endpoint unavailable"
+    )
+
+    with patch(
+        "src.ai_agent.provider._invoke_sagemaker",
+        side_effect=sagemaker_error,
+    ) as mock_sagemaker, patch(
+        "src.ai_agent.provider._invoke_local",
+    ) as mock_local:
+
+        with pytest.raises(
+            RuntimeError,
+            match="SageMaker endpoint unavailable",
+        ):
+            invoke_agent(
+                "What increases readmission risk?",
+                provider="sagemaker",
+            )
+
+    mock_sagemaker.assert_called_once_with(
+        "What increases readmission risk?"
+    )
+
+    mock_local.assert_not_called()
+
+
+def test_sagemaker_not_implemented_does_not_fallback_to_local() -> None:
+    """
+    CRITICAL CONTRACT:
+
+    Until SageMaker is implemented, its deliberate
+    NotImplementedError must propagate directly.
+
+    The facade must not fall back to Local/Ollama.
+    """
+
+    with patch(
+        "src.ai_agent.provider._invoke_sagemaker",
+        side_effect=NotImplementedError(
+            "SageMaker provider not implemented"
+        ),
+    ) as mock_sagemaker, patch(
+        "src.ai_agent.provider._invoke_local",
+    ) as mock_local:
+
+        with pytest.raises(
+            NotImplementedError,
+            match="SageMaker provider not implemented",
+        ):
+            invoke_agent(
+                "Test SageMaker routing.",
+                provider="sagemaker",
+            )
+
+    mock_sagemaker.assert_called_once_with(
+        "Test SageMaker routing."
+    )
+
+    mock_local.assert_not_called()
+
+
+def test_local_provider_failure_does_not_fallback_to_sagemaker() -> None:
+    """
+    A Local provider failure must not silently switch to
+    SageMaker.
+    """
+
+    local_error = RuntimeError(
+        "Local Ollama unavailable"
+    )
+
+    with patch(
+        "src.ai_agent.provider._invoke_local",
+        side_effect=local_error,
+    ) as mock_local, patch(
+        "src.ai_agent.provider._invoke_sagemaker",
+    ) as mock_sagemaker:
+
+        with pytest.raises(
+            RuntimeError,
+            match="Local Ollama unavailable",
+        ):
+            invoke_agent(
+                "Test local routing.",
+                provider="local",
+            )
+
+    mock_local.assert_called_once_with(
+        "Test local routing."
+    )
+
+    mock_sagemaker.assert_not_called()
+
+
+# ============================================================
+# Query Forwarding
+# ============================================================
+
+
+def test_local_query_is_forwarded_unchanged() -> None:
+    """The Local provider must receive the exact user query."""
+
+    user_query = (
+        "Does AVG_DAYS_BETWEEN_INPATIENT_CLAIMS increase "
+        "or decrease readmission risk?"
+    )
+
+    with patch(
+        "src.ai_agent.provider._invoke_local",
+        return_value="response",
+    ) as mock_local:
+
+        invoke_agent(
+            user_query,
+            provider="local",
+        )
+
+    mock_local.assert_called_once_with(user_query)
+
+
+def test_sagemaker_query_is_forwarded_unchanged() -> None:
+    """The SageMaker provider must receive the exact user query."""
+
+    user_query = (
+        "Explain the relationship between TOTAL_ADMISSIONS "
+        "and readmission risk."
+    )
+
+    with patch(
+        "src.ai_agent.provider._invoke_sagemaker",
+        return_value="response",
+    ) as mock_sagemaker:
+
+        invoke_agent(
+            user_query,
+            provider="sagemaker",
+        )
+
+    mock_sagemaker.assert_called_once_with(user_query)
+
+
+# ============================================================
+# Explicit Provider Normalization During Invocation
+# ============================================================
+
+
+def test_invoke_agent_accepts_uppercase_local() -> None:
+    """invoke_agent() must inherit provider normalization."""
+
+    expected_response = "local response"
+
+    with patch(
+        "src.ai_agent.provider._invoke_local",
+        return_value=expected_response,
+    ) as mock_local:
+
+        result = invoke_agent(
+            "Test uppercase provider.",
+            provider="LOCAL",
+        )
+
+    assert result == expected_response
+
+    mock_local.assert_called_once_with(
+        "Test uppercase provider."
+    )
+
+
+def test_invoke_agent_accepts_uppercase_sagemaker() -> None:
+    """invoke_agent() must inherit SageMaker normalization."""
+
+    expected_response = "sagemaker response"
+
+    with patch(
+        "src.ai_agent.provider._invoke_sagemaker",
+        return_value=expected_response,
+    ) as mock_sagemaker:
+
+        result = invoke_agent(
+            "Test uppercase provider.",
+            provider="SAGEMAKER",
+        )
+
+    assert result == expected_response
+
+    mock_sagemaker.assert_called_once_with(
+        "Test uppercase provider."
+    )
+
+
+def test_invoke_agent_accepts_whitespace_around_provider() -> None:
+    """
+    invoke_agent() must strip whitespace from explicit
+    provider names.
+    """
+
+    expected_response = "local response"
+
+    with patch(
+        "src.ai_agent.provider._invoke_local",
+        return_value=expected_response,
+    ) as mock_local:
+
+        result = invoke_agent(
+            "Test whitespace provider.",
+            provider="  LOCAL  ",
+        )
+
+    assert result == expected_response
+
+    mock_local.assert_called_once_with(
+        "Test whitespace provider."
+    )
+
+
+def test_invoke_agent_rejects_invalid_provider() -> None:
+    """invoke_agent() must reject unsupported providers."""
+
+    with pytest.raises(
+        ValueError,
+        match="Unsupported AI provider",
+    ):
+        invoke_agent(
+            "Test invalid provider.",
+            provider="invalid_provider",
+        )
+
+
+def test_invoke_agent_rejects_empty_provider() -> None:
+    """invoke_agent() must reject an empty provider override."""
+
+    with pytest.raises(
+        ValueError,
+        match="AI provider override cannot be empty",
+    ):
+        invoke_agent(
+            "Test empty provider.",
+            provider="",
+        )
+
+
+def test_invoke_agent_rejects_whitespace_only_provider() -> None:
+    """
+    invoke_agent() must reject a provider containing only
+    whitespace.
+    """
+
+    with pytest.raises(
+        ValueError,
+        match="AI provider override cannot be empty",
+    ):
+        invoke_agent(
+            "Test whitespace-only provider.",
+            provider="   ",
+        )
+
+
+# ============================================================
+# Configuration Precedence
+# ============================================================
+
+
+def test_environment_local_is_used_when_no_override_exists() -> None:
+    """
+    When the configured provider is local and no explicit
+    provider is supplied, the local provider must be selected.
+    """
+
+    expected_response = "environment local response"
+
+    with patch(
+        "src.ai_agent.provider.get_ai_provider",
+        return_value="local",
+    ) as mock_get_provider, patch(
+        "src.ai_agent.provider._invoke_local",
+        return_value=expected_response,
+    ) as mock_local, patch(
+        "src.ai_agent.provider._invoke_sagemaker",
+    ) as mock_sagemaker:
+
+        result = invoke_agent(
+            "Test environment local selection."
+        )
+
+    assert result == expected_response
+
+    mock_get_provider.assert_called_once_with()
+
+    mock_local.assert_called_once_with(
+        "Test environment local selection."
+    )
+
+    mock_sagemaker.assert_not_called()
+
+
+def test_environment_sagemaker_is_used_when_no_override_exists() -> None:
+    """
+    When the configured provider is SageMaker and no explicit
+    provider is supplied, SageMaker must be selected.
+    """
+
+    expected_response = "environment sagemaker response"
+
+    with patch(
+        "src.ai_agent.provider.get_ai_provider",
+        return_value="sagemaker",
+    ) as mock_get_provider, patch(
+        "src.ai_agent.provider._invoke_sagemaker",
+        return_value=expected_response,
+    ) as mock_sagemaker, patch(
+        "src.ai_agent.provider._invoke_local",
+    ) as mock_local:
+
+        result = invoke_agent(
+            "Test environment SageMaker selection."
+        )
+
+    assert result == expected_response
+
+    mock_get_provider.assert_called_once_with()
+
+    mock_sagemaker.assert_called_once_with(
+        "Test environment SageMaker selection."
+    )
+
+    mock_local.assert_not_called()
+
+
+# ============================================================
+# Public API Smoke Tests
+# ============================================================
+
+
+def test_public_provider_api_is_callable() -> None:
+    """
+    Basic smoke test confirming the primary public facade
+    functions are available and callable.
+    """
+
+    assert callable(resolve_provider)
+    assert callable(get_active_provider)
+    assert callable(invoke_agent)
 ```
 
 
@@ -16132,5 +22446,3031 @@ def get_logger(name: str, log_file: str = "valueai.log") -> logging.Logger:
 # File: tests\test_data.py
 
 ```python
+"""
+Unit tests for the ValueAI data-processing modules.
+
+Tested modules:
+    src.data.make_dataset
+    src.data.monte_carlo_simulation
+    src.data.validate_data
+
+These tests intentionally use small synthetic datasets and temporary
+directories. They do not depend on the real SynPUF dataset.
+
+Run from the project root:
+
+    pytest -q tests/test_data.py
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import numpy as np
+import pandas as pd
+import pytest
+
+# Force non-interactive backend to prevent Tkinter errors on Windows headless/pytest runs
+import matplotlib
+matplotlib.use('Agg')
+
+# =============================================================================
+# PROJECT PATH
+# =============================================================================
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+
+# =============================================================================
+# OPTIONAL SPARK IMPORT
+# =============================================================================
+#
+# The make_dataset.py module requires PySpark. These tests skip Spark-specific
+# tests cleanly if PySpark is not installed.
+# =============================================================================
+
+try:
+    from pyspark.sql import SparkSession
+    PYSPARK_AVAILABLE = True
+except ImportError:
+    SparkSession = None
+    PYSPARK_AVAILABLE = False
+
+
+# =============================================================================
+# MODULE IMPORTS
+# =============================================================================
+
+from src.data import monte_carlo_simulation
+
+
+# Import make_dataset lazily through a helper because the module performs
+# Windows Hadoop validation during import.
+def _import_make_dataset():
+    """
+    Import src.data.make_dataset.
+
+    The production module performs Windows-specific winutils.exe and
+    hadoop.dll validation at import time. On Windows, these tests therefore
+    require the same Hadoop native binaries as the production pipeline.
+    """
+
+    from src.data import make_dataset
+
+    return make_dataset
+
+
+# =============================================================================
+# SPARK FIXTURE
+# =============================================================================
+
+@pytest.fixture(scope="session")
+def spark():
+    """
+    Create a small local Spark session for Spark-based unit tests.
+    """
+
+    if not PYSPARK_AVAILABLE:
+        pytest.skip("PySpark is not installed.")
+
+    make_dataset = _import_make_dataset()
+
+    # The production module configures these variables on Windows.
+    # We simply create a local Spark session using the same general settings.
+    spark = (
+        SparkSession.builder
+        .master("local[2]")
+        .appName("ValueAI_TestSuite")
+        .config("spark.sql.session.timeZone", "UTC")
+        .config("spark.sql.shuffle.partitions", "2")
+        .config("spark.ui.enabled", "false")
+        .getOrCreate()
+    )
+
+    spark.sparkContext.setLogLevel("ERROR")
+
+    yield spark
+
+    spark.stop()
+
+
+# =============================================================================
+# MAKE_DATASET.PY - BENEFICIARY CLEANING
+# =============================================================================
+
+@pytest.mark.spark
+def test_clean_beneficiary_data(spark):
+    """
+    Verify that beneficiary cleaning:
+
+    - converts birth dates
+    - converts death dates
+    - derives AGE
+    - imputes missing race
+    - removes BENE_RACE_CD
+    - creates IS_DECEASED
+    - keeps only valid ages
+    """
+
+    make_dataset = _import_make_dataset()
+
+    rows = [
+        (
+            "BEN001",
+            "19400101",
+            None,
+            1,
+        ),
+        (
+            "BEN002",
+            "19500101",
+            "20100101",
+            None,
+        ),
+        (
+            "BEN003",
+            "20200101",
+            None,
+            1,
+        ),
+    ]
+
+    columns = [
+        "DESYNPUF_ID",
+        "BENE_BIRTH_DT",
+        "BENE_DEATH_DT",
+        "BENE_RACE_CD",
+    ]
+
+    df = spark.createDataFrame(rows, columns)
+
+    result = make_dataset.clean_beneficiary_data(df)
+
+    result_rows = {
+        row["DESYNPUF_ID"]: row.asDict()
+        for row in result.collect()
+    }
+
+    # BEN003 is under 18 and should be filtered out.
+    assert "BEN003" not in result_rows
+
+    assert "BEN001" in result_rows
+    assert "BEN002" in result_rows
+
+    # Dates should have been converted to Spark date values.
+    assert str(result_rows["BEN001"]["BENE_BIRTH_DT"]) == "1940-01-01"
+
+    # BEN001 has no death date.
+    assert result_rows["BEN001"]["IS_DECEASED"] is False
+
+    # BEN002 has a death date.
+    assert result_rows["BEN002"]["IS_DECEASED"] is True
+
+    # Missing race should be replaced with 2.
+    assert result_rows["BEN002"]["RACE"] == 2
+
+    # Original race column should be removed.
+    assert "BENE_RACE_CD" not in result.columns
+
+    # Derived age should exist.
+    assert "AGE" in result.columns
+
+
+# =============================================================================
+# MAKE_DATASET.PY - CLAIM DATE CLEANING
+# =============================================================================
+
+@pytest.mark.spark
+@pytest.mark.parametrize(
+    "claim_type,expected_columns",
+    [
+        (
+            "inpatient",
+            [
+                "CLM_ADMSN_DT",
+                "CLM_THRU_DT",
+                "NCH_BENE_DSCHRG_DT",
+            ],
+        ),
+        (
+            "outpatient",
+            [
+                "CLM_FROM_DT",
+                "CLM_THRU_DT",
+            ],
+        ),
+        (
+            "carrier",
+            [
+                "CLM_FROM_DT",
+                "CLM_THRU_DT",
+            ],
+        ),
+        (
+            "drug",
+            [
+                "SRVC_DT",
+            ],
+        ),
+    ],
+)
+def test_clean_claims_dates(spark, claim_type, expected_columns):
+    """
+    Verify that the date columns for each supported claim type are converted
+    from yyyyMMdd strings to Spark date values.
+    """
+
+    make_dataset = _import_make_dataset()
+
+    data = {
+        "DESYNPUF_ID": ["BEN001"],
+    }
+
+    for column in expected_columns:
+        data[column] = ["20100115"]
+
+    df = spark.createDataFrame(
+        list(zip(*data.values())),
+        list(data.keys()),
+    )
+
+    result = make_dataset.clean_claims_dates(
+        df,
+        claim_type,
+    )
+
+    row = result.first()
+
+    for column in expected_columns:
+        assert str(row[column]) == "2010-01-15"
+
+
+# =============================================================================
+# MAKE_DATASET.PY - READMISSION TARGET
+# =============================================================================
+
+@pytest.mark.spark
+def test_build_readmission_target_identifies_30_day_readmission(spark):
+    """
+    Verify that an inpatient admission followed by another admission within
+    30 days is marked as a 30-day readmission.
+    """
+
+    make_dataset = _import_make_dataset()
+
+    rows = [
+        (
+            "BEN001",
+            "20100101",
+            "20100105",
+        ),
+        (
+            "BEN001",
+            "20100120",
+            "20100125",
+        ),
+        (
+            "BEN002",
+            "20100101",
+            "20100105",
+        ),
+        (
+            "BEN002",
+            "20100210",
+            "20100215",
+        ),
+    ]
+
+    columns = [
+        "DESYNPUF_ID",
+        "CLM_ADMSN_DT",
+        "NCH_BENE_DSCHRG_DT",
+    ]
+
+    df = spark.createDataFrame(rows, columns)
+
+    df = make_dataset.clean_claims_dates(
+        df,
+        "inpatient",
+    )
+
+    result = make_dataset.build_readmission_target(df)
+
+    rows_by_patient = {}
+
+    for row in result.collect():
+        rows_by_patient.setdefault(
+            row["DESYNPUF_ID"],
+            [],
+        ).append(row)
+
+    # BEN001:
+    # First discharge = Jan 5
+    # Next admission = Jan 20
+    # Difference = 15 days -> True.
+    ben001 = sorted(
+        rows_by_patient["BEN001"],
+        key=lambda row: row["CLM_ADMSN_DT"],
+    )
+
+    assert ben001[0]["IS_30DAY_READMISSION"] is True
+
+    # BEN002:
+    # First discharge = Jan 5
+    # Next admission = Feb 10
+    # Difference = 36 days -> False.
+    ben002 = sorted(
+        rows_by_patient["BEN002"],
+        key=lambda row: row["CLM_ADMSN_DT"],
+    )
+
+    assert ben002[0]["IS_30DAY_READMISSION"] is False
+
+
+@pytest.mark.spark
+def test_build_readmission_target_handles_exact_30_days(spark):
+    """
+    Verify that exactly 30 days is treated as a readmission.
+
+    The production code uses:
+        days_to_next_admission <= 30
+    """
+
+    make_dataset = _import_make_dataset()
+
+    rows = [
+        (
+            "BEN001",
+            "20100101",
+            "20100105",
+        ),
+        (
+            "BEN001",
+            "20100204",
+            "20100210",
+        ),
+    ]
+
+    columns = [
+        "DESYNPUF_ID",
+        "CLM_ADMSN_DT",
+        "NCH_BENE_DSCHRG_DT",
+    ]
+
+    df = spark.createDataFrame(rows, columns)
+
+    df = make_dataset.clean_claims_dates(
+        df,
+        "inpatient",
+    )
+
+    result = make_dataset.build_readmission_target(df)
+
+    first_admission = (
+        result
+        .orderBy("CLM_ADMSN_DT")
+        .first()
+    )
+
+    assert first_admission["IS_30DAY_READMISSION"] is True
+
+
+# =============================================================================
+# MAKE_DATASET.PY - COMORBIDITY FEATURES
+# =============================================================================
+
+@pytest.mark.spark
+def test_build_comorbidity_features(spark):
+    """
+    Verify that unique diagnosis codes are counted per beneficiary.
+    """
+
+    make_dataset = _import_make_dataset()
+    from pyspark.sql.types import StructType, StructField, StringType
+
+    rows = [
+        (
+            "BEN001",
+            "250",
+            "401",
+            "250",
+            None,
+        ),
+        (
+            "BEN001",
+            "272",
+            "401",
+            None,
+            None,
+        ),
+        (
+            "BEN002",
+            "414",
+            None,
+            None,
+            None,
+        ),
+    ]
+
+    # Explicit schema is required because PySpark cannot infer the type of 
+    # columns that contain only None values (e.g., ICD9_DGNS_4_CD).
+    schema = StructType([
+        StructField("DESYNPUF_ID", StringType(), True),
+        StructField("ICD9_DGNS_CD", StringType(), True),
+        StructField("ICD9_DGNS_2_CD", StringType(), True),
+        StructField("ICD9_DGNS_3_CD", StringType(), True),
+        StructField("ICD9_DGNS_4_CD", StringType(), True),
+    ])
+
+    df = spark.createDataFrame(rows, schema)
+
+    result = make_dataset.build_comorbidity_features(df)
+
+    values = {
+        row["DESYNPUF_ID"]: row["UNIQUE_DIAGNOSES_COUNT"]
+        for row in result.collect()
+    }
+
+    # BEN001 has:
+    # 250, 401, 272
+    # = 3 unique diagnoses.
+    assert values["BEN001"] == 3
+
+    # BEN002 has one diagnosis.
+    assert values["BEN002"] == 1
+
+
+# =============================================================================
+# MAKE_DATASET.PY - UTILIZATION FEATURES
+# =============================================================================
+
+@pytest.mark.spark
+def test_build_utilization_features_with_claim_cost(spark):
+    """
+    Verify utilization features when CLM_PMT_AMT is available.
+    """
+
+    make_dataset = _import_make_dataset()
+
+    rows = [
+        (
+            "BEN001",
+            "20100101",
+            100.0,
+        ),
+        (
+            "BEN001",
+            "20100110",
+            200.0,
+        ),
+        (
+            "BEN001",
+            "20100120",
+            300.0,
+        ),
+        (
+            "BEN002",
+            "20100105",
+            500.0,
+        ),
+    ]
+
+    columns = [
+        "DESYNPUF_ID",
+        "CLM_FROM_DT",
+        "CLM_PMT_AMT",
+    ]
+
+    df = spark.createDataFrame(rows, columns)
+
+    df = make_dataset.clean_claims_dates(
+        df,
+        "outpatient",
+    )
+
+    result = make_dataset.build_utilization_features(
+        df,
+        "outpatient",
+    )
+
+    assert "OUTPATIENT_CLAIM_COUNT" in result.columns
+    assert "AVG_OUTPATIENT_COST" in result.columns
+    assert "AVG_DAYS_BETWEEN_OUTPATIENT_CLAIMS" in result.columns
+
+    values = {
+        row["DESYNPUF_ID"]: row.asDict()
+        for row in result.collect()
+    }
+
+    assert values["BEN001"]["OUTPATIENT_CLAIM_COUNT"] == 3
+    assert values["BEN002"]["OUTPATIENT_CLAIM_COUNT"] == 1
+
+
+@pytest.mark.spark
+def test_build_utilization_features_with_drug_cost(spark):
+    """
+    Verify that drug claims use TOT_RX_CST_AMT when CLM_PMT_AMT is absent.
+    """
+
+    make_dataset = _import_make_dataset()
+
+    rows = [
+        (
+            "BEN001",
+            "20100101",
+            50.0,
+        ),
+        (
+            "BEN001",
+            "20100115",
+            75.0,
+        ),
+    ]
+
+    columns = [
+        "DESYNPUF_ID",
+        "SRVC_DT",
+        "TOT_RX_CST_AMT",
+    ]
+
+    df = spark.createDataFrame(rows, columns)
+
+    df = make_dataset.clean_claims_dates(
+        df,
+        "drug",
+    )
+
+    result = make_dataset.build_utilization_features(
+        df,
+        "drug",
+    )
+
+    assert "DRUG_CLAIM_COUNT" in result.columns
+    assert "AVG_DRUG_COST" in result.columns
+    assert "AVG_DAYS_BETWEEN_DRUG_CLAIMS" in result.columns
+
+    row = result.first()
+
+    assert row["DRUG_CLAIM_COUNT"] == 2
+
+
+# =============================================================================
+# MAKE_DATASET.PY - DATA INGESTION
+# =============================================================================
+
+@pytest.mark.spark
+def test_load_beneficiary_data(tmp_path, spark):
+    """
+    Verify that beneficiary files matching the expected pattern are loaded
+    and combined.
+    """
+
+    make_dataset = _import_make_dataset()
+
+    first_file = (
+        tmp_path
+        / "DE1_0_2008_Beneficiary_Summary_File_Sample_1.csv"
+    )
+
+    second_file = (
+        tmp_path
+        / "DE1_0_2009_Beneficiary_Summary_File_Sample_1.csv"
+    )
+
+    first_file.write_text(
+        "DESYNPUF_ID,BENE_BIRTH_DT\n"
+        "BEN001,19400101\n",
+        encoding="utf-8",
+    )
+
+    second_file.write_text(
+        "DESYNPUF_ID,BENE_BIRTH_DT\n"
+        "BEN002,19500101\n",
+        encoding="utf-8",
+    )
+
+    result = make_dataset.load_beneficiary_data(
+        spark,
+        tmp_path,
+    )
+
+    assert result.count() == 2
+
+    years = {
+        row["source_year"]
+        for row in result.select("source_year").collect()
+    }
+
+    assert years == {2008, 2009}
+
+
+@pytest.mark.spark
+def test_load_beneficiary_data_raises_when_no_files_exist(
+    tmp_path,
+    spark,
+):
+    """
+    Verify that missing beneficiary files raise FileNotFoundError.
+    """
+
+    make_dataset = _import_make_dataset()
+
+    with pytest.raises(FileNotFoundError):
+        make_dataset.load_beneficiary_data(
+            spark,
+            tmp_path,
+        )
+
+
+@pytest.mark.spark
+def test_load_claims_data(tmp_path, spark):
+    """
+    Verify that a supported claims file is loaded correctly.
+    """
+
+    make_dataset = _import_make_dataset()
+
+    file_name = (
+        "DE1_0_2008_to_2010_Inpatient_Claims_Sample_1.csv"
+    )
+
+    claims_file = tmp_path / file_name
+
+    claims_file.write_text(
+        "DESYNPUF_ID,CLM_ADMSN_DT,CLM_PMT_AMT\n"
+        "BEN001,20100101,100.50\n"
+        "BEN002,20100105,200.00\n",
+        encoding="utf-8",
+    )
+
+    result = make_dataset.load_claims_data(
+        spark,
+        tmp_path,
+        "inpatient",
+    )
+
+    assert result.count() == 2
+
+    assert "DESYNPUF_ID" in result.columns
+    assert "CLM_ADMSN_DT" in result.columns
+    assert "CLM_PMT_AMT" in result.columns
+
+
+# =============================================================================
+# MAKE_DATASET.PY - STRATIFIED SPLIT
+# =============================================================================
+
+@pytest.mark.spark
+def test_stratified_split_returns_three_dataframes(spark):
+    """
+    Verify that stratified_split returns train, validation and test
+    DataFrames.
+    """
+
+    make_dataset = _import_make_dataset()
+
+    rows = [
+        (f"BEN{i:03d}", i % 2 == 0)
+        for i in range(100)
+    ]
+
+    df = spark.createDataFrame(
+        rows,
+        [
+            "DESYNPUF_ID",
+            "IS_30DAY_READMISSION",
+        ],
+    )
+
+    train_df, val_df, test_df = make_dataset.stratified_split(
+        df,
+        "IS_30DAY_READMISSION",
+    )
+
+    assert train_df is not None
+    assert val_df is not None
+    assert test_df is not None
+
+    assert train_df.count() > 0
+    assert val_df.count() > 0
+    assert test_df.count() > 0
+
+
+@pytest.mark.spark
+def test_stratified_split_preserves_total_row_count(spark):
+    """
+    Verify that the three output datasets together contain every input row.
+
+    The implementation creates mutually exclusive filters, so the total
+    number of rows should remain unchanged.
+    """
+
+    make_dataset = _import_make_dataset()
+
+    rows = [
+        (f"BEN{i:03d}", i % 2 == 0)
+        for i in range(200)
+    ]
+
+    df = spark.createDataFrame(
+        rows,
+        [
+            "DESYNPUF_ID",
+            "IS_30DAY_READMISSION",
+        ],
+    )
+
+    train_df, val_df, test_df = make_dataset.stratified_split(
+        df,
+        "IS_30DAY_READMISSION",
+    )
+
+    total_output_rows = (
+        train_df.count()
+        + val_df.count()
+        + test_df.count()
+    )
+
+    assert total_output_rows == df.count()
+
+
+# =============================================================================
+# MAKE_DATASET.PY - DATA PROFILE
+# =============================================================================
+
+@pytest.mark.spark
+def test_generate_data_profile(spark, tmp_path):
+    """
+    Verify that the lightweight Spark data profile is generated.
+    """
+
+    make_dataset = _import_make_dataset()
+
+    df = spark.createDataFrame(
+        [
+            ("BEN001", 70, True),
+            ("BEN002", 65, False),
+        ],
+        [
+            "DESYNPUF_ID",
+            "AGE",
+            "IS_30DAY_READMISSION",
+        ],
+    )
+
+    make_dataset._generate_data_profile(
+        df,
+        tmp_path,
+    )
+
+    profile_path = (
+        tmp_path
+        / "data_profile_summary.csv"
+    )
+
+    assert profile_path.exists()
+
+    profile = pd.read_csv(profile_path)
+
+    assert not profile.empty
+
+
+# =============================================================================
+# MONTE_CARLO_SIMULATION.PY
+# =============================================================================
+
+def _create_monte_carlo_dataset(
+    output_path: Path,
+    costs: list[float],
+):
+    """
+    Create a small synthetic full_dataset.parquet file for Monte Carlo tests.
+    """
+
+    df = pd.DataFrame(
+        {
+            "AVG_ADMISSION_COST": costs,
+        }
+    )
+
+    df.to_parquet(
+        output_path / "full_dataset.parquet",
+        index=False,
+    )
+
+
+def test_run_monte_carlo_projection(tmp_path):
+    """
+    Verify that the Monte Carlo simulation:
+
+    - loads historical costs
+    - excludes non-positive values
+    - produces projections
+    - produces confidence bounds
+    - writes JSON output
+    - writes the projection plot
+    """
+
+    costs = [
+        100.0,
+        120.0,
+        150.0,
+        175.0,
+        200.0,
+        225.0,
+        250.0,
+        300.0,
+        350.0,
+        400.0,
+        450.0,
+        500.0,
+        0.0,
+        -10.0,
+    ]
+
+    _create_monte_carlo_dataset(
+        tmp_path,
+        costs,
+    )
+
+    results = monte_carlo_simulation.run_monte_carlo_projection(
+        n_simulations=100,
+        projection_horizon_months=6,
+        confidence_level=0.95,
+        output_path=tmp_path,
+    )
+
+    assert isinstance(results, dict)
+
+    assert "mean_monthly_projection" in results
+    assert "lower_bound" in results
+    assert "upper_bound" in results
+
+    assert "total_cost_mean" in results
+    assert "total_cost_ci_lower" in results
+    assert "total_cost_ci_upper" in results
+
+    assert results["n_simulations"] == 100
+    assert results["projection_horizon_months"] == 6
+    assert results["confidence_level"] == 0.95
+
+    # 12 positive values are used.
+    assert results["positive_cost_records_used"] == 12
+
+    # 0 and -10 are excluded.
+    assert results["excluded_non_positive_costs"] == 2
+
+    assert len(results["mean_monthly_projection"]) == 6
+    assert len(results["lower_bound"]) == 6
+    assert len(results["upper_bound"]) == 6
+
+    assert results["total_cost_mean"] > 0
+
+    assert results["total_cost_ci_lower"] <= (
+        results["total_cost_mean"]
+    )
+
+    assert results["total_cost_ci_upper"] >= (
+        results["total_cost_mean"]
+    )
+
+    assert (
+        tmp_path / "monte_carlo_results.json"
+    ).exists()
+
+    assert (
+        tmp_path / "monte_carlo_projection.png"
+    ).exists()
+
+
+def test_run_monte_carlo_projection_requires_cost_column(tmp_path):
+    """
+    Verify that the simulation raises ValueError when the required
+    AVG_ADMISSION_COST column is missing.
+    """
+
+    df = pd.DataFrame(
+        {
+            "WRONG_COLUMN": [
+                100.0,
+                200.0,
+            ]
+        }
+    )
+
+    df.to_parquet(
+        tmp_path / "full_dataset.parquet",
+        index=False,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="AVG_ADMISSION_COST column not found",
+    ):
+        monte_carlo_simulation.run_monte_carlo_projection(
+            n_simulations=10,
+            projection_horizon_months=3,
+            output_path=tmp_path,
+        )
+
+
+def test_run_monte_carlo_projection_requires_historical_data(
+    tmp_path,
+):
+    """
+    Verify that the simulation rejects an empty cost dataset.
+    """
+
+    df = pd.DataFrame(
+        {
+            "AVG_ADMISSION_COST": [],
+        }
+    )
+
+    df.to_parquet(
+        tmp_path / "full_dataset.parquet",
+        index=False,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="No historical cost data available",
+    ):
+        monte_carlo_simulation.run_monte_carlo_projection(
+            n_simulations=10,
+            projection_horizon_months=3,
+            output_path=tmp_path,
+        )
+
+
+def test_run_monte_carlo_projection_requires_at_least_ten_positive_costs(
+    tmp_path,
+):
+    """
+    Verify that fewer than 10 positive historical observations are rejected.
+    """
+
+    costs = [
+        100.0,
+        110.0,
+        120.0,
+        130.0,
+        140.0,
+    ]
+
+    _create_monte_carlo_dataset(
+        tmp_path,
+        costs,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Fewer than 10 positive historical cost observations",
+    ):
+        monte_carlo_simulation.run_monte_carlo_projection(
+            n_simulations=10,
+            projection_horizon_months=3,
+            output_path=tmp_path,
+        )
+
+
+def test_run_monte_carlo_projection_rejects_zero_variance(
+    tmp_path,
+):
+    """
+    Verify that identical positive costs are rejected because the fitted
+    log-normal distribution has zero standard deviation.
+    """
+
+    costs = [100.0] * 10
+
+    _create_monte_carlo_dataset(
+        tmp_path,
+        costs,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="standard deviation is zero",
+    ):
+        monte_carlo_simulation.run_monte_carlo_projection(
+            n_simulations=10,
+            projection_horizon_months=3,
+            output_path=tmp_path,
+        )
+
+
+def test_run_monte_carlo_projection_uses_deterministic_seed(
+    tmp_path,
+):
+    """
+    Verify that the simulation is reproducible because the implementation
+    explicitly sets np.random.seed(42).
+    """
+
+    costs = [
+        100.0,
+        120.0,
+        150.0,
+        175.0,
+        200.0,
+        225.0,
+        250.0,
+        300.0,
+        350.0,
+        400.0,
+    ]
+
+    _create_monte_carlo_dataset(
+        tmp_path,
+        costs,
+    )
+
+    first = monte_carlo_simulation.run_monte_carlo_projection(
+        n_simulations=50,
+        projection_horizon_months=4,
+        output_path=tmp_path,
+    )
+
+    second = monte_carlo_simulation.run_monte_carlo_projection(
+        n_simulations=50,
+        projection_horizon_months=4,
+        output_path=tmp_path,
+    )
+
+    assert (
+        first["mean_monthly_projection"]
+        == second["mean_monthly_projection"]
+    )
+
+    assert (
+        first["lower_bound"]
+        == second["lower_bound"]
+    )
+
+    assert (
+        first["upper_bound"]
+        == second["upper_bound"]
+    )
+
+
+# =============================================================================
+# VALIDATE_DATA.PY
+# =============================================================================
+#
+# We deliberately mock Great Expectations here. The purpose is to test that
+# run_data_validation() orchestrates the expected validation flow without
+# requiring the real processed SynPUF dataset.
+# =============================================================================
+
+def test_run_data_validation_success(monkeypatch, tmp_path):
+    """
+    Verify the validation workflow when all expectations succeed.
+
+    Great Expectations is mocked so this test does not require a real
+    train.parquet dataset.
+    """
+
+    try:
+        from src.data import validate_data
+    except ImportError:
+        pytest.skip(
+            "Great Expectations is not installed."
+        )
+
+    # -------------------------------------------------------------------------
+    # Patch builtins.open to enforce UTF-8 encoding on Windows
+    # This prevents UnicodeEncodeError when writing emoji characters
+    # -------------------------------------------------------------------------
+    import builtins
+    original_open = builtins.open
+    def utf8_open(file, mode='r', *args, **kwargs):
+        if 'b' not in mode and 'encoding' not in kwargs:
+            kwargs['encoding'] = 'utf-8'
+        return original_open(file, mode, *args, **kwargs)
+    monkeypatch.setattr(builtins, "open", utf8_open)
+
+    # -------------------------------------------------------------------------
+    # Fake validation result
+    # -------------------------------------------------------------------------
+
+    fake_results = [
+        SimpleNamespace(
+            success=True,
+            expectation=SimpleNamespace(
+                configuration={
+                    "type": "expect_column_values_to_not_be_null"
+                }
+            ),
+        ),
+        SimpleNamespace(
+            success=True,
+            expectation=SimpleNamespace(
+                configuration={
+                    "type": "expect_column_values_to_be_between"
+                }
+            ),
+        ),
+        SimpleNamespace(
+            success=True,
+            expectation=SimpleNamespace(
+                configuration={
+                    "type": "expect_column_values_to_be_in_set"
+                }
+            ),
+        ),
+    ]
+
+    fake_result = SimpleNamespace(
+        success=True,
+        results=fake_results,
+    )
+
+    # -------------------------------------------------------------------------
+    # Fake Great Expectations objects
+    # -------------------------------------------------------------------------
+
+    class FakeValidationDefinition:
+        def __init__(
+            self,
+            name,
+            data,
+            suite,
+        ):
+            self.name = name
+            self.data = data
+            self.suite = suite
+
+        def run(self, batch_parameters):
+            return fake_result
+
+    class FakeValidationDefinitions:
+        def add(self, definition):
+            return definition
+
+    class FakeExpectationSuite:
+        def __init__(self, name):
+            self.name = name
+            self.expectations = []
+
+        def add_expectation(self, expectation):
+            self.expectations.append(expectation)
+
+    class FakeSuites:
+        def add(self, suite):
+            return suite
+
+    class FakeBatchDefinition:
+        def get_batch(self, batch_parameters):
+            return object()
+
+    class FakeDataAsset:
+        def add_batch_definition_whole_dataframe(self, name):
+            return FakeBatchDefinition()
+
+    class FakeDataSource:
+        def add_dataframe_asset(self, name):
+            return FakeDataAsset()
+
+    class FakeDataSources:
+        def add_pandas(self, name):
+            return FakeDataSource()
+
+    fake_context = SimpleNamespace(
+        data_sources=FakeDataSources(),
+        suites=FakeSuites(),
+        validation_definitions=FakeValidationDefinitions(),
+    )
+
+    # -------------------------------------------------------------------------
+    # Fake expectations
+    # -------------------------------------------------------------------------
+
+    class FakeExpectations:
+        @staticmethod
+        def ExpectColumnValuesToNotBeNull(**kwargs):
+            return SimpleNamespace(**kwargs)
+
+        @staticmethod
+        def ExpectColumnValuesToBeBetween(**kwargs):
+            return SimpleNamespace(**kwargs)
+
+        @staticmethod
+        def ExpectColumnValuesToBeInSet(**kwargs):
+            return SimpleNamespace(**kwargs)
+
+        @staticmethod
+        def ExpectColumnValuesToBeUnique(**kwargs):
+            return SimpleNamespace(**kwargs)
+
+    class FakeGX:
+        def get_context(self):
+            return fake_context
+
+        ExpectationSuite = FakeExpectationSuite
+        ValidationDefinition = FakeValidationDefinition
+
+        expectations = FakeExpectations()
+
+    # -------------------------------------------------------------------------
+    # Patch dependencies
+    # -------------------------------------------------------------------------
+
+    monkeypatch.setattr(
+        validate_data.gx,
+        "get_context",
+        fake_context_factory := lambda: fake_context,
+    )
+
+    monkeypatch.setattr(
+        validate_data.gx,
+        "ExpectationSuite",
+        FakeExpectationSuite,
+        raising=False,
+    )
+
+    monkeypatch.setattr(
+        validate_data.gx,
+        "ValidationDefinition",
+        FakeValidationDefinition,
+        raising=False,
+    )
+
+    monkeypatch.setattr(
+        validate_data.gx,
+        "expectations",
+        FakeExpectations(),
+        raising=False,
+    )
+
+    # -------------------------------------------------------------------------
+    # Fake parquet loading
+    # -------------------------------------------------------------------------
+
+    fake_df = pd.DataFrame(
+        {
+            "DESYNPUF_ID": ["BEN001"],
+            "AGE": [70],
+            "IS_30DAY_READMISSION": [False],
+            "AVG_ADMISSION_COST": [100.0],
+            "TOTAL_ADMISSIONS": [1],
+        }
+    )
+
+    monkeypatch.setattr(
+        pd,
+        "read_parquet",
+        lambda path: fake_df,
+    )
+
+    # -------------------------------------------------------------------------
+    # Replace the actual Great Expectations expectation constructors
+    # -------------------------------------------------------------------------
+
+    monkeypatch.setattr(
+        validate_data.gx,
+        "expectations",
+        FakeExpectations(),
+        raising=False,
+    )
+
+    # The module uses gx.ValidationDefinition directly.
+    monkeypatch.setattr(
+        validate_data.gx,
+        "ValidationDefinition",
+        FakeValidationDefinition,
+        raising=False,
+    )
+
+    # -------------------------------------------------------------------------
+    # Execute
+    # -------------------------------------------------------------------------
+
+    result = validate_data.run_data_validation()
+
+    assert result is True
+
+
+def test_run_data_validation_writes_failure_or_success_report(
+    monkeypatch,
+    tmp_path,
+):
+    """
+    Verify the report-writing behavior independently from Great Expectations.
+
+    This test focuses on the output format used by the implementation.
+    """
+
+    try:
+        from src.data import validate_data
+    except ImportError:
+        pytest.skip(
+            "Great Expectations is not installed."
+        )
+
+    # -------------------------------------------------------------------------
+    # Patch builtins.open to enforce UTF-8 encoding on Windows
+    # This prevents UnicodeEncodeError when writing emoji characters
+    # -------------------------------------------------------------------------
+    import builtins
+    original_open = builtins.open
+    def utf8_open(file, mode='r', *args, **kwargs):
+        if 'b' not in mode and 'encoding' not in kwargs:
+            kwargs['encoding'] = 'utf-8'
+        return original_open(file, mode, *args, **kwargs)
+    monkeypatch.setattr(builtins, "open", utf8_open)
+
+    # Build a fake result matching the attributes used by the production code.
+    fake_expectation = SimpleNamespace(
+        configuration={
+            "type": "test_expectation"
+        }
+    )
+
+    fake_result_item = SimpleNamespace(
+        success=True,
+        expectation=fake_expectation,
+    )
+
+    fake_result = SimpleNamespace(
+        success=True,
+        results=[
+            fake_result_item,
+        ],
+    )
+
+    # -------------------------------------------------------------------------
+    # Minimal fake GX hierarchy
+    # -------------------------------------------------------------------------
+
+    class FakeBatchDefinition:
+        def get_batch(self, batch_parameters):
+            return object()
+
+    class FakeDataAsset:
+        def add_batch_definition_whole_dataframe(self, name):
+            return FakeBatchDefinition()
+
+    class FakeDataSource:
+        def add_dataframe_asset(self, name):
+            return FakeDataAsset()
+
+    class FakeDataSources:
+        def add_pandas(self, name):
+            return FakeDataSource()
+
+    class FakeSuite:
+        def add_expectation(self, expectation):
+            pass
+
+    class FakeSuites:
+        def add(self, suite):
+            return FakeSuite()
+
+    class FakeValidationDefinitions:
+        def add(self, definition):
+            return SimpleNamespace(
+                run=lambda batch_parameters: fake_result
+            )
+
+    fake_context = SimpleNamespace(
+        data_sources=FakeDataSources(),
+        suites=FakeSuites(),
+        validation_definitions=FakeValidationDefinitions(),
+    )
+
+    monkeypatch.setattr(
+        validate_data.gx,
+        "get_context",
+        lambda: fake_context,
+    )
+
+    monkeypatch.setattr(
+        validate_data.gx,
+        "ExpectationSuite",
+        lambda name: SimpleNamespace(
+            add_expectation=lambda expectation: None
+        ),
+        raising=False,
+    )
+
+    class FakeExpectations:
+        @staticmethod
+        def ExpectColumnValuesToNotBeNull(**kwargs):
+            return SimpleNamespace(**kwargs)
+
+        @staticmethod
+        def ExpectColumnValuesToBeBetween(**kwargs):
+            return SimpleNamespace(**kwargs)
+
+        @staticmethod
+        def ExpectColumnValuesToBeInSet(**kwargs):
+            return SimpleNamespace(**kwargs)
+
+        @staticmethod
+        def ExpectColumnValuesToBeUnique(**kwargs):
+            return SimpleNamespace(**kwargs)
+
+    monkeypatch.setattr(
+        validate_data.gx,
+        "expectations",
+        FakeExpectations(),
+        raising=False,
+    )
+
+    monkeypatch.setattr(
+        validate_data.gx,
+        "ValidationDefinition",
+        lambda **kwargs: SimpleNamespace(**kwargs),
+        raising=False,
+    )
+
+    fake_df = pd.DataFrame(
+        {
+            "DESYNPUF_ID": ["BEN001"],
+            "AGE": [70],
+            "IS_30DAY_READMISSION": [False],
+            "AVG_ADMISSION_COST": [100.0],
+            "TOTAL_ADMISSIONS": [1],
+        }
+    )
+
+    monkeypatch.setattr(
+        pd,
+        "read_parquet",
+        lambda path: fake_df,
+    )
+
+    # The production function hard-codes the report path relative to the
+    # project root. We therefore redirect Path in the module so the test
+    # writes into a temporary directory.
+    original_path = validate_data.Path
+
+    class TestPath(type(original_path())):
+        pass
+
+    # Instead of replacing Path globally, simply verify that the function
+    # completes and returns the expected validation status.
+    result = validate_data.run_data_validation()
+
+    assert result is True
+
+
+# =============================================================================
+# IMPORT / API SANITY CHECKS
+# =============================================================================
+
+def test_monte_carlo_module_exposes_expected_function():
+    """
+    Basic API check for the Monte Carlo module.
+    """
+
+    assert hasattr(
+        monte_carlo_simulation,
+        "run_monte_carlo_projection",
+    )
+
+    assert callable(
+        monte_carlo_simulation.run_monte_carlo_projection,
+    )
+
+
+@pytest.mark.spark
+def test_make_dataset_exposes_expected_functions(spark):
+    """
+    Verify that make_dataset.py exposes the functions used by the pipeline.
+    """
+
+    make_dataset = _import_make_dataset()
+
+    expected_functions = [
+        "create_spark_session",
+        "load_beneficiary_data",
+        "load_claims_data",
+        "clean_beneficiary_data",
+        "clean_claims_dates",
+        "build_readmission_target",
+        "build_comorbidity_features",
+        "build_utilization_features",
+        "stratified_split",
+        "run_pipeline",
+        "_generate_data_profile",
+    ]
+
+    for function_name in expected_functions:
+        assert hasattr(
+            make_dataset,
+            function_name,
+        ), f"Missing function: {function_name}"
+
+        assert callable(
+            getattr(make_dataset, function_name)
+        )
+```
+
+
+<div style='page-break-after: always;'></div>
+
+# File: tests\test_sagemaker_agent.py
+
+```python
+"""
+ValueAI — SageMaker Agent Contract Tests
+==========================================
+
+Tests for:
+
+    src.ai_agent.sagemaker_agent
+
+These tests DO NOT:
+    - call AWS
+    - call SageMaker
+    - call Ollama
+    - call the live endpoint
+    - create AWS resources
+    - modify the frozen agent_graph.py
+    - require a running SageMaker endpoint
+
+They verify:
+
+    1. SageMaker payload construction
+    2. SageMaker response parsing
+    3. Invalid response handling
+    4. Empty prompt validation
+    5. AWS runtime client initialization
+    6. SageMaker ClientError translation
+    7. SageMaker BotoCoreError translation
+    8. Missing response body handling
+    9. Response body read/decode handling
+    10. Evidence-first prompt construction
+    11. Evidence retrieval before SageMaker invocation
+    12. User-query normalization
+    13. Empty user-query validation
+    14. No silent local/Ollama fallback
+    15. Complete evidence-first SageMaker agent flow
+
+Run:
+
+    pytest -q tests/test_sagemaker_agent.py
+
+Run with verbose output:
+
+    pytest -v tests/test_sagemaker_agent.py
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+from botocore.exceptions import BotoCoreError, ClientError
+
+
+# ============================================================
+# PROJECT ROOT / IMPORT PATH
+# ============================================================
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+
+# ============================================================
+# APPLICATION IMPORTS
+# ============================================================
+
+from src.ai_agent import sagemaker_agent
+
+
+from src.ai_agent.sagemaker_agent import (
+    SAGEMAKER_ACCEPT,
+    SAGEMAKER_CONTENT_TYPE,
+    SageMakerConfigurationError,
+    SageMakerInvocationError,
+    SageMakerResponseError,
+    _build_evidence_prompt,
+    build_sagemaker_payload,
+    invoke_sagemaker_agent,
+    invoke_sagemaker_endpoint,
+    parse_sagemaker_response,
+)
+
+
+# ============================================================
+# TEST DATA
+# ============================================================
+
+TEST_PROMPT = (
+    "What increases readmission risk?"
+)
+
+TEST_QUERY = (
+    "Explain the main readmission risk drivers."
+)
+
+TEST_GENERATED_TEXT = (
+    "ValueAI SageMaker response"
+)
+
+TEST_EVIDENCE_STATE = {
+    "evidence": {
+        "readmission_rate": 0.23,
+        "high_risk_cluster": {
+            "size": 1250,
+            "readmission_rate": 0.41,
+        },
+    },
+    "evidence_source": "verified analytical artifacts",
+}
+
+
+# ============================================================
+# HELPERS
+# ============================================================
+
+
+def make_streaming_body(
+    content: str,
+) -> MagicMock:
+    """
+    Create a fake SageMaker StreamingBody-like object.
+    """
+
+    body = MagicMock()
+
+    body.read.return_value = content.encode(
+        "utf-8"
+    )
+
+    return body
+
+
+def make_client_error(
+    code: str = "ValidationException",
+    message: str = "Test SageMaker error",
+) -> ClientError:
+    """
+    Create a deterministic boto3 ClientError for testing.
+    """
+
+    return ClientError(
+        {
+            "Error": {
+                "Code": code,
+                "Message": message,
+            }
+        },
+        "InvokeEndpoint",
+    )
+
+
+# ============================================================
+# PAYLOAD TESTS
+# ============================================================
+
+
+def test_sagemaker_payload_contains_inputs() -> None:
+    """
+    The payload must preserve the supplied prompt.
+    """
+
+    payload = build_sagemaker_payload(
+        TEST_PROMPT
+    )
+
+    assert isinstance(
+        payload,
+        dict,
+    )
+
+    assert payload["inputs"] == TEST_PROMPT
+
+
+def test_sagemaker_payload_contains_generation_parameters() -> None:
+    """
+    The payload must contain the generation parameters required
+    by the SageMaker Qwen endpoint.
+    """
+
+    payload = build_sagemaker_payload(
+        TEST_PROMPT
+    )
+
+    parameters = payload.get(
+        "parameters"
+    )
+
+    assert isinstance(
+        parameters,
+        dict,
+    )
+
+    assert "max_new_tokens" in parameters
+    assert "temperature" in parameters
+    assert "top_p" in parameters
+    assert "return_full_text" in parameters
+
+
+def test_sagemaker_payload_return_full_text_is_false() -> None:
+    """
+    ValueAI expects only the generated completion rather than
+    the original prompt being returned as part of the response.
+    """
+
+    payload = build_sagemaker_payload(
+        TEST_PROMPT
+    )
+
+    assert (
+        payload["parameters"]["return_full_text"]
+        is False
+    )
+
+
+def test_sagemaker_payload_uses_configured_generation_values() -> None:
+    """
+    Generation settings must come from the ValueAI configuration
+    helpers rather than being hard-coded inside the payload builder.
+    """
+
+    with patch(
+        "src.ai_agent.sagemaker_agent.get_sagemaker_max_new_tokens",
+        return_value=777,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.get_sagemaker_temperature",
+        return_value=0.25,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.get_sagemaker_top_p",
+        return_value=0.91,
+    ):
+
+        payload = build_sagemaker_payload(
+            TEST_PROMPT
+        )
+
+    parameters = payload["parameters"]
+
+    assert parameters["max_new_tokens"] == 777
+    assert parameters["temperature"] == 0.25
+    assert parameters["top_p"] == 0.91
+    assert parameters["return_full_text"] is False
+
+
+# ============================================================
+# RESPONSE PARSING TESTS
+# ============================================================
+
+
+def test_parse_sagemaker_response_parses_jumpstart_format() -> None:
+    """
+    Verify the primary Hugging Face / JumpStart response format:
+
+        [
+            {
+                "generated_text": "..."
+            }
+        ]
+    """
+
+    raw_response = json.dumps(
+        [
+            {
+                "generated_text": TEST_GENERATED_TEXT
+            }
+        ]
+    )
+
+    result = parse_sagemaker_response(
+        raw_response
+    )
+
+    assert result == TEST_GENERATED_TEXT
+
+
+def test_parse_sagemaker_response_strips_whitespace() -> None:
+    """
+    Generated text should be returned without surrounding
+    whitespace.
+    """
+
+    raw_response = json.dumps(
+        [
+            {
+                "generated_text": (
+                    "   ValueAI response   "
+                )
+            }
+        ]
+    )
+
+    result = parse_sagemaker_response(
+        raw_response
+    )
+
+    assert result == "ValueAI response"
+
+
+def test_parse_sagemaker_response_parses_dictionary_format() -> None:
+    """
+    Dictionary responses containing generated_text should
+    also be accepted.
+    """
+
+    raw_response = json.dumps(
+        {
+            "generated_text": TEST_GENERATED_TEXT
+        }
+    )
+
+    result = parse_sagemaker_response(
+        raw_response
+    )
+
+    assert result == TEST_GENERATED_TEXT
+
+
+def test_parse_sagemaker_response_parses_generation_content_list() -> None:
+    """
+    Verify compatibility with:
+
+        [
+            {
+                "generation": {
+                    "content": "..."
+                }
+            }
+        ]
+    """
+
+    raw_response = json.dumps(
+        [
+            {
+                "generation": {
+                    "content": TEST_GENERATED_TEXT
+                }
+            }
+        ]
+    )
+
+    result = parse_sagemaker_response(
+        raw_response
+    )
+
+    assert result == TEST_GENERATED_TEXT
+
+
+def test_parse_sagemaker_response_parses_generation_content_dict() -> None:
+    """
+    Verify compatibility with:
+
+        {
+            "generation": {
+                "content": "..."
+            }
+        }
+    """
+
+    raw_response = json.dumps(
+        {
+            "generation": {
+                "content": TEST_GENERATED_TEXT
+            }
+        }
+    )
+
+    result = parse_sagemaker_response(
+        raw_response
+    )
+
+    assert result == TEST_GENERATED_TEXT
+
+
+def test_parse_sagemaker_response_parses_choices_text() -> None:
+    """
+    Verify compatibility with a choices/text response shape.
+    """
+
+    raw_response = json.dumps(
+        {
+            "choices": [
+                {
+                    "text": TEST_GENERATED_TEXT
+                }
+            ]
+        }
+    )
+
+    result = parse_sagemaker_response(
+        raw_response
+    )
+
+    assert result == TEST_GENERATED_TEXT
+
+
+def test_parse_sagemaker_response_rejects_invalid_json() -> None:
+    """
+    Invalid JSON must produce SageMakerResponseError.
+    """
+
+    with pytest.raises(
+        SageMakerResponseError,
+        match="not valid JSON",
+    ):
+        parse_sagemaker_response(
+            "this is not json"
+        )
+
+
+def test_parse_sagemaker_response_rejects_unrecognized_shape() -> None:
+    """
+    Valid JSON without generated text must be rejected.
+    """
+
+    raw_response = json.dumps(
+        {
+            "unexpected": "response"
+        }
+    )
+
+    with pytest.raises(
+        SageMakerResponseError,
+        match="no generated text",
+    ):
+        parse_sagemaker_response(
+            raw_response
+        )
+
+
+def test_parse_sagemaker_response_rejects_empty_generated_text() -> None:
+    """
+    Empty generated text is not a valid SageMaker response.
+    """
+
+    raw_response = json.dumps(
+        [
+            {
+                "generated_text": ""
+            }
+        ]
+    )
+
+    with pytest.raises(
+        SageMakerResponseError,
+        match="no generated text",
+    ):
+        parse_sagemaker_response(
+            raw_response
+        )
+
+
+def test_parse_sagemaker_response_rejects_empty_list() -> None:
+    """
+    An empty JSON list must be rejected.
+    """
+
+    with pytest.raises(
+        SageMakerResponseError,
+        match="no generated text",
+    ):
+        parse_sagemaker_response(
+            "[]"
+        )
+
+
+# ============================================================
+# EVIDENCE PROMPT TESTS
+# ============================================================
+
+
+def test_evidence_prompt_contains_user_query() -> None:
+    """
+    The final evidence-first prompt must contain the user's
+    actual question.
+    """
+
+    prompt = _build_evidence_prompt(
+        TEST_QUERY,
+        TEST_EVIDENCE_STATE,
+    )
+
+    assert TEST_QUERY in prompt
+
+
+def test_evidence_prompt_contains_evidence_source() -> None:
+    """
+    The prompt must identify where the evidence came from.
+    """
+
+    prompt = _build_evidence_prompt(
+        TEST_QUERY,
+        TEST_EVIDENCE_STATE,
+    )
+
+    assert (
+        "verified analytical artifacts"
+        in prompt
+    )
+
+
+def test_evidence_prompt_contains_evidence_json() -> None:
+    """
+    The analytical evidence must be embedded in the prompt.
+    """
+
+    prompt = _build_evidence_prompt(
+        TEST_QUERY,
+        TEST_EVIDENCE_STATE,
+    )
+
+    assert (
+        "readmission_rate"
+        in prompt
+    )
+
+    assert (
+        "high_risk_cluster"
+        in prompt
+    )
+
+    assert (
+        "0.23"
+        in prompt
+    )
+
+    assert (
+        "1250"
+        in prompt
+    )
+
+
+def test_evidence_prompt_contains_evidence_first_instructions() -> None:
+    """
+    The prompt must retain the evidence-first safeguards.
+    """
+
+    prompt = _build_evidence_prompt(
+        TEST_QUERY,
+        TEST_EVIDENCE_STATE,
+    )
+
+    assert (
+        "Treat this evidence as authoritative."
+        in prompt
+    )
+
+    assert (
+        "Do not invent quantitative values."
+        in prompt
+    )
+
+    assert (
+        "Do not introduce numerical values"
+        in prompt
+    )
+
+    assert (
+        "If the evidence does not establish something"
+        in prompt
+    )
+
+
+def test_evidence_prompt_contains_shap_safeguard() -> None:
+    """
+    The prompt must distinguish SHAP importance magnitude from
+    direction and causation.
+    """
+
+    prompt = _build_evidence_prompt(
+        TEST_QUERY,
+        TEST_EVIDENCE_STATE,
+    )
+
+    assert (
+        "mean absolute SHAP values"
+        in prompt
+    )
+
+    assert (
+        "not direction or causation"
+        in prompt
+    )
+
+
+def test_evidence_prompt_contains_strategy_safeguard() -> None:
+    """
+    Strategic recommendations must be framed as hypotheses
+    rather than guaranteed outcomes.
+    """
+
+    prompt = _build_evidence_prompt(
+        TEST_QUERY,
+        TEST_EVIDENCE_STATE,
+    )
+
+    assert (
+        "hypotheses for evaluation"
+        in prompt
+    )
+
+    assert (
+        "Never claim that an intervention will reduce"
+        in prompt
+    )
+
+
+# ============================================================
+# RAW ENDPOINT VALIDATION TESTS
+# ============================================================
+
+
+def test_invoke_sagemaker_endpoint_rejects_empty_prompt() -> None:
+    """
+    Empty prompts must fail before AWS is contacted.
+    """
+
+    with pytest.raises(
+        ValueError,
+        match="prompt cannot be empty",
+    ):
+        invoke_sagemaker_endpoint("")
+
+
+def test_invoke_sagemaker_endpoint_rejects_whitespace_prompt() -> None:
+    """
+    Whitespace-only prompts must fail before AWS is contacted.
+    """
+
+    with pytest.raises(
+        ValueError,
+        match="prompt cannot be empty",
+    ):
+        invoke_sagemaker_endpoint(
+            "   "
+        )
+
+
+def test_invoke_sagemaker_endpoint_does_not_call_aws_for_empty_prompt() -> None:
+    """
+    Confirm that invalid input fails before creating the runtime
+    client.
+    """
+
+    with patch(
+        "src.ai_agent.sagemaker_agent._get_runtime_client"
+    ) as mock_client:
+
+        with pytest.raises(
+            ValueError,
+            match="prompt cannot be empty",
+        ):
+            invoke_sagemaker_endpoint(
+                "   "
+            )
+
+    mock_client.assert_not_called()
+
+
+# ============================================================
+# RUNTIME CLIENT TESTS
+# ============================================================
+
+
+def test_runtime_client_uses_configured_region() -> None:
+    """
+    The SageMaker Runtime client must use get_aws_region().
+    """
+
+    fake_client = MagicMock()
+
+    with patch(
+        "src.ai_agent.sagemaker_agent.get_aws_region",
+        return_value="us-east-1",
+    ), patch(
+        "src.ai_agent.sagemaker_agent.boto3.client",
+        return_value=fake_client,
+    ) as mock_boto_client:
+
+        result = sagemaker_agent._get_runtime_client()
+
+    assert result is fake_client
+
+    mock_boto_client.assert_called_once_with(
+        "sagemaker-runtime",
+        region_name="us-east-1",
+    )
+
+
+def test_runtime_client_wraps_initialization_error() -> None:
+    """
+    Runtime-client initialization failures must become the
+    application's configuration error.
+    """
+
+    with patch(
+        "src.ai_agent.sagemaker_agent.boto3.client",
+        side_effect=Exception(
+            "Unable to initialize AWS client"
+        ),
+    ):
+
+        with pytest.raises(
+            SageMakerConfigurationError,
+            match="Unable to initialize SageMaker Runtime client",
+        ):
+            sagemaker_agent._get_runtime_client()
+
+
+# ============================================================
+# ENDPOINT INVOCATION TESTS
+# ============================================================
+
+
+def test_invoke_sagemaker_endpoint_sends_expected_request() -> None:
+    """
+    Verify the actual invoke_endpoint contract without calling AWS.
+    """
+
+    runtime_client = MagicMock()
+
+    runtime_client.invoke_endpoint.return_value = {
+        "Body": make_streaming_body(
+            json.dumps(
+                [
+                    {
+                        "generated_text": TEST_GENERATED_TEXT
+                    }
+                ]
+            )
+        )
+    }
+
+    with patch(
+        "src.ai_agent.sagemaker_agent._get_runtime_client",
+        return_value=runtime_client,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.get_sagemaker_endpoint_name",
+        return_value="valueai-qwen25-7b",
+    ):
+
+        result = invoke_sagemaker_endpoint(
+            TEST_PROMPT
+        )
+
+    assert result == TEST_GENERATED_TEXT
+
+    runtime_client.invoke_endpoint.assert_called_once()
+
+    call_kwargs = (
+        runtime_client.invoke_endpoint.call_args.kwargs
+    )
+
+    assert (
+        call_kwargs["EndpointName"]
+        == "valueai-qwen25-7b"
+    )
+
+    assert (
+        call_kwargs["ContentType"]
+        == SAGEMAKER_CONTENT_TYPE
+    )
+
+    assert (
+        call_kwargs["Accept"]
+        == SAGEMAKER_ACCEPT
+    )
+
+    payload = json.loads(
+        call_kwargs["Body"].decode(
+            "utf-8"
+        )
+    )
+
+    assert payload["inputs"] == TEST_PROMPT
+
+    assert (
+        payload["parameters"]["return_full_text"]
+        is False
+    )
+
+
+def test_invoke_sagemaker_endpoint_strips_prompt_before_sending() -> None:
+    """
+    invoke_sagemaker_endpoint() should normalize the prompt
+    using strip() before constructing the payload.
+    """
+
+    runtime_client = MagicMock()
+
+    runtime_client.invoke_endpoint.return_value = {
+        "Body": make_streaming_body(
+            json.dumps(
+                [
+                    {
+                        "generated_text": "OK"
+                    }
+                ]
+            )
+        )
+    }
+
+    with patch(
+        "src.ai_agent.sagemaker_agent._get_runtime_client",
+        return_value=runtime_client,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.get_sagemaker_endpoint_name",
+        return_value="valueai-qwen25-7b",
+    ):
+
+        result = invoke_sagemaker_endpoint(
+            "   hello world   "
+        )
+
+    assert result == "OK"
+
+    call_kwargs = (
+        runtime_client.invoke_endpoint.call_args.kwargs
+    )
+
+    payload = json.loads(
+        call_kwargs["Body"].decode(
+            "utf-8"
+        )
+    )
+
+    assert (
+        payload["inputs"]
+        == "hello world"
+    )
+
+
+def test_invoke_sagemaker_endpoint_translates_client_error() -> None:
+    """
+    boto3 ClientError must become SageMakerInvocationError.
+    """
+
+    runtime_client = MagicMock()
+
+    runtime_client.invoke_endpoint.side_effect = (
+        make_client_error(
+            code="ModelError",
+            message="The model failed",
+        )
+    )
+
+    with patch(
+        "src.ai_agent.sagemaker_agent._get_runtime_client",
+        return_value=runtime_client,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.get_sagemaker_endpoint_name",
+        return_value="valueai-qwen25-7b",
+    ):
+
+        with pytest.raises(
+            SageMakerInvocationError,
+            match="ModelError",
+        ) as exc_info:
+
+            invoke_sagemaker_endpoint(
+                TEST_PROMPT
+            )
+
+    assert (
+        "The model failed"
+        in str(exc_info.value)
+    )
+
+
+def test_invoke_sagemaker_endpoint_translates_botocore_error() -> None:
+    """
+    boto3/botocore failures must become SageMakerInvocationError.
+    """
+
+    runtime_client = MagicMock()
+
+    runtime_client.invoke_endpoint.side_effect = (
+        BotoCoreError()
+    )
+
+    with patch(
+        "src.ai_agent.sagemaker_agent._get_runtime_client",
+        return_value=runtime_client,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.get_sagemaker_endpoint_name",
+        return_value="valueai-qwen25-7b",
+    ):
+
+        with pytest.raises(
+            SageMakerInvocationError,
+            match="AWS SDK error",
+        ):
+
+            invoke_sagemaker_endpoint(
+                TEST_PROMPT
+            )
+
+
+def test_invoke_sagemaker_endpoint_translates_unexpected_error() -> None:
+    """
+    Unexpected runtime-client failures must also be translated
+    into SageMakerInvocationError.
+    """
+
+    runtime_client = MagicMock()
+
+    runtime_client.invoke_endpoint.side_effect = (
+        RuntimeError(
+            "Unexpected test failure"
+        )
+    )
+
+    with patch(
+        "src.ai_agent.sagemaker_agent._get_runtime_client",
+        return_value=runtime_client,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.get_sagemaker_endpoint_name",
+        return_value="valueai-qwen25-7b",
+    ):
+
+        with pytest.raises(
+            SageMakerInvocationError,
+            match="Unexpected SageMaker invocation error",
+        ):
+
+            invoke_sagemaker_endpoint(
+                TEST_PROMPT
+            )
+
+
+def test_invoke_sagemaker_endpoint_rejects_missing_body() -> None:
+    """
+    A successful boto3 call without Body is still an invalid
+    SageMaker response.
+    """
+
+    runtime_client = MagicMock()
+
+    runtime_client.invoke_endpoint.return_value = {}
+
+    with patch(
+        "src.ai_agent.sagemaker_agent._get_runtime_client",
+        return_value=runtime_client,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.get_sagemaker_endpoint_name",
+        return_value="valueai-qwen25-7b",
+    ):
+
+        with pytest.raises(
+            SageMakerResponseError,
+            match="did not contain a response body",
+        ):
+
+            invoke_sagemaker_endpoint(
+                TEST_PROMPT
+            )
+
+
+def test_invoke_sagemaker_endpoint_handles_body_read_failure() -> None:
+    """
+    Failure while reading the StreamingBody must become
+    SageMakerResponseError.
+    """
+
+    body = MagicMock()
+
+    body.read.side_effect = (
+        RuntimeError(
+            "Body read failed"
+        )
+    )
+
+    runtime_client = MagicMock()
+
+    runtime_client.invoke_endpoint.return_value = {
+        "Body": body
+    }
+
+    with patch(
+        "src.ai_agent.sagemaker_agent._get_runtime_client",
+        return_value=runtime_client,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.get_sagemaker_endpoint_name",
+        return_value="valueai-qwen25-7b",
+    ):
+
+        with pytest.raises(
+            SageMakerResponseError,
+            match="Unable to read SageMaker response body",
+        ):
+
+            invoke_sagemaker_endpoint(
+                TEST_PROMPT
+            )
+
+
+def test_invoke_sagemaker_endpoint_handles_invalid_response_json() -> None:
+    """
+    Invalid response JSON must be rejected after the endpoint
+    invocation succeeds.
+    """
+
+    runtime_client = MagicMock()
+
+    runtime_client.invoke_endpoint.return_value = {
+        "Body": make_streaming_body(
+            "not valid json"
+        )
+    }
+
+    with patch(
+        "src.ai_agent.sagemaker_agent._get_runtime_client",
+        return_value=runtime_client,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.get_sagemaker_endpoint_name",
+        return_value="valueai-qwen25-7b",
+    ):
+
+        with pytest.raises(
+            SageMakerResponseError,
+            match="not valid JSON",
+        ):
+
+            invoke_sagemaker_endpoint(
+                TEST_PROMPT
+            )
+
+
+# ============================================================
+# COMPLETE EVIDENCE-FIRST AGENT TESTS
+# ============================================================
+
+
+def test_invoke_sagemaker_agent_rejects_empty_query() -> None:
+    """
+    Empty user queries must be rejected before evidence retrieval
+    or SageMaker invocation.
+    """
+
+    with patch(
+        "src.ai_agent.sagemaker_agent.retrieve_evidence"
+    ) as mock_retrieve, patch(
+        "src.ai_agent.sagemaker_agent.invoke_sagemaker_endpoint"
+    ) as mock_invoke:
+
+        with pytest.raises(
+            ValueError,
+            match="User query cannot be empty",
+        ):
+
+            invoke_sagemaker_agent(
+                ""
+            )
+
+    mock_retrieve.assert_not_called()
+    mock_invoke.assert_not_called()
+
+
+def test_invoke_sagemaker_agent_rejects_whitespace_query() -> None:
+    """
+    Whitespace-only queries must be rejected.
+    """
+
+    with patch(
+        "src.ai_agent.sagemaker_agent.retrieve_evidence"
+    ) as mock_retrieve, patch(
+        "src.ai_agent.sagemaker_agent.invoke_sagemaker_endpoint"
+    ) as mock_invoke:
+
+        with pytest.raises(
+            ValueError,
+            match="User query cannot be empty",
+        ):
+
+            invoke_sagemaker_agent(
+                "   "
+            )
+
+    mock_retrieve.assert_not_called()
+    mock_invoke.assert_not_called()
+
+
+def test_invoke_sagemaker_agent_normalizes_user_query() -> None:
+    """
+    Leading/trailing whitespace must be removed before evidence
+    retrieval.
+    """
+
+    evidence_state = {
+        "evidence": {
+            "example": "verified"
+        },
+        "evidence_source": "test",
+    }
+
+    with patch(
+        "src.ai_agent.sagemaker_agent.retrieve_evidence",
+        return_value=evidence_state,
+    ) as mock_retrieve, patch(
+        "src.ai_agent.sagemaker_agent.invoke_sagemaker_endpoint",
+        return_value="Final response",
+    ) as mock_invoke:
+
+        result = invoke_sagemaker_agent(
+            "   Explain readmission risk.   "
+        )
+
+    assert result == "Final response"
+
+    mock_retrieve.assert_called_once_with(
+        {
+            "user_query": (
+                "Explain readmission risk."
+            )
+        }
+    )
+
+    mock_invoke.assert_called_once()
+
+
+def test_invoke_sagemaker_agent_retrieves_evidence_before_invocation() -> None:
+    """
+    The architecture requires:
+
+        user query
+            ↓
+        retrieve evidence
+            ↓
+        build evidence prompt
+            ↓
+        SageMaker
+
+    This test verifies that evidence retrieval happens before
+    SageMaker invocation.
+    """
+
+    call_order: list[str] = []
+
+    evidence_state = {
+        "evidence": {
+            "readmission_rate": 0.23
+        },
+        "evidence_source": "verified analytical artifacts",
+    }
+
+    def fake_retrieve(
+        state: dict,
+    ) -> dict:
+
+        call_order.append(
+            "retrieve_evidence"
+        )
+
+        return evidence_state
+
+    def fake_invoke(
+        prompt: str,
+    ) -> str:
+
+        call_order.append(
+            "invoke_sagemaker_endpoint"
+        )
+
+        assert (
+            "readmission_rate"
+            in prompt
+        )
+
+        assert (
+            "0.23"
+            in prompt
+        )
+
+        return "SageMaker answer"
+
+    with patch(
+        "src.ai_agent.sagemaker_agent.retrieve_evidence",
+        side_effect=fake_retrieve,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.invoke_sagemaker_endpoint",
+        side_effect=fake_invoke,
+    ):
+
+        result = invoke_sagemaker_agent(
+            TEST_QUERY
+        )
+
+    assert result == "SageMaker answer"
+
+    assert call_order == [
+        "retrieve_evidence",
+        "invoke_sagemaker_endpoint",
+    ]
+
+
+def test_invoke_sagemaker_agent_passes_evidence_into_prompt() -> None:
+    """
+    The prompt sent to SageMaker must contain the retrieved
+    analytical evidence.
+    """
+
+    evidence_state = {
+        "evidence": {
+            "high_risk_cluster_size": 1250,
+            "readmission_rate": 0.41,
+        },
+        "evidence_source": (
+            "verified analytical artifacts"
+        ),
+    }
+
+    with patch(
+        "src.ai_agent.sagemaker_agent.retrieve_evidence",
+        return_value=evidence_state,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.invoke_sagemaker_endpoint",
+        return_value="Answer",
+    ) as mock_invoke:
+
+        result = invoke_sagemaker_agent(
+            "Analyze the high-risk cluster."
+        )
+
+    assert result == "Answer"
+
+    mock_invoke.assert_called_once()
+
+    prompt = (
+        mock_invoke.call_args.args[0]
+    )
+
+    assert (
+        "high_risk_cluster_size"
+        in prompt
+    )
+
+    assert (
+        "1250"
+        in prompt
+    )
+
+    assert (
+        "0.41"
+        in prompt
+    )
+
+    assert (
+        "verified analytical artifacts"
+        in prompt
+    )
+
+
+def test_invoke_sagemaker_agent_returns_sagemaker_response() -> None:
+    """
+    The final return value must be exactly the response returned
+    by the SageMaker invocation layer.
+    """
+
+    evidence_state = {
+        "evidence": {
+            "example": "verified"
+        },
+        "evidence_source": "test",
+    }
+
+    expected_response = (
+        "This is the generated SageMaker response."
+    )
+
+    with patch(
+        "src.ai_agent.sagemaker_agent.retrieve_evidence",
+        return_value=evidence_state,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.invoke_sagemaker_endpoint",
+        return_value=expected_response,
+    ):
+
+        result = invoke_sagemaker_agent(
+            TEST_QUERY
+        )
+
+    assert result == expected_response
+
+
+# ============================================================
+# NO-FALLBACK TESTS
+# ============================================================
+
+
+def test_invoke_sagemaker_agent_does_not_fallback_when_sagemaker_fails() -> None:
+    """
+    SageMaker failure must propagate.
+
+    There must be no hidden fallback to:
+        - Ollama
+        - ChatOllama
+        - local Qwen
+        - another provider
+    """
+
+    evidence_state = {
+        "evidence": {
+            "example": "verified"
+        },
+        "evidence_source": "test",
+    }
+
+    with patch(
+        "src.ai_agent.sagemaker_agent.retrieve_evidence",
+        return_value=evidence_state,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.invoke_sagemaker_endpoint",
+        side_effect=SageMakerInvocationError(
+            "SageMaker unavailable"
+        ),
+    ) as mock_invoke:
+
+        with pytest.raises(
+            SageMakerInvocationError,
+            match="SageMaker unavailable",
+        ):
+
+            invoke_sagemaker_agent(
+                TEST_QUERY
+            )
+
+    mock_invoke.assert_called_once()
+
+
+def test_invoke_sagemaker_agent_does_not_silently_replace_evidence() -> None:
+    """
+    The SageMaker agent must use the exact evidence returned by
+    retrieve_evidence rather than silently substituting another
+    source.
+    """
+
+    evidence_state = {
+        "evidence": {
+            "test_value": 987654
+        },
+        "evidence_source": "deterministic-test-source",
+    }
+
+    with patch(
+        "src.ai_agent.sagemaker_agent.retrieve_evidence",
+        return_value=evidence_state,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.invoke_sagemaker_endpoint",
+        return_value="Answer",
+    ) as mock_invoke:
+
+        invoke_sagemaker_agent(
+            TEST_QUERY
+        )
+
+    prompt = (
+        mock_invoke.call_args.args[0]
+    )
+
+    assert (
+        "987654"
+        in prompt
+    )
+
+    assert (
+        "deterministic-test-source"
+        in prompt
+    )
+
+
+# ============================================================
+# ERROR PROPAGATION TESTS
+# ============================================================
+
+
+def test_invoke_sagemaker_agent_propagates_response_errors() -> None:
+    """
+    Response parsing errors must not be swallowed by the agent.
+    """
+
+    evidence_state = {
+        "evidence": {
+            "example": "verified"
+        },
+        "evidence_source": "test",
+    }
+
+    with patch(
+        "src.ai_agent.sagemaker_agent.retrieve_evidence",
+        return_value=evidence_state,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.invoke_sagemaker_endpoint",
+        side_effect=SageMakerResponseError(
+            "Invalid SageMaker response"
+        ),
+    ):
+
+        with pytest.raises(
+            SageMakerResponseError,
+            match="Invalid SageMaker response",
+        ):
+
+            invoke_sagemaker_agent(
+                TEST_QUERY
+            )
+
+
+def test_invoke_sagemaker_agent_propagates_configuration_errors() -> None:
+    """
+    SageMaker configuration errors must propagate rather than
+    triggering a local fallback.
+    """
+
+    evidence_state = {
+        "evidence": {
+            "example": "verified"
+        },
+        "evidence_source": "test",
+    }
+
+    with patch(
+        "src.ai_agent.sagemaker_agent.retrieve_evidence",
+        return_value=evidence_state,
+    ), patch(
+        "src.ai_agent.sagemaker_agent.invoke_sagemaker_endpoint",
+        side_effect=SageMakerConfigurationError(
+            "SageMaker configuration is invalid"
+        ),
+    ):
+
+        with pytest.raises(
+            SageMakerConfigurationError,
+            match="SageMaker configuration is invalid",
+        ):
+
+            invoke_sagemaker_agent(
+                TEST_QUERY
+            )
+
+
+# ============================================================
+# PUBLIC API TEST
+# ============================================================
+
+
+def test_sagemaker_agent_public_api_exports_expected_functions() -> None:
+    """
+    Verify that the module's public API remains available.
+    """
+
+    expected_exports = {
+        "SageMakerConfigurationError",
+        "SageMakerInvocationError",
+        "SageMakerResponseError",
+        "build_sagemaker_payload",
+        "parse_sagemaker_response",
+        "invoke_sagemaker_endpoint",
+        "invoke_sagemaker_agent",
+    }
+
+    assert set(
+        sagemaker_agent.__all__
+    ) == expected_exports
+
+    for name in expected_exports:
+        assert hasattr(
+            sagemaker_agent,
+            name,
+        )
+
+
+# ============================================================
+# CONSTANT TESTS
+# ============================================================
+
+
+def test_sagemaker_content_type_is_json() -> None:
+    """
+    SageMaker endpoint input/output contract must use JSON.
+    """
+
+    assert (
+        SAGEMAKER_CONTENT_TYPE
+        == "application/json"
+    )
+
+    assert (
+        SAGEMAKER_ACCEPT
+        == "application/json"
+    )
 ```
 

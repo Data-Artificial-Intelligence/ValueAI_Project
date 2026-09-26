@@ -25,3 +25,6 @@ venv/
 .idea/
 *.swp
 *.swo
+
+
+.key

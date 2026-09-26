@@ -18,6 +18,8 @@ This project builds a scalable cloud pipeline that segments users, predicts futu
 
 
 
+<<<<<<< HEAD
+=======
 ## 📊 Dashboard Screenshots
 
 ### Executive Dashboard

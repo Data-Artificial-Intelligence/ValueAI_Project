@@ -1,0 +1,105 @@
+# =============================================================================
+# ValueAI — Continuous Integration Pipeline
+# -----------------------------------------------------------------------------
+# Triggers : push / pull_request on `main` and `develop`
+# Purpose  : Validate the data pipeline, ML models, and Agentic AI provider
+#            routing on every change before it reaches the main branches.
+# =============================================================================
+
+name: ValueAI CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:   # Allows manual runs from the GitHub Actions tab
+
+# Cancel older in-progress runs on the same branch to save CI minutes
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # JOB 1 — Automated Test Suite
+  # ---------------------------------------------------------------------------
+  test:
+    name: Unit & Integration Tests (Python 3.13 / Ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      # Force non-interactive Matplotlib backend (headless CI)
+      MPLBACKEND: Agg
+      # Default AI provider for agent routing tests (explicit overrides still win)
+      VALUEAI_AI_PROVIDER: local
+      # Ensure PySpark workers use the same interpreter as the driver
+      PYSPARK_PYTHON: python
+      PYSPARK_DRIVER_PYTHON: python
+      # Prevent botocore from probing EC2 metadata in CI (avoids timeouts)
+      AWS_EC2_METADATA_DISABLED: "true"
+      AWS_DEFAULT_REGION: us-east-1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip                 # Caches pip downloads keyed on requirements.txt
+
+      - name: Set up Java 17 (required by PySpark)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install project dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run full test suite
+        run: pytest -q tests/
+
+  # ---------------------------------------------------------------------------
+  # JOB 2 — Repository Hygiene / Import Smoke Check
+  # ---------------------------------------------------------------------------
+  smoke:
+    name: Module Import Smoke Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      MPLBACKEND: Agg
+      VALUEAI_AI_PROVIDER: local
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install project dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verify core modules import cleanly
+        run: |
+          python -c "import src.data.make_dataset"
+          python -c "import src.data.monte_carlo_simulation"
+          python -c "import src.models.train_clustering"
+          python -c "import src.models.train_classification"
+          python -c "import src.models.train_timeseries"
+          python -c "import src.ai_agent.agent_graph"
+          python -c "import src.ai_agent.agent_tools"
+          echo "All core ValueAI modules imported successfully."

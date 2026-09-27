@@ -31,6 +31,9 @@ This project builds a scalable cloud pipeline that segments users, predicts futu
 ### Sagemaker Quotas
 ![Excel Report](presentation/sagemaker_quotas.png)
 
+### Sagemaker Cost
+![Excel Report](presentation/sagemaker_cost.png)
+
 ##  Video Presentation
 [Watch the 35-minute project presentation](presentation/project_presentation.mp4)
 

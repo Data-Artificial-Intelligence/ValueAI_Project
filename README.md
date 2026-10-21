@@ -34,6 +34,9 @@ This project builds a scalable cloud pipeline that segments users, predicts futu
 ### Sagemaker Cost
 ![Excel Report](presentation/sagemaker_cost.png)
 
+### System Architecture
+![System Architecture](presentation/project_architecture.png)
+
 ##  Video Presentation
 [Watch the 35-minute project presentation](presentation/project_presentation.mp4)
 
